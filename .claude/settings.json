@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude mcp *)",
+      "PowerShell(claude mcp add -s local -t stdio laravel-boost php artisan boost:mcp)",
+      "Read(//c/Users/opsip/**)",
+      "mcp__laravel-boost__application-info",
+      "mcp__laravel-boost__search-docs",
+      "WebSearch",
+      "Bash(composer update *)",
+      "Bash(vendor/bin/pint --dirty --format agent)",
+      "Bash(php artisan *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/laravel/react-starter-kit/main/resources/js/pages/welcome.tsx\")",
+      "Bash(npm run *)"
+    ]
+  }
+}
