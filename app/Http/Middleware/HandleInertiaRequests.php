@@ -2,6 +2,8 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Shift;
+use App\Models\SystemSettings;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -43,7 +45,26 @@ class HandleInertiaRequests extends Middleware
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
-                'user' => $request->user(),
+                'user' => $request->user()?->only(['id', 'name', 'email', 'role']),
+                'permissions' => $request->user()?->getAllPermissions()->pluck('name')->values() ?? [],
+            ],
+            'restaurant' => [
+                'name' => SystemSettings::get('restaurant_name', config('app.name')),
+                'logo_url' => SystemSettings::get('restaurant_logo_url'),
+                'receipt_header' => SystemSettings::get('receipt_header'),
+                'receipt_footer' => SystemSettings::get('receipt_footer'),
+            ],
+            'activeShift' => $request->user()
+                ? Shift::query()
+                    ->where('kasir_id', $request->user()->id)
+                    ->where('status', 'open')
+                    ->latest('opened_at')
+                    ->first()?->only(['id', 'opened_at', 'opening_cash'])
+                : null,
+            'flash' => [
+                'success' => $request->session()->get('success'),
+                'error' => $request->session()->get('error'),
+                'info' => $request->session()->get('info'),
             ],
         ]);
     }

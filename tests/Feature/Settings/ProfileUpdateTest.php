@@ -4,15 +4,26 @@ namespace Tests\Feature\Settings;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
 class ProfileUpdateTest extends TestCase
 {
     use RefreshDatabase;
 
+    private function userWithSettingsPermission(): User
+    {
+        Permission::query()->firstOrCreate(['name' => 'settings.view', 'guard_name' => 'web']);
+
+        $user = User::factory()->create(['role' => 'manager']);
+        $user->givePermissionTo('settings.view');
+
+        return $user;
+    }
+
     public function test_profile_page_is_displayed()
     {
-        $user = User::factory()->create();
+        $user = $this->userWithSettingsPermission();
 
         $response = $this
             ->actingAs($user)
@@ -23,7 +34,7 @@ class ProfileUpdateTest extends TestCase
 
     public function test_profile_information_can_be_updated()
     {
-        $user = User::factory()->create();
+        $user = $this->userWithSettingsPermission();
 
         $response = $this
             ->actingAs($user)
@@ -45,7 +56,7 @@ class ProfileUpdateTest extends TestCase
 
     public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged()
     {
-        $user = User::factory()->create();
+        $user = $this->userWithSettingsPermission();
 
         $response = $this
             ->actingAs($user)
@@ -63,7 +74,7 @@ class ProfileUpdateTest extends TestCase
 
     public function test_user_can_delete_their_account()
     {
-        $user = User::factory()->create();
+        $user = $this->userWithSettingsPermission();
 
         $response = $this
             ->actingAs($user)
@@ -76,12 +87,12 @@ class ProfileUpdateTest extends TestCase
             ->assertRedirect('/');
 
         $this->assertGuest();
-        $this->assertNull($user->fresh());
+        $this->assertSoftDeleted($user);
     }
 
     public function test_correct_password_must_be_provided_to_delete_account()
     {
-        $user = User::factory()->create();
+        $user = $this->userWithSettingsPermission();
 
         $response = $this
             ->actingAs($user)
