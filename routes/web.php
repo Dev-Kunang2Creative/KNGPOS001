@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('welcome');
+    return redirect()->route('login');
 })->name('home');
 
 Route::get('s/{qr_token}', [SelfOrderController::class, 'show'])->name('self-order.show');
