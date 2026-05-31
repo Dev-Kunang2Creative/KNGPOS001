@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Payment;
 
+use App\Models\BarOrder;
 use App\Models\BarStation;
+use App\Models\KitchenOrder;
 use App\Models\KitchenStation;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Order;
+use App\Models\Shift;
 use App\Models\SystemSettings;
 use App\Models\Table;
 use App\Models\Transaction;
@@ -24,10 +27,17 @@ class PaymentFlowTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutVite();
+    }
+
     public function test_cash_payment_calculates_total_server_side_and_creates_transaction(): void
     {
         $cashier = User::factory()->create(['role' => 'kasir']);
         $order = $this->orderWithItemTotal($cashier, 25000);
+        $order->table()->update(['status' => 'occupied']);
 
         $transaction = app(PaymentService::class)->createCashPayment($order, $cashier, 30000);
 
@@ -35,6 +45,306 @@ class PaymentFlowTest extends TestCase
         $this->assertEquals(30000, (float) $transaction->amount_paid);
         $this->assertEquals(5000, (float) $transaction->change_amount);
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('tables', ['id' => $order->table_id, 'status' => 'occupied']);
+    }
+
+    public function test_cash_payment_route_redirects_to_printable_receipt(): void
+    {
+        foreach (['pos.checkout', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.checkout', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $order = $this->orderWithItemTotal($cashier, 25000);
+
+        $response = $this->actingAs($cashier)
+            ->post("/pos/orders/{$order->id}/pay", ['amount_paid' => 30000]);
+
+        $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
+
+        $response->assertRedirect(route('pos.transactions.receipt', $transaction));
+        $this->actingAs($cashier)
+            ->get(route('pos.transactions.receipt', $transaction))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/Receipt')
+                ->where('transaction.id', $transaction->id));
+    }
+
+    public function test_close_bill_creates_routes_pays_and_redirects_to_receipt(): void
+    {
+        foreach (['pos.create', 'pos.checkout', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.create', 'pos.checkout', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $zone = Zone::query()->create(['name' => 'Indoor']);
+        $table = Table::query()->create(['name' => 'T1', 'zone_id' => $zone->id]);
+        $kitchen = KitchenStation::query()->create(['name' => 'Kitchen 1']);
+        $bar = BarStation::query()->create(['name' => 'Bar 1']);
+        ZoneStationAssignment::query()->create([
+            'zone_id' => $zone->id,
+            'kitchen_station_id' => $kitchen->id,
+            'bar_station_id' => $bar->id,
+        ]);
+        $category = MenuCategory::query()->create(['name' => 'Main']);
+        $menuItem = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Nasi',
+            'price' => 25000,
+            'print_to' => 'kitchen',
+        ]);
+
+        $response = $this->actingAs($cashier)
+            ->post('/pos/orders/close-bill', [
+                'table_id' => $table->id,
+                'bill_mode' => 'close_bill',
+                'amount_paid' => 30000,
+                'items' => [
+                    ['menu_item_id' => $menuItem->id, 'quantity' => 1],
+                ],
+            ]);
+
+        $order = Order::query()->firstOrFail();
+        $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
+
+        $response->assertRedirect(route('pos.transactions.receipt', $transaction));
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid', 'change_amount' => 5000]);
+        $this->assertDatabaseHas('kitchen_orders', ['order_id' => $order->id, 'kitchen_station_id' => $kitchen->id]);
+        $this->assertDatabaseHas('tables', ['id' => $table->id, 'status' => 'occupied']);
+    }
+
+    public function test_close_bill_allows_occupied_table_for_additional_order(): void
+    {
+        foreach (['pos.create', 'pos.checkout', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.create', 'pos.checkout', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $zone = Zone::query()->create(['name' => 'Indoor']);
+        $table = Table::query()->create(['name' => 'T1', 'zone_id' => $zone->id, 'status' => 'occupied']);
+        $kitchen = KitchenStation::query()->create(['name' => 'Kitchen 1']);
+        $bar = BarStation::query()->create(['name' => 'Bar 1']);
+        ZoneStationAssignment::query()->create([
+            'zone_id' => $zone->id,
+            'kitchen_station_id' => $kitchen->id,
+            'bar_station_id' => $bar->id,
+        ]);
+        $category = MenuCategory::query()->create(['name' => 'Main']);
+        $menuItem = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Nasi',
+            'price' => 25000,
+            'print_to' => 'kitchen',
+        ]);
+
+        $response = $this->actingAs($cashier)
+            ->post('/pos/orders/close-bill', [
+                'table_id' => $table->id,
+                'bill_mode' => 'close_bill',
+                'amount_paid' => 30000,
+                'items' => [
+                    ['menu_item_id' => $menuItem->id, 'quantity' => 1],
+                ],
+            ]);
+
+        $order = Order::query()->firstOrFail();
+        $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
+
+        $response->assertRedirect(route('pos.transactions.receipt', $transaction));
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('tables', ['id' => $table->id, 'status' => 'occupied']);
+    }
+
+    public function test_close_bill_rejects_table_with_open_bill(): void
+    {
+        foreach (['pos.create', 'pos.checkout', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.create', 'pos.checkout', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $zone = Zone::query()->create(['name' => 'Indoor']);
+        $table = Table::query()->create(['name' => 'T1', 'zone_id' => $zone->id, 'status' => 'open_bill']);
+        $category = MenuCategory::query()->create(['name' => 'Main']);
+        $menuItem = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Nasi',
+            'price' => 25000,
+            'print_to' => 'kitchen',
+        ]);
+
+        $this->actingAs($cashier)
+            ->from('/pos')
+            ->post('/pos/orders/close-bill', [
+                'table_id' => $table->id,
+                'bill_mode' => 'close_bill',
+                'amount_paid' => 30000,
+                'items' => [
+                    ['menu_item_id' => $menuItem->id, 'quantity' => 1],
+                ],
+            ])
+            ->assertRedirect('/pos')
+            ->assertSessionHas('error', 'Meja ini sedang memiliki open bill, reserved, atau blocked. Buka open bill yang ada atau pilih meja lain.');
+
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_open_bill_can_add_items_and_payment_requires_printing_pending_items(): void
+    {
+        foreach (['pos.create', 'pos.checkout', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.create', 'pos.checkout', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $order = $this->orderWithItemTotal($cashier, 25000);
+        $category = MenuCategory::query()->firstOrFail();
+        $menuItem = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Es Teh',
+            'price' => 8000,
+            'print_to' => 'bar',
+        ]);
+
+        $this->actingAs($cashier)
+            ->post("/pos/orders/{$order->id}/items", [
+                'items' => [
+                    ['menu_item_id' => $menuItem->id, 'quantity' => 2],
+                ],
+            ])
+            ->assertRedirect(route('pos.index', ['order' => $order->id]))
+            ->assertSessionHas('success', 'Item berhasil ditambahkan ke open bill. Cetak ke Kitchen/Bar untuk mengirim item baru.');
+
+        $this->assertDatabaseHas('order_items', [
+            'order_id' => $order->id,
+            'menu_item_id' => $menuItem->id,
+            'quantity' => 2,
+            'subtotal' => 16000,
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('orders', [
+            'id' => $order->id,
+            'subtotal' => 41000,
+            'total_amount' => 41000,
+        ]);
+        $this->assertDatabaseHas('tables', ['id' => $order->table_id, 'status' => 'open_bill']);
+
+        $this->actingAs($cashier)
+            ->from('/pos?order='.$order->id)
+            ->post("/pos/orders/{$order->id}/pay", ['amount_paid' => 50000])
+            ->assertRedirect('/pos?order='.$order->id)
+            ->assertSessionHas('error', 'Masih ada item baru yang belum dicetak ke Kitchen/Bar.');
+
+        $response = $this->actingAs($cashier)
+            ->post("/pos/orders/{$order->id}/submit");
+
+        $barOrder = BarOrder::query()->where('order_id', $order->id)->firstOrFail();
+
+        $response->assertRedirect(route('pos.orders.station-ticket', [
+            'order' => $order->id,
+            'bar_order' => $barOrder->id,
+        ]));
+        $this->actingAs($cashier)
+            ->get(route('pos.orders.station-ticket', [
+                'order' => $order->id,
+                'bar_order' => $barOrder->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/StationTicket')
+                ->where('order.id', $order->id)
+                ->has('barOrders', 1));
+
+        $response = $this->actingAs($cashier)
+            ->post("/pos/orders/{$order->id}/items/submit", [
+                'items' => [
+                    ['menu_item_id' => $menuItem->id, 'quantity' => 1],
+                ],
+            ]);
+
+        $latestBarOrder = BarOrder::query()->where('order_id', $order->id)->latest('id')->firstOrFail();
+
+        $response->assertRedirect(route('pos.orders.station-ticket', [
+            'order' => $order->id,
+            'bar_order' => $latestBarOrder->id,
+        ]));
+        $this->assertDatabaseHas('order_items', [
+            'order_id' => $order->id,
+            'menu_item_id' => $menuItem->id,
+            'quantity' => 1,
+            'status' => 'sent',
+        ]);
+
+        $foodItem = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Mie Goreng',
+            'price' => 18000,
+            'print_to' => 'kitchen',
+        ]);
+
+        $response = $this->actingAs($cashier)
+            ->post("/pos/orders/{$order->id}/items/submit", [
+                'items' => [
+                    ['menu_item_id' => $foodItem->id, 'quantity' => 1],
+                ],
+            ]);
+
+        $latestKitchenOrder = KitchenOrder::query()->where('order_id', $order->id)->latest('id')->firstOrFail();
+
+        $response->assertRedirect(route('pos.orders.station-ticket', [
+            'order' => $order->id,
+            'kitchen_order' => $latestKitchenOrder->id,
+        ]));
+        $this->actingAs($cashier)
+            ->get(route('pos.orders.station-ticket', [
+                'order' => $order->id,
+                'kitchen_order' => $latestKitchenOrder->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/StationTicket')
+                ->has('kitchenOrders', 1)
+                ->has('barOrders', 0));
     }
 
     public function test_xendit_callback_validates_token_logs_and_is_idempotent(): void

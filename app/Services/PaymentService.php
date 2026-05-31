@@ -41,6 +41,8 @@ class PaymentService
                 'status' => 'paid',
             ]);
 
+            $order->table()->update(['status' => 'occupied']);
+
             return $transaction;
         });
     }
@@ -139,6 +141,7 @@ class PaymentService
             ]);
 
             $order->update(['status' => 'paid']);
+            $order->table()->update(['status' => 'occupied']);
 
             return $payment;
         });

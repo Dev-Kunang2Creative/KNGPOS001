@@ -15,10 +15,14 @@ class PaymentController extends Controller
 {
     public function cash(CashPaymentRequest $request, Order $order, PaymentService $paymentService): RedirectResponse
     {
-        abort_unless($order->kasir_id === $request->user()->id && in_array($order->status, ['open', 'submitted'], true), 403);
+        abort_unless($order->kasir_id === $request->user()->id && $order->status === 'submitted', 403);
 
         try {
-            $paymentService->createCashPayment(
+            if ($order->items()->where('status', 'pending')->exists()) {
+                throw new RuntimeException('Masih ada item baru yang belum dicetak ke Kitchen/Bar.');
+            }
+
+            $transaction = $paymentService->createCashPayment(
                 order: $order,
                 cashier: $request->user(),
                 amountPaid: (float) $request->validated('amount_paid'),
@@ -28,14 +32,20 @@ class PaymentController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
-        return redirect()->route('pos.index')->with('success', 'Pembayaran tunai berhasil.');
+        return redirect()
+            ->route('pos.transactions.receipt', $transaction)
+            ->with('success', 'Pembayaran tunai berhasil. Struk siap dicetak.');
     }
 
     public function xendit(XenditPaymentRequest $request, Order $order, PaymentService $paymentService): RedirectResponse
     {
-        abort_unless($order->kasir_id === $request->user()->id && in_array($order->status, ['open', 'submitted'], true), 403);
+        abort_unless($order->kasir_id === $request->user()->id && $order->status === 'submitted', 403);
 
         try {
+            if ($order->items()->where('status', 'pending')->exists()) {
+                throw new RuntimeException('Masih ada item baru yang belum dicetak ke Kitchen/Bar.');
+            }
+
             $result = $paymentService->createQrisPayment($order, $request->user());
         } catch (RequestException) {
             return back()->with('error', 'Gagal membuat pembayaran Xendit.');

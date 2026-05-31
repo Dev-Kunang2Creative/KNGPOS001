@@ -34,12 +34,20 @@ Route::middleware(['auth', 'permission:pos.view', 'active.shift'])->group(functi
 
 Route::middleware(['auth', 'permission:pos.create', 'active.shift'])->group(function () {
     Route::post('pos/orders', [OrderController::class, 'store'])->name('pos.orders.store');
+    Route::post('pos/orders/{order}/items', [OrderController::class, 'addItems'])->name('pos.orders.items.store');
+    Route::post('pos/orders/{order}/items/submit', [OrderController::class, 'addItemsAndSubmit'])->name('pos.orders.items.submit');
     Route::post('pos/orders/{order}/submit', [OrderController::class, 'submit'])->name('pos.orders.submit');
+    Route::get('pos/orders/{order}/station-ticket', [OrderController::class, 'stationTicket'])->name('pos.orders.station-ticket');
+});
+
+Route::middleware(['auth', 'permission:pos.create', 'permission:pos.checkout', 'active.shift'])->group(function () {
+    Route::post('pos/orders/close-bill', [OrderController::class, 'closeBill'])->name('pos.orders.close-bill');
 });
 
 Route::middleware(['auth', 'permission:pos.checkout', 'active.shift'])->group(function () {
     Route::post('pos/orders/{order}/pay', [PaymentController::class, 'cash'])->name('pos.orders.pay');
     Route::post('pos/orders/{order}/xendit', [PaymentController::class, 'xendit'])->name('pos.orders.xendit');
+    Route::get('pos/transactions/{transaction}/receipt', [OrderController::class, 'receipt'])->name('pos.transactions.receipt');
 });
 
 Route::middleware(['auth', 'permission:kitchen.view'])->group(function () {

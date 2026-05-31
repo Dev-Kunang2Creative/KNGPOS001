@@ -103,6 +103,45 @@ class OrderRoutingServiceTest extends TestCase
         ]);
     }
 
+    public function test_routes_only_new_pending_items_when_submitted_order_is_printed_again(): void
+    {
+        [$zone, $kitchen] = $this->configuredZone();
+        $order = $this->orderForZone($zone, ['kitchen']);
+
+        app(OrderRoutingService::class)->routeOrder($order);
+
+        $category = MenuCategory::query()->firstOrFail();
+        $menuItem = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Extra Item',
+            'price' => 15000,
+            'print_to' => 'kitchen',
+        ]);
+        $order->items()->create([
+            'menu_item_id' => $menuItem->id,
+            'quantity' => 1,
+            'unit_price' => 15000,
+            'subtotal' => 15000,
+            'status' => 'pending',
+        ]);
+
+        app(OrderRoutingService::class)->routeOrder($order->fresh());
+
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'submitted']);
+        $this->assertDatabaseHas('kitchen_orders', [
+            'order_id' => $order->id,
+            'kitchen_station_id' => $kitchen->id,
+            'status' => 'queued',
+        ]);
+        $this->assertDatabaseCount('kitchen_orders', 2);
+        $this->assertDatabaseCount('kitchen_order_items', 2);
+        $this->assertDatabaseHas('order_items', [
+            'order_id' => $order->id,
+            'menu_item_id' => $menuItem->id,
+            'status' => 'sent',
+        ]);
+    }
+
     private function configuredZone(): array
     {
         $zone = Zone::query()->create(['name' => 'Indoor']);
