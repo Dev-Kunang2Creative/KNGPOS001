@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { ChevronDown, ChevronRight, Minus, Plus, Send, ShoppingCart, Trash2 } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronRight, Minus, Plus, ReceiptText, Send, ShoppingCart, Trash2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
@@ -34,7 +34,7 @@ type OpenOrder = {
     total_amount: string;
     created_at: string;
 };
-type XenditPayment = { id: number; external_id: string; status: string; xendit_raw_response?: Record<string, unknown> | null } | null;
+type XenditPayment = { id: number; transaction_id: number; external_id: string; status: string; xendit_raw_response?: Record<string, unknown> | null } | null;
 type CartItem = { menu_item_id: number; name: string; quantity: number; notes: string; price: number };
 type BillMode = 'open_bill' | 'close_bill';
 type CartTarget = 'close_bill' | 'open_bill' | `bill:${number}`;
@@ -104,6 +104,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const activeOrderSections = useMemo(() => groupOpenBillItems(activeOrder?.items ?? []), [activeOrder?.items]);
     const selectedCartOrderId = cartTarget.startsWith('bill:') ? Number(cartTarget.replace('bill:', '')) : null;
     const selectedCartOrder = openOrders.find((order) => order.id === selectedCartOrderId);
+    const isXenditPaid = String(xenditPayment?.status ?? '').toLowerCase() === 'paid';
 
     const form = useForm({
         table_id: '',
@@ -386,8 +387,25 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                             <p className="break-all text-xs text-muted-foreground">{xenditPayment.xendit_raw_response.qr_string}</p>
                                                         </>
                                                     )}
-                                                    {String(xenditPayment.status).toLowerCase() === 'paid' ? (
-                                                        <p className="mt-3 text-xs font-medium text-emerald-700">Pembayaran QRIS sudah paid.</p>
+                                                    {isXenditPaid ? (
+                                                        <div className="mt-3 overflow-hidden rounded-md border border-emerald-500/40 bg-emerald-50 p-4 text-center">
+                                                            <div className="relative mx-auto flex size-14 items-center justify-center">
+                                                                <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-30" />
+                                                                <span className="relative flex size-12 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm">
+                                                                    <CheckCircle2 className="size-7" />
+                                                                </span>
+                                                            </div>
+                                                            <p className="mt-3 text-sm font-semibold text-emerald-900">You've just tested Pay using QRIS Xendit</p>
+                                                            <p className="mt-1 text-xs text-emerald-700">Pembayaran berhasil dikonfirmasi dan transaksi sudah paid.</p>
+                                                            <Button
+                                                                type="button"
+                                                                className="mt-4 w-full"
+                                                                onClick={() => router.visit(`/pos/transactions/${xenditPayment.transaction_id}/receipt`)}
+                                                            >
+                                                                <ReceiptText />
+                                                                Cetak Struk
+                                                            </Button>
+                                                        </div>
                                                     ) : (
                                                         <Button
                                                             type="button"

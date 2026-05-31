@@ -90,7 +90,11 @@ class PaymentController extends Controller
         }
 
         return redirect()
-            ->route('pos.transactions.receipt', $paidPayment->transaction_id)
-            ->with('success', 'Simulasi pembayaran QRIS berhasil. Struk siap dicetak.');
+            ->route('pos.index', [
+                'order' => $order->id,
+                'payment' => $paidPayment->id,
+                'payment_success' => 1,
+            ])
+            ->with('success', 'Simulasi pembayaran QRIS berhasil.');
     }
 }

@@ -455,7 +455,11 @@ class PaymentFlowTest extends TestCase
 
         $this->actingAs($cashier)
             ->post(route('pos.orders.xendit.simulate', [$order, $payment]))
-            ->assertRedirect(route('pos.transactions.receipt', $transaction));
+            ->assertRedirect(route('pos.index', [
+                'order' => $order->id,
+                'payment' => $payment->id,
+                'payment_success' => 1,
+            ]));
 
         $this->assertDatabaseHas('xendit_payments', ['id' => $payment->id, 'status' => 'paid']);
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid']);
