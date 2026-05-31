@@ -47,6 +47,7 @@ Route::middleware(['auth', 'permission:pos.create', 'permission:pos.checkout', '
 Route::middleware(['auth', 'permission:pos.checkout', 'active.shift'])->group(function () {
     Route::post('pos/orders/{order}/pay', [PaymentController::class, 'cash'])->name('pos.orders.pay');
     Route::post('pos/orders/{order}/xendit', [PaymentController::class, 'xendit'])->name('pos.orders.xendit');
+    Route::post('pos/orders/{order}/xendit/{payment}/simulate', [PaymentController::class, 'simulateXendit'])->name('pos.orders.xendit.simulate');
     Route::get('pos/transactions/{transaction}/receipt', [OrderController::class, 'receipt'])->name('pos.transactions.receipt');
 });
 

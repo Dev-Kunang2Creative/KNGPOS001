@@ -147,6 +147,37 @@ class PaymentService
         });
     }
 
+    /**
+     * @return array<string, mixed>
+     *
+     * @throws RequestException
+     */
+    public function simulateQrisPayment(XenditPayment $payment): array
+    {
+        $secretKey = SystemSettings::get('xendit_secret_key');
+
+        if (! $secretKey || SystemSettings::get('xendit_enabled') !== '1') {
+            throw new RuntimeException('Xendit belum dikonfigurasi.');
+        }
+
+        if (! str_starts_with((string) $secretKey, 'xnd_development_')) {
+            throw new RuntimeException('Simulasi pembayaran hanya tersedia untuk Xendit Test Mode.');
+        }
+
+        $qrCodeIdentifier = $payment->xendit_invoice_id ?: $payment->external_id;
+
+        return Http::withBasicAuth($secretKey, '')
+            ->withHeaders([
+                'api-version' => '2022-07-31',
+                'Content-Type' => 'application/json',
+            ])
+            ->post("https://api.xendit.co/qr_codes/{$qrCodeIdentifier}/payments/simulate", [
+                'amount' => (int) round((float) $payment->amount),
+            ])
+            ->throw()
+            ->json();
+    }
+
     public function calculateOrderTotal(Order $order): float
     {
         $order->loadMissing('items');

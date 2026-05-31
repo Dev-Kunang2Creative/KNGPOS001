@@ -386,6 +386,18 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                             <p className="break-all text-xs text-muted-foreground">{xenditPayment.xendit_raw_response.qr_string}</p>
                                                         </>
                                                     )}
+                                                    {String(xenditPayment.status).toLowerCase() === 'paid' ? (
+                                                        <p className="mt-3 text-xs font-medium text-emerald-700">Pembayaran QRIS sudah paid.</p>
+                                                    ) : (
+                                                        <Button
+                                                            type="button"
+                                                            className="mt-3 w-full"
+                                                            variant="secondary"
+                                                            onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit/${xenditPayment.id}/simulate`, {}, { preserveScroll: true })}
+                                                        >
+                                                            Simulasi Bayar QRIS
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
