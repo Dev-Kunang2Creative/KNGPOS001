@@ -66,6 +66,25 @@ class PaymentController extends Controller
             ->with('success', 'QRIS Xendit berhasil dibuat.');
     }
 
+    public function show(XenditPayment $payment): Response|RedirectResponse
+    {
+        $payment->load([
+            'transaction.order.table:id,name',
+        ]);
+
+        abort_unless($payment->transaction?->kasir_id === request()->user()->id, 403);
+
+        if (strtolower((string) $payment->status) === 'paid') {
+            return redirect()->route('pos.xendit.success', $payment);
+        }
+
+        return Inertia::render('Pos/PaymentPending', [
+            'payment' => $payment,
+            'transaction' => $payment->transaction,
+            'order' => $payment->transaction->order,
+        ]);
+    }
+
     public function simulateXendit(Order $order, XenditPayment $payment, PaymentService $paymentService): RedirectResponse
     {
         abort_unless($order->kasir_id === request()->user()->id && $payment->transaction?->order_id === $order->id, 403);

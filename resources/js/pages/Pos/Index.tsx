@@ -538,7 +538,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             </>
                                         ) : (
                                             <p className="rounded-md border border-emerald-500/30 bg-emerald-50 p-2 text-xs text-emerald-700">
-                                                Setelah disimpan, QRIS Xendit dibuat dan pembayaran bisa disimulasikan dari panel Open Bill.
+                                                Setelah disimpan, QRIS Xendit langsung dibuat dan dibuka di layar pembayaran khusus.
                                             </p>
                                         )}
                                     </div>

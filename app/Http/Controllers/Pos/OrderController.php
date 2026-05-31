@@ -139,7 +139,7 @@ class OrderController extends Controller
                 $result = $paymentService->createQrisPayment($order->fresh('items'), $request->user());
 
                 return redirect()
-                    ->route('pos.index', ['order' => $order->id, 'payment' => $result['payment']->id])
+                    ->route('pos.xendit.show', $result['payment'])
                     ->with('success', 'Close bill QRIS Xendit berhasil dibuat.');
             }
 

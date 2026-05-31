@@ -187,7 +187,15 @@ class PaymentFlowTest extends TestCase
         $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
         $payment = XenditPayment::query()->where('transaction_id', $transaction->id)->firstOrFail();
 
-        $response->assertRedirect(route('pos.index', ['order' => $order->id, 'payment' => $payment->id]));
+        $response->assertRedirect(route('pos.xendit.show', $payment));
+        $this->actingAs($cashier)
+            ->get(route('pos.xendit.show', $payment))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/PaymentPending')
+                ->where('payment.id', $payment->id)
+                ->where('transaction.id', $transaction->id)
+                ->where('order.id', $order->id));
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'submitted']);
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'payment_method' => 'qris', 'status' => 'pending']);
         $this->assertDatabaseHas('xendit_payments', ['id' => $payment->id, 'xendit_invoice_id' => 'qr_close_bill']);
