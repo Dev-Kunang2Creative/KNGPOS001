@@ -15,9 +15,11 @@ use App\Models\Transaction;
 use App\Models\XenditPayment;
 use App\Services\OrderRoutingService;
 use App\Services\PaymentService;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -131,12 +133,30 @@ class OrderController extends Controller
             $validated = $request->validated();
             $order = $this->createOrder($request, $validated);
             $routingService->routeOrder($order);
+            $paymentMethod = $validated['payment_method'] ?? 'cash';
+
+            if ($paymentMethod === 'qris') {
+                $result = $paymentService->createQrisPayment($order->fresh('items'), $request->user());
+
+                return redirect()
+                    ->route('pos.index', ['order' => $order->id, 'payment' => $result['payment']->id])
+                    ->with('success', 'Close bill QRIS Xendit berhasil dibuat.');
+            }
+
             $transaction = $paymentService->createCashPayment(
                 order: $order->fresh('items'),
                 cashier: $request->user(),
                 amountPaid: (float) ($validated['amount_paid'] ?? 0),
                 notes: 'Close bill POS',
             );
+        } catch (RequestException $exception) {
+            Log::error('Close Bill Xendit Request Error', [
+                'response' => $exception->response->json(),
+                'status' => $exception->response->status(),
+            ]);
+            $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API Xendit';
+
+            return back()->with('error', 'Gagal membuat pembayaran Xendit: ' . (is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
         } catch (ZoneStationAssignmentMissingException|RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
@@ -234,7 +254,9 @@ class OrderController extends Controller
                 return (float) $menuItems[$item['menu_item_id']]->price * (int) $item['quantity'];
             });
 
-            if (($validated['bill_mode'] ?? 'open_bill') === 'close_bill' && (float) ($validated['amount_paid'] ?? 0) < $subtotal) {
+            $paymentMethod = $validated['payment_method'] ?? 'cash';
+
+            if (($validated['bill_mode'] ?? 'open_bill') === 'close_bill' && $paymentMethod === 'cash' && (float) ($validated['amount_paid'] ?? 0) < $subtotal) {
                 throw new RuntimeException('Uang pelanggan kurang dari total tagihan.');
             }
 

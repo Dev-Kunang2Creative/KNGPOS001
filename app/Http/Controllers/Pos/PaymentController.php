@@ -10,6 +10,8 @@ use App\Models\XenditPayment;
 use App\Services\PaymentService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
 use RuntimeException;
 
 class PaymentController extends Controller
@@ -90,11 +92,24 @@ class PaymentController extends Controller
         }
 
         return redirect()
-            ->route('pos.index', [
-                'order' => $order->id,
-                'payment' => $paidPayment->id,
-                'payment_success' => 1,
-            ])
+            ->route('pos.xendit.success', $paidPayment)
             ->with('success', 'Simulasi pembayaran QRIS berhasil.');
+    }
+
+    public function success(XenditPayment $payment): Response
+    {
+        $payment->load([
+            'transaction.order.table:id,name',
+            'transaction.cashier:id,name',
+        ]);
+
+        abort_unless($payment->transaction?->kasir_id === request()->user()->id, 403);
+        abort_unless(strtolower((string) $payment->status) === 'paid' && $payment->transaction->status === 'paid', 404);
+
+        return Inertia::render('Pos/PaymentSuccess', [
+            'payment' => $payment,
+            'transaction' => $payment->transaction,
+            'redirectSeconds' => 3,
+        ]);
     }
 }

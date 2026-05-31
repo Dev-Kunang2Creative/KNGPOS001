@@ -131,6 +131,72 @@ class PaymentFlowTest extends TestCase
         $this->assertDatabaseHas('tables', ['id' => $table->id, 'status' => 'occupied']);
     }
 
+    public function test_close_bill_can_generate_xendit_qris_payment(): void
+    {
+        foreach (['pos.create', 'pos.checkout', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        Http::fake([
+            'api.xendit.co/qr_codes' => Http::response([
+                'id' => 'qr_close_bill',
+                'status' => 'ACTIVE',
+                'qr_string' => '000201010212-close-bill',
+            ]),
+        ]);
+        SystemSettings::setEncrypted('xendit_secret_key', 'xnd_development_test');
+        SystemSettings::set('xendit_enabled', '1');
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.create', 'pos.checkout', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $zone = Zone::query()->create(['name' => 'Indoor']);
+        $table = Table::query()->create(['name' => 'T1', 'zone_id' => $zone->id]);
+        $kitchen = KitchenStation::query()->create(['name' => 'Kitchen 1']);
+        $bar = BarStation::query()->create(['name' => 'Bar 1']);
+        ZoneStationAssignment::query()->create([
+            'zone_id' => $zone->id,
+            'kitchen_station_id' => $kitchen->id,
+            'bar_station_id' => $bar->id,
+        ]);
+        $category = MenuCategory::query()->create(['name' => 'Main']);
+        $menuItem = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Nasi',
+            'price' => 25000,
+            'print_to' => 'kitchen',
+        ]);
+
+        $response = $this->actingAs($cashier)
+            ->post('/pos/orders/close-bill', [
+                'table_id' => $table->id,
+                'bill_mode' => 'close_bill',
+                'payment_method' => 'qris',
+                'items' => [
+                    ['menu_item_id' => $menuItem->id, 'quantity' => 1],
+                ],
+            ]);
+
+        $order = Order::query()->firstOrFail();
+        $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
+        $payment = XenditPayment::query()->where('transaction_id', $transaction->id)->firstOrFail();
+
+        $response->assertRedirect(route('pos.index', ['order' => $order->id, 'payment' => $payment->id]));
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'submitted']);
+        $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'payment_method' => 'qris', 'status' => 'pending']);
+        $this->assertDatabaseHas('xendit_payments', ['id' => $payment->id, 'xendit_invoice_id' => 'qr_close_bill']);
+        $this->assertDatabaseHas('kitchen_orders', ['order_id' => $order->id, 'kitchen_station_id' => $kitchen->id]);
+        Http::assertSent(fn ($request) => $request->url() === 'https://api.xendit.co/qr_codes'
+            && $request['amount'] === 25000
+            && $request['currency'] === 'IDR');
+    }
+
     public function test_close_bill_allows_occupied_table_for_additional_order(): void
     {
         foreach (['pos.create', 'pos.checkout', 'shift.view'] as $permission) {
@@ -455,15 +521,19 @@ class PaymentFlowTest extends TestCase
 
         $this->actingAs($cashier)
             ->post(route('pos.orders.xendit.simulate', [$order, $payment]))
-            ->assertRedirect(route('pos.index', [
-                'order' => $order->id,
-                'payment' => $payment->id,
-                'payment_success' => 1,
-            ]));
+            ->assertRedirect(route('pos.xendit.success', $payment));
 
         $this->assertDatabaseHas('xendit_payments', ['id' => $payment->id, 'status' => 'paid']);
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid']);
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
+        $this->actingAs($cashier)
+            ->get(route('pos.xendit.success', $payment))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/PaymentSuccess')
+                ->where('payment.id', $payment->id)
+                ->where('transaction.id', $transaction->id)
+                ->where('redirectSeconds', 3));
         Http::assertSent(fn ($request) => $request->url() === 'https://api.xendit.co/qr_codes/qr_test/payments/simulate'
             && $request['amount'] === 20000);
     }

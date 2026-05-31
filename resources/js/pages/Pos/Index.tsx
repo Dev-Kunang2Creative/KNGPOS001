@@ -57,6 +57,7 @@ type GroupedOpenBillSection = {
     label: string;
     items: GroupedOpenBillLine[];
 };
+type CloseBillPaymentMethod = 'cash' | 'qris';
 
 function groupOpenBillItems(items: ActiveOrderItem[]): GroupedOpenBillSection[] {
     const sections = new Map<string, GroupedOpenBillLine[]>();
@@ -114,6 +115,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
         items: [] as { menu_item_id: number; quantity: number; notes?: string }[],
     });
     const cashForm = useForm({ amount_paid: activeOrderTotal, notes: '' });
+    const [closeBillPaymentMethod, setCloseBillPaymentMethod] = useState<CloseBillPaymentMethod>('cash');
     const [closeBillAmount, setCloseBillAmount] = useState(0);
     const closeBillChange = Math.max(0, Number(closeBillAmount || 0) - cartTotal);
     const activeCashPaid = Number(cashForm.data.amount_paid || 0);
@@ -189,7 +191,8 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
             table_id: Number(selectedTableId),
             notes: form.data.notes,
             bill_mode: billMode,
-            amount_paid: billMode === 'close_bill' ? Number(closeBillAmount || 0) : undefined,
+            payment_method: billMode === 'close_bill' ? closeBillPaymentMethod : undefined,
+            amount_paid: billMode === 'close_bill' && closeBillPaymentMethod === 'cash' ? Number(closeBillAmount || 0) : undefined,
             items,
         };
         const endpoint = billMode === 'close_bill' ? '/pos/orders/close-bill' : '/pos/orders';
@@ -201,6 +204,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                 setCart([]);
                 setSelectedTableId('');
                 setCartTarget('close_bill');
+                setCloseBillPaymentMethod('cash');
                 setCloseBillAmount(0);
                 form.reset();
             },
@@ -400,10 +404,10 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                             <Button
                                                                 type="button"
                                                                 className="mt-4 w-full"
-                                                                onClick={() => router.visit(`/pos/transactions/${xenditPayment.transaction_id}/receipt`)}
+                                                                onClick={() => router.visit(`/pos/xendit/${xenditPayment.id}/success`)}
                                                             >
                                                                 <ReceiptText />
-                                                                Cetak Struk
+                                                                Buka Halaman Sukses
                                                             </Button>
                                                         </div>
                                                     ) : (
@@ -500,19 +504,43 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             {cartTarget === 'close_bill' && (
                                 <div className="rounded-md border bg-muted/30 p-3 text-sm">
                                     <div className="grid gap-2">
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Button
+                                                type="button"
+                                                variant={closeBillPaymentMethod === 'cash' ? 'default' : 'outline'}
+                                                onClick={() => setCloseBillPaymentMethod('cash')}
+                                            >
+                                                Cash
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant={closeBillPaymentMethod === 'qris' ? 'default' : 'outline'}
+                                                onClick={() => setCloseBillPaymentMethod('qris')}
+                                            >
+                                                QRIS
+                                            </Button>
+                                        </div>
                                         <div className="flex justify-between">
                                             <span>Total tagihan</span>
                                             <strong>Rp {money(cartTotal)}</strong>
                                         </div>
-                                        <Input type="number" value={closeBillAmount} onChange={(event) => setCloseBillAmount(Number(event.target.value))} placeholder="Uang pelanggan" />
-                                        <div className="flex justify-between">
-                                            <span>Uang pelanggan</span>
-                                            <strong>Rp {money(closeBillAmount)}</strong>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span>Kembalian</span>
-                                            <strong>Rp {money(closeBillChange)}</strong>
-                                        </div>
+                                        {closeBillPaymentMethod === 'cash' ? (
+                                            <>
+                                                <Input type="number" value={closeBillAmount} onChange={(event) => setCloseBillAmount(Number(event.target.value))} placeholder="Uang pelanggan" />
+                                                <div className="flex justify-between">
+                                                    <span>Uang pelanggan</span>
+                                                    <strong>Rp {money(closeBillAmount)}</strong>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span>Kembalian</span>
+                                                    <strong>Rp {money(closeBillChange)}</strong>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <p className="rounded-md border border-emerald-500/30 bg-emerald-50 p-2 text-xs text-emerald-700">
+                                                Setelah disimpan, QRIS Xendit dibuat dan pembayaran bisa disimulasikan dari panel Open Bill.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -523,11 +551,11 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                     (!selectedCartOrder && !selectedTableId) ||
                                     cart.length === 0 ||
                                     form.processing ||
-                                    (cartTarget === 'close_bill' && Number(closeBillAmount || 0) < cartTotal)
+                                    (cartTarget === 'close_bill' && closeBillPaymentMethod === 'cash' && Number(closeBillAmount || 0) < cartTotal)
                                 }
                             >
                                 <ShoppingCart />
-                                {selectedCartOrder ? 'Tambah & Cetak Kitchen/Bar' : cartTarget === 'close_bill' ? 'Close Bill & Cetak Struk' : 'Simpan Open Bill'}
+                                {selectedCartOrder ? 'Tambah & Cetak Kitchen/Bar' : cartTarget === 'close_bill' ? (closeBillPaymentMethod === 'qris' ? 'Close Bill & Generate QRIS' : 'Close Bill & Cetak Struk') : 'Simpan Open Bill'}
                             </Button>
                         </div>
                     </form>
