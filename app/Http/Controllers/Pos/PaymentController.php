@@ -47,8 +47,13 @@ class PaymentController extends Controller
             }
 
             $result = $paymentService->createQrisPayment($order, $request->user());
-        } catch (RequestException) {
-            return back()->with('error', 'Gagal membuat pembayaran Xendit.');
+        } catch (RequestException $exception) {
+            \Illuminate\Support\Facades\Log::error('Xendit Request Error', [
+                'response' => $exception->response->json(),
+                'status' => $exception->response->status(),
+            ]);
+            $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API Xendit';
+            return back()->with('error', 'Gagal membuat pembayaran Xendit: ' . (is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
         } catch (RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
