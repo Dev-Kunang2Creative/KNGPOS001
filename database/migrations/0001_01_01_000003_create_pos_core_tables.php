@@ -192,6 +192,7 @@ return new class extends Migration
             $table->enum('status', ['queued', 'in_progress', 'done', 'cancelled'])->default('queued');
             $table->text('notes')->nullable();
             $table->timestamp('sent_at')->nullable();
+            $table->timestamp('printed_at')->nullable();
             $table->timestamp('started_at')->nullable();
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();
@@ -206,6 +207,7 @@ return new class extends Migration
             $table->enum('status', ['queued', 'in_progress', 'done', 'cancelled'])->default('queued');
             $table->text('notes')->nullable();
             $table->timestamp('sent_at')->nullable();
+            $table->timestamp('printed_at')->nullable();
             $table->timestamp('started_at')->nullable();
             $table->timestamp('completed_at')->nullable();
             $table->timestamps();

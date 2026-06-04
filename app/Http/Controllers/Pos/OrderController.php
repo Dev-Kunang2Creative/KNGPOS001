@@ -9,6 +9,8 @@ use App\Http\Requests\Pos\ApproveSelfOrderRequest;
 use App\Http\Requests\Pos\RejectSelfOrderRequest;
 use App\Http\Requests\Pos\StoreOrderRequest;
 use App\Http\Requests\Pos\SubmitOrderRequest;
+use App\Models\BarOrder;
+use App\Models\KitchenOrder;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Order;
@@ -82,6 +84,8 @@ class OrderController extends Controller
                 ->latest()
                 ->limit(20)
                 ->get(),
+            'pendingStationTickets' => $this->stationTicketsQuery(false),
+            'stationTicketHistory' => $this->stationTicketsQuery(true),
         ]);
     }
 
@@ -109,7 +113,11 @@ class OrderController extends Controller
 
     public function stationTicket(Request $request, Order $order): Response
     {
-        abort_unless($order->kasir_id === $request->user()->id && in_array($order->status, ['open', 'submitted'], true), 403);
+        abort_unless(
+            $order->kasir_id === $request->user()->id
+                || ($order->kasir_id === null && $order->order_type === 'self_order'),
+            403
+        );
 
         $order->load(['table.zone:id,name', 'cashier:id,name']);
         $kitchenOrderId = $request->integer('kitchen_order');
@@ -132,6 +140,11 @@ class OrderController extends Controller
 
         abort_if($kitchenOrders->isEmpty() && $barOrders->isEmpty(), 404);
 
+        if (! $request->boolean('reprint')) {
+            $kitchenOrders->whereNull('printed_at')->each->update(['printed_at' => now()]);
+            $barOrders->whereNull('printed_at')->each->update(['printed_at' => now()]);
+        }
+
         return Inertia::render('Pos/StationTicket', [
             'order' => $order,
             'kitchenOrders' => $kitchenOrders,
@@ -140,6 +153,52 @@ class OrderController extends Controller
                 ? XenditPayment::query()->find($request->integer('payment'))
                 : null,
         ]);
+    }
+
+    private function stationTicketsQuery(bool $printed): array
+    {
+        $kitchenTickets = KitchenOrder::query()
+            ->with(['order.table.zone:id,name', 'station:id,name'])
+            ->whereHas('order', fn ($query) => $query->where('order_type', 'self_order'))
+            ->when($printed, fn ($query) => $query->whereNotNull('printed_at'), fn ($query) => $query->whereNull('printed_at'))
+            ->latest($printed ? 'printed_at' : 'sent_at')
+            ->limit(20)
+            ->get()
+            ->map(fn (KitchenOrder $ticket): array => [
+                'id' => $ticket->id,
+                'type' => 'kitchen',
+                'order_id' => $ticket->order_id,
+                'station_name' => $ticket->station?->name,
+                'table_name' => $ticket->order?->table?->name,
+                'zone_name' => $ticket->order?->table?->zone?->name,
+                'sent_at' => $ticket->sent_at,
+                'printed_at' => $ticket->printed_at,
+            ]);
+
+        $barTickets = BarOrder::query()
+            ->with(['order.table.zone:id,name', 'station:id,name'])
+            ->whereHas('order', fn ($query) => $query->where('order_type', 'self_order'))
+            ->when($printed, fn ($query) => $query->whereNotNull('printed_at'), fn ($query) => $query->whereNull('printed_at'))
+            ->latest($printed ? 'printed_at' : 'sent_at')
+            ->limit(20)
+            ->get()
+            ->map(fn (BarOrder $ticket): array => [
+                'id' => $ticket->id,
+                'type' => 'bar',
+                'order_id' => $ticket->order_id,
+                'station_name' => $ticket->station?->name,
+                'table_name' => $ticket->order?->table?->name,
+                'zone_name' => $ticket->order?->table?->zone?->name,
+                'sent_at' => $ticket->sent_at,
+                'printed_at' => $ticket->printed_at,
+            ]);
+
+        return $kitchenTickets
+            ->concat($barTickets)
+            ->sortByDesc(fn (array $ticket) => $printed ? $ticket['printed_at'] : $ticket['sent_at'])
+            ->take(20)
+            ->values()
+            ->all();
     }
 
     public function store(StoreOrderRequest $request): RedirectResponse
@@ -296,7 +355,9 @@ class OrderController extends Controller
             }
         }
 
-        return $this->redirectToStationTicket($result['order'], $result['routing']);
+        return redirect()
+            ->route('pos.index', ['order' => $result['order']->id])
+            ->with('success', 'Self-order diterima. Tagihan siap dibayar dan tiket Kitchen/Bar masuk daftar cetak.');
     }
 
     public function rejectSelfOrder(

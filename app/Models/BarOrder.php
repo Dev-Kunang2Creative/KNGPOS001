@@ -14,6 +14,7 @@ class BarOrder extends Model
     {
         return [
             'sent_at' => 'datetime',
+            'printed_at' => 'datetime',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
         ];

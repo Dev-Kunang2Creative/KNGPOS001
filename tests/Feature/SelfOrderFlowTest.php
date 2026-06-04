@@ -77,13 +77,13 @@ class SelfOrderFlowTest extends TestCase
             'subtotal' => 50000,
         ]);
 
-        $this->actingAs($cashier)
-            ->post(route('pos.self-orders.approve', $selfOrder))
-            ->assertRedirect();
+        $response = $this->actingAs($cashier)
+            ->post(route('pos.self-orders.approve', $selfOrder));
 
         $order = $selfOrder->fresh()->order;
 
         $this->assertNotNull($order);
+        $response->assertRedirect(route('pos.index', ['order' => $order->id]));
         $this->assertDatabaseHas('self_orders', [
             'id' => $selfOrder->id,
             'status' => 'converted_to_order',
@@ -289,6 +289,95 @@ class SelfOrderFlowTest extends TestCase
                 ->has('paidSelfOrderReceipts', 1)
                 ->where('paidSelfOrderReceipts.0.id', $selfOrder->id)
                 ->where('paidSelfOrderReceipts.0.order.transaction.id', $transaction->id));
+    }
+
+    public function test_self_order_station_ticket_disappears_after_print_and_moves_to_history(): void
+    {
+        [$table, $qrCode, $menuItem, $kitchen, $bar] = $this->selfOrderFixture();
+        $cashier = $this->cashier();
+        Shift::query()->create(['kasir_id' => $cashier->id, 'opening_cash' => 100000, 'status' => 'open']);
+
+        $order = Order::query()->create([
+            'table_id' => $table->id,
+            'kasir_id' => null,
+            'order_type' => 'self_order',
+            'status' => 'paid',
+            'subtotal' => 25000,
+            'total_amount' => 25000,
+        ]);
+        $orderItem = $order->items()->create([
+            'menu_item_id' => $menuItem->id,
+            'quantity' => 1,
+            'unit_price' => 25000,
+            'subtotal' => 25000,
+            'status' => 'sent',
+        ]);
+        SelfOrder::query()->create([
+            'table_id' => $table->id,
+            'table_qrcode_id' => $qrCode->id,
+            'order_id' => $order->id,
+            'customer_name' => 'Budi',
+            'customer_email' => 'budi@example.com',
+            'payment_preference' => 'qris',
+            'status' => 'converted_to_order',
+            'subtotal' => 25000,
+            'total_amount' => 25000,
+        ]);
+        Transaction::query()->create([
+            'order_id' => $order->id,
+            'kasir_id' => null,
+            'payment_method' => 'qris',
+            'amount_paid' => 25000,
+            'change_amount' => 0,
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+        $kitchenOrder = \App\Models\KitchenOrder::query()->create([
+            'order_id' => $order->id,
+            'kitchen_station_id' => $kitchen->id,
+            'status' => 'queued',
+            'sent_at' => now(),
+        ]);
+        $kitchenOrder->items()->create([
+            'order_item_id' => $orderItem->id,
+            'quantity' => 1,
+        ]);
+        $barOrder = \App\Models\BarOrder::query()->create([
+            'order_id' => $order->id,
+            'bar_station_id' => $bar->id,
+            'status' => 'queued',
+            'sent_at' => now(),
+        ]);
+        $barOrder->items()->create([
+            'order_item_id' => $orderItem->id,
+            'quantity' => 1,
+        ]);
+
+        $this->actingAs($cashier)
+            ->get(route('pos.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('pendingStationTickets', 2)
+                ->has('stationTicketHistory', 0));
+
+        $this->actingAs($cashier)
+            ->get(route('pos.orders.station-ticket', [
+                'order' => $order->id,
+                'kitchen_order' => $kitchenOrder->id,
+            ]))
+            ->assertOk();
+
+        $this->assertNotNull($kitchenOrder->fresh()->printed_at);
+        $this->assertNull($barOrder->fresh()->printed_at);
+
+        $this->actingAs($cashier)
+            ->get(route('pos.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->has('pendingStationTickets', 1)
+                ->where('pendingStationTickets.0.type', 'bar')
+                ->has('stationTicketHistory', 1)
+                ->where('stationTicketHistory.0.type', 'kitchen'));
     }
 
     public function test_self_order_qris_payment_can_be_simulated_in_xendit_test_mode(): void

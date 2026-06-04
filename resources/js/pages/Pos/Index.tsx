@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { Bell, CheckCircle2, ChevronDown, ChevronRight, Minus, Plus, ReceiptText, Send, ShoppingCart, Trash2, XCircle } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronDown, ChevronRight, Minus, Plus, Printer, ReceiptText, Send, ShoppingCart, Trash2, XCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
@@ -73,6 +73,16 @@ type PaidSelfOrderReceipt = PendingSelfOrder & {
         } | null;
     } | null;
 };
+type StationTicketSummary = {
+    id: number;
+    type: 'kitchen' | 'bar';
+    order_id: number;
+    station_name?: string | null;
+    table_name?: string | null;
+    zone_name?: string | null;
+    sent_at?: string | null;
+    printed_at?: string | null;
+};
 type BillMode = 'open_bill' | 'close_bill';
 type CartTarget = 'close_bill' | 'open_bill' | `bill:${number}`;
 type Props = {
@@ -83,6 +93,8 @@ type Props = {
     xenditPayment: XenditPayment;
     pendingSelfOrders: PendingSelfOrder[];
     paidSelfOrderReceipts: PaidSelfOrderReceipt[];
+    pendingStationTickets: StationTicketSummary[];
+    stationTicketHistory: StationTicketSummary[];
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'POS', href: '/pos' }];
@@ -133,7 +145,7 @@ function groupOpenBillItems(items: ActiveOrderItem[]): GroupedOpenBillSection[] 
         .sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
 }
 
-export default function PosIndex({ tables, openOrders, categories, activeOrder, xenditPayment, pendingSelfOrders, paidSelfOrderReceipts }: Props) {
+export default function PosIndex({ tables, openOrders, categories, activeOrder, xenditPayment, pendingSelfOrders, paidSelfOrderReceipts, pendingStationTickets, stationTicketHistory }: Props) {
     const { flash } = usePage<SharedData>().props;
     const [selectedTableId, setSelectedTableId] = useState('');
     const [cartTarget, setCartTarget] = useState<CartTarget>('close_bill');
@@ -143,6 +155,8 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [selectedCategoryId, setSelectedCategoryId] = useState(categories[0] ? String(categories[0].id) : '');
     const [selfOrders, setSelfOrders] = useState<PendingSelfOrder[]>(pendingSelfOrders);
     const [showSelfOrders, setShowSelfOrders] = useState(pendingSelfOrders.length > 0);
+    const [showStationTickets, setShowStationTickets] = useState(pendingStationTickets.length > 0);
+    const [showStationHistory, setShowStationHistory] = useState(false);
     const orderableTables = useMemo(() => tables.filter((table) => ['available', 'occupied'].includes(table.status)), [tables]);
     const selectedCategory = categories.find((category) => String(category.id) === selectedCategoryId) ?? categories[0];
     const selectedTable = tables.find((table) => String(table.id) === selectedTableId);
@@ -179,7 +193,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
             }
 
             router.reload({
-                only: ['pendingSelfOrders', 'paidSelfOrderReceipts', 'openOrders'],
+                only: ['pendingSelfOrders', 'paidSelfOrderReceipts', 'pendingStationTickets', 'stationTicketHistory', 'openOrders'],
                 preserveScroll: true,
                 preserveState: true,
             });
@@ -291,6 +305,17 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                 onSuccess: () => setSelfOrders((current) => current.filter((order) => order.id !== selfOrderId)),
             },
         );
+    }
+
+    function stationTicketUrl(ticket: StationTicketSummary, reprint = false) {
+        const key = ticket.type === 'kitchen' ? 'kitchen_order' : 'bar_order';
+        const params = new URLSearchParams({ [key]: String(ticket.id) });
+
+        if (reprint) {
+            params.set('reprint', '1');
+        }
+
+        return `/pos/orders/${ticket.order_id}/station-ticket?${params.toString()}`;
     }
 
     return (
@@ -468,8 +493,80 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
                     <Card className="rounded-md">
                         <CardHeader>
+                            <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowStationTickets((current) => !current)}>
+                                <CardTitle className="flex items-center gap-2 text-base">
+                                    <Printer className="size-4" />
+                                    Cetak Kitchen/Bar
+                                    {pendingStationTickets.length > 0 && <Badge variant="destructive">{pendingStationTickets.length}</Badge>}
+                                </CardTitle>
+                                {showStationTickets ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                            </button>
+                        </CardHeader>
+                        {showStationTickets && (
+                            <CardContent className="space-y-3">
+                                {pendingStationTickets.length === 0 && <p className="text-sm text-muted-foreground">Tidak ada tiket kitchen/bar yang menunggu cetak.</p>}
+                                {pendingStationTickets.map((ticket) => (
+                                    <div key={`${ticket.type}-${ticket.id}`} className="rounded-md border p-3 text-sm">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="font-semibold">
+                                                    {ticket.type === 'kitchen' ? 'Kitchen' : 'Bar'} - {ticket.station_name ?? '-'}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Order #{ticket.order_id} - {ticket.table_name ?? '-'} - {ticket.zone_name ?? '-'}
+                                                </p>
+                                                {ticket.sent_at && <p className="text-xs text-muted-foreground">{new Date(ticket.sent_at).toLocaleString('id-ID')}</p>}
+                                            </div>
+                                            <Badge variant="outline">Belum cetak</Badge>
+                                        </div>
+                                        <Button type="button" size="sm" className="mt-3 w-full" onClick={() => router.visit(stationTicketUrl(ticket))}>
+                                            <Printer />
+                                            Cetak Tiket
+                                        </Button>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        )}
+                    </Card>
+
+                    <Card className="rounded-md">
+                        <CardHeader>
+                            <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowStationHistory((current) => !current)}>
+                                <CardTitle className="text-base">History Cetak Station</CardTitle>
+                                {showStationHistory ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                            </button>
+                        </CardHeader>
+                        {showStationHistory && (
+                            <CardContent className="space-y-3">
+                                {stationTicketHistory.length === 0 && <p className="text-sm text-muted-foreground">Belum ada history cetak station.</p>}
+                                {stationTicketHistory.map((ticket) => (
+                                    <div key={`history-${ticket.type}-${ticket.id}`} className="rounded-md border p-3 text-sm">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="font-semibold">
+                                                    {ticket.type === 'kitchen' ? 'Kitchen' : 'Bar'} - {ticket.station_name ?? '-'}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    Order #{ticket.order_id} - {ticket.table_name ?? '-'} - {ticket.zone_name ?? '-'}
+                                                </p>
+                                                {ticket.printed_at && <p className="text-xs text-muted-foreground">Printed: {new Date(ticket.printed_at).toLocaleString('id-ID')}</p>}
+                                            </div>
+                                            <Badge variant="secondary">Printed</Badge>
+                                        </div>
+                                        <Button type="button" size="sm" variant="outline" className="mt-3 w-full" onClick={() => router.visit(stationTicketUrl(ticket, true))}>
+                                            <Printer />
+                                            Cetak Ulang
+                                        </Button>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        )}
+                    </Card>
+
+                    <Card className="rounded-md">
+                        <CardHeader>
                             <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowOpenBill((current) => !current)}>
-                                <CardTitle className="text-base">Open Bill</CardTitle>
+                                <CardTitle className="text-base">Tagihan / Siap Bayar</CardTitle>
                                 {showOpenBill ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                             </button>
                         </CardHeader>
@@ -487,14 +584,19 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                {openOrders.length === 0 && <p className="mt-2 text-xs text-muted-foreground">Tidak ada open bill.</p>}
+                                {openOrders.length === 0 && <p className="mt-2 text-xs text-muted-foreground">Tidak ada tagihan aktif.</p>}
 
                                 {activeOrder && (
                                     <div className="mt-4 space-y-3 rounded-md border p-3 text-sm">
                                         <div className="flex items-center justify-between gap-2">
-                                            <p>
-                                                {activeOrder.table?.name} - Rp {money(activeOrderTotal)}
-                                            </p>
+                                            <div>
+                                                <p>{activeOrder.table?.name} - Rp {money(activeOrderTotal)}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {activeOrder.status === 'submitted'
+                                                        ? 'Siap dibayar. Jika ada tambahan, pilih menu lalu tambah ke tagihan ini.'
+                                                        : 'Cetak item baru ke Kitchen/Bar sebelum pembayaran.'}
+                                                </p>
+                                            </div>
                                             <Badge variant={activeOrder.status === 'submitted' ? 'default' : 'secondary'}>{activeOrder.status}</Badge>
                                         </div>
                                         {activeOrderSections.map((section) => (
