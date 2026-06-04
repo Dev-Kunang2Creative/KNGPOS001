@@ -85,6 +85,7 @@ type StationTicketSummary = {
 };
 type BillMode = 'open_bill' | 'close_bill';
 type CartTarget = 'close_bill' | 'open_bill' | `bill:${number}`;
+type CashierPanel = 'cart' | 'bills' | 'self_order' | 'station_print' | 'station_history';
 type Props = {
     tables: Table[];
     openOrders: OpenOrder[];
@@ -157,6 +158,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [showSelfOrders, setShowSelfOrders] = useState(pendingSelfOrders.length > 0);
     const [showStationTickets, setShowStationTickets] = useState(pendingStationTickets.length > 0);
     const [showStationHistory, setShowStationHistory] = useState(false);
+    const [activePanel, setActivePanel] = useState<CashierPanel>(
+        activeOrder ? 'bills' : pendingSelfOrders.length > 0 ? 'self_order' : pendingStationTickets.length > 0 ? 'station_print' : 'cart',
+    );
     const orderableTables = useMemo(() => tables.filter((table) => ['available', 'occupied'].includes(table.status)), [tables]);
     const selectedCategory = categories.find((category) => String(category.id) === selectedCategoryId) ?? categories[0];
     const selectedTable = tables.find((table) => String(table.id) === selectedTableId);
@@ -181,6 +185,13 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const closeBillChange = Math.max(0, Number(closeBillAmount || 0) - cartTotal);
     const activeCashPaid = Number(cashForm.data.amount_paid || 0);
     const activeCashChange = Math.max(0, activeCashPaid - activeOrderTotal);
+    const cashierPanels: { key: CashierPanel; label: string; icon: typeof ShoppingCart; count?: number }[] = [
+        { key: 'cart', label: 'Cart', icon: ShoppingCart, count: cart.length },
+        { key: 'bills', label: 'Tagihan', icon: ReceiptText, count: openOrders.length },
+        { key: 'self_order', label: 'Self Order', icon: Bell, count: selfOrders.length + paidSelfOrderReceipts.length },
+        { key: 'station_print', label: 'Cetak Station', icon: Printer, count: pendingStationTickets.length },
+        { key: 'station_history', label: 'History', icon: ReceiptText, count: stationTicketHistory.length },
+    ];
 
     useEffect(() => {
         setSelfOrders(pendingSelfOrders);
@@ -208,6 +219,24 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
             setShowOpenBill(true);
         }
     }, [activeOrder?.id, activeOrderTotal]);
+
+    useEffect(() => {
+        if (activePanel === 'self_order') {
+            setShowSelfOrders(true);
+        }
+
+        if (activePanel === 'station_print') {
+            setShowStationTickets(true);
+        }
+
+        if (activePanel === 'station_history') {
+            setShowStationHistory(true);
+        }
+
+        if (activePanel === 'bills') {
+            setShowOpenBill(true);
+        }
+    }, [activePanel]);
 
     useEffect(() => {
         if (cartTarget === 'close_bill' && closeBillAmount < cartTotal) {
@@ -378,7 +407,37 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     </Card>
                 </section>
 
-                <aside className="space-y-4">
+                <aside className="grid gap-4 lg:grid-cols-[160px_1fr] xl:grid-cols-[150px_1fr]">
+                    <nav className="h-fit rounded-md border bg-background p-2">
+                        <div className="mb-2 px-2 py-1 text-xs font-semibold uppercase text-muted-foreground">Kasir</div>
+                        <div className="grid gap-1">
+                            {cashierPanels.map((panel) => {
+                                const Icon = panel.icon;
+
+                                return (
+                                    <button
+                                        key={panel.key}
+                                        type="button"
+                                        className={`flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors ${
+                                            activePanel === panel.key ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                                        }`}
+                                        onClick={() => setActivePanel(panel.key)}
+                                    >
+                                        <Icon className="size-4 shrink-0" />
+                                        <span className="min-w-0 flex-1 truncate">{panel.label}</span>
+                                        {Boolean(panel.count) && (
+                                            <span className={`rounded px-1.5 py-0.5 text-xs ${activePanel === panel.key ? 'bg-primary-foreground text-primary' : 'bg-muted text-foreground'}`}>
+                                                {panel.count}
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </nav>
+
+                    <div className="space-y-4">
+                    {activePanel === 'self_order' && (
                     <Card className="rounded-md">
                         <CardHeader>
                             <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowSelfOrders((current) => !current)}>
@@ -490,7 +549,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             </CardContent>
                         )}
                     </Card>
+                    )}
 
+                    {activePanel === 'station_print' && (
                     <Card className="rounded-md">
                         <CardHeader>
                             <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowStationTickets((current) => !current)}>
@@ -528,7 +589,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             </CardContent>
                         )}
                     </Card>
+                    )}
 
+                    {activePanel === 'station_history' && (
                     <Card className="rounded-md">
                         <CardHeader>
                             <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowStationHistory((current) => !current)}>
@@ -562,7 +625,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             </CardContent>
                         )}
                     </Card>
+                    )}
 
+                    {activePanel === 'bills' && (
                     <Card className="rounded-md">
                         <CardHeader>
                             <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowOpenBill((current) => !current)}>
@@ -724,7 +789,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             </CardContent>
                         )}
                     </Card>
+                    )}
 
+                    {activePanel === 'cart' && (
                     <form onSubmit={submitOrder} className="rounded-md border p-4">
                         <div className="mb-4 flex items-center justify-between">
                             <h2 className="flex items-center gap-2 text-base font-semibold">
@@ -855,7 +922,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             </Button>
                         </div>
                     </form>
+                    )}
 
+                    </div>
                 </aside>
             </main>
         </AppLayout>
