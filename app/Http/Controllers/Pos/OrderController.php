@@ -163,7 +163,6 @@ class OrderController extends Controller
     {
         $kitchenTickets = KitchenOrder::query()
             ->with(['order.table.zone:id,name', 'station:id,name'])
-            ->whereHas('order', fn ($query) => $query->where('order_type', 'self_order'))
             ->when($printed, fn ($query) => $query->whereNotNull('printed_at'), fn ($query) => $query->whereNull('printed_at'))
             ->latest($printed ? 'printed_at' : 'sent_at')
             ->limit(20)
@@ -181,7 +180,6 @@ class OrderController extends Controller
 
         $barTickets = BarOrder::query()
             ->with(['order.table.zone:id,name', 'station:id,name'])
-            ->whereHas('order', fn ($query) => $query->where('order_type', 'self_order'))
             ->when($printed, fn ($query) => $query->whereNotNull('printed_at'), fn ($query) => $query->whereNull('printed_at'))
             ->latest($printed ? 'printed_at' : 'sent_at')
             ->limit(20)

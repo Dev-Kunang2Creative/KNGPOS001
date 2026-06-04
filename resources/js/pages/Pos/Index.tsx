@@ -13,6 +13,7 @@ import {
     CheckCircle2,
     ChevronDown,
     ChevronRight,
+    ChevronUp,
     CreditCard,
     GlassWater,
     Minus,
@@ -161,6 +162,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [selfOrders, setSelfOrders] = useState<PendingSelfOrder[]>(pendingSelfOrders);
     const [approvingAll, setApprovingAll] = useState(false);
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [billItemsExpanded, setBillItemsExpanded] = useState(false);
     const [selfOrderForCheckout, setSelfOrderForCheckout] = useState<PendingSelfOrder | null>(null);
 
     // Pagination states
@@ -397,6 +399,12 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                 Self Order dari <strong className="mx-1">{selfOrderForCheckout.customer_name ?? 'Customer'}</strong> — {selfOrderForCheckout.table_name ?? `Meja ${selfOrderForCheckout.table_id}`}
                             </div>
                         )}
+                        {selectedCartOrder && !selfOrderForCheckout && (
+                            <div className="mt-2 flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                                <ReceiptText className="size-3 shrink-0" />
+                                Tambah item ke <strong className="mx-1">Open Bill #{selectedCartOrder.id}</strong> — {selectedCartOrder.table?.name ?? '-'} · Rp {money(selectedCartOrder.total_amount)}
+                            </div>
+                        )}
                     </div>
                     {/* Form */}
                     <form onSubmit={(e) => { submitOrder(e); setDrawerOpen(false); }} className="space-y-5 px-4 pb-10">
@@ -512,7 +520,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             {quickAmounts.map((amt) => (
                                                 <button key={amt} type="button"
                                                     className={`rounded-lg border py-2 text-xs font-semibold transition-colors ${closeBillAmount === amt ? 'border-primary bg-primary/10 text-primary' : 'bg-muted hover:bg-muted/80'}`}
-                                                    onClick={() => setCloseBillAmount(amt)}>
+                                                    onClick={() => setCloseBillAmount((prev) => prev + amt)}>
                                                     {amt >= 1000 ? `${amt / 1000}rb` : amt}
                                                 </button>
                                             ))}
@@ -767,7 +775,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                 {quickAmounts.map((amt) => (
                                                     <button key={amt} type="button"
                                                         className={`rounded-lg border py-1.5 text-xs font-semibold transition-colors ${closeBillAmount === amt ? 'border-primary bg-primary/10 text-primary' : 'bg-muted hover:bg-muted/80'}`}
-                                                        onClick={() => setCloseBillAmount(amt)}>
+                                                        onClick={() => setCloseBillAmount((prev) => prev + amt)}>
                                                         {amt >= 1000 ? `${amt / 1000}rb` : amt}
                                                     </button>
                                                 ))}
@@ -799,32 +807,38 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
                     {/* ── PANEL: TAGIHAN AKTIF ── */}
                     {activePanel === 'bills' && (
-                        <div className="space-y-4 rounded-xl border bg-card p-4">
-                            <h2 className="flex items-center gap-2 font-semibold">
-                                <ReceiptText className="size-4" />
-                                Tagihan Aktif
-                            </h2>
-                            {openOrders.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">Tidak ada tagihan aktif.</p>
-                            ) : (
-                                <>
-                                    <Select value={activeOrder ? String(activeOrder.id) : ''} onValueChange={(id) => router.visit(`/pos?order=${id}`)}>
-                                        <SelectTrigger className="min-h-[44px]">
-                                            <SelectValue placeholder="Pilih tagihan..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {paginatedOpenOrders.map((o) => (
-                                                <SelectItem key={o.id} value={String(o.id)}>#{o.id} – {o.table?.name ?? '-'} – Rp {money(o.total_amount)}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <Pagination page={billsPage} total={openOrders.length} pageSize={PAGE_SIZE} onPage={setBillsPage} />
-                                </>
-                            )}
+                        <div className="space-y-3">
+                            {/* Open bills list */}
+                            <div className="rounded-xl border bg-card p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="flex items-center gap-2 font-semibold"><ReceiptText className="size-4" />Open Bill</h2>
+                                    {openOrders.length > 0 && <Badge variant="secondary">{openOrders.length}</Badge>}
+                                </div>
+                                {openOrders.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground">Tidak ada open bill aktif.</p>
+                                ) : (
+                                    <>
+                                        {paginatedOpenOrders.map((o) => (
+                                            <button key={o.id} type="button"
+                                                className={`flex min-h-[52px] w-full items-center justify-between rounded-xl border-2 px-4 py-2.5 text-sm transition-all ${activeOrder?.id === o.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'}`}
+                                                onClick={() => router.visit(`/pos?order=${o.id}`)}>
+                                                <div className="text-left">
+                                                    <p className="font-semibold">{o.table?.name ?? '-'}</p>
+                                                    <p className="text-xs text-muted-foreground">#{o.id} · {o.status}</p>
+                                                </div>
+                                                <span className="font-bold">Rp {money(o.total_amount)}</span>
+                                            </button>
+                                        ))}
+                                        <Pagination page={billsPage} total={openOrders.length} pageSize={PAGE_SIZE} onPage={setBillsPage} />
+                                    </>
+                                )}
+                            </div>
 
+                            {/* Active order detail */}
                             {activeOrder && (
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
+                                <div className="rounded-xl border bg-card p-4 space-y-3">
+                                    {/* Header */}
+                                    <div className="flex items-center justify-between">
                                         <div>
                                             <p className="font-semibold">{activeOrder.table?.name} · Rp {money(activeOrderTotal)}</p>
                                             <p className="text-xs text-muted-foreground">Order #{activeOrder.id}</p>
@@ -832,55 +846,58 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         <Badge variant={activeOrder.status === 'submitted' ? 'default' : 'secondary'}>{activeOrder.status}</Badge>
                                     </div>
 
-                                    {/* Flow steps */}
-                                    <div className="space-y-2 rounded-lg border p-3">
-                                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Alur Pembayaran</p>
-                                        <div className={`flex items-start gap-2 ${pendingActiveItems.length > 0 ? '' : 'opacity-40'}`}>
-                                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${pendingActiveItems.length > 0 ? 'bg-amber-500 text-white' : 'bg-muted text-muted-foreground'}`}>1</span>
-                                            <div>
-                                                <p className="text-sm font-medium">Kirim ke Dapur/Bar</p>
-                                                <p className="text-xs text-muted-foreground">{pendingActiveItems.length > 0 ? `${pendingActiveItems.length} item belum dikirim` : 'Semua item sudah dikirim'}</p>
-                                            </div>
-                                        </div>
-                                        <div className={`flex items-start gap-2 ${canPay ? '' : 'opacity-40'}`}>
-                                            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${canPay ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>2</span>
-                                            <div>
-                                                <p className="text-sm font-medium">Proses Pembayaran</p>
-                                                <p className="text-xs text-muted-foreground">Cash atau QRIS</p>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    {/* Tambah Item — primary action */}
+                                    <Button type="button" className="min-h-[48px] w-full"
+                                        onClick={() => { setCartTarget(`bill:${activeOrder.id}` as CartTarget); setDrawerOpen(true); }}>
+                                        <Plus className="size-4" /> Tambah Item ke Tagihan Ini
+                                    </Button>
 
-                                    {activeOrderSections.map((section) => (
-                                        <div key={section.label}>
-                                            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{section.label}</p>
-                                            <div className="rounded-lg border bg-background">
-                                                {section.items.map((item) => (
-                                                    <div key={item.ids.join('-')} className="flex items-center gap-2 border-b px-3 py-2.5 last:border-0">
-                                                        <div className="flex-1">
-                                                            <p className="text-sm font-medium">{item.menu_item?.name}</p>
-                                                            {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
-                                                        </div>
-                                                        <Badge variant={item.status === 'pending' ? 'destructive' : 'outline'} className="text-xs">{item.status}</Badge>
-                                                        <span className="text-sm">×{item.quantity}</span>
-                                                        <span className="w-20 text-right text-xs text-muted-foreground">Rp {money(item.subtotal)}</span>
+                                    {/* Items collapsible */}
+                                    <button type="button" className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                                        onClick={() => setBillItemsExpanded((v) => !v)}>
+                                        <span>Item ({activeOrder.items.length})</span>
+                                        {billItemsExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                                    </button>
+
+                                    {billItemsExpanded && (
+                                        <div className="space-y-2">
+                                            {activeOrderSections.map((section) => (
+                                                <div key={section.label}>
+                                                    <p className="mb-1 text-xs font-semibold text-muted-foreground">{section.label}</p>
+                                                    <div className="rounded-lg border bg-background">
+                                                        {section.items.map((item) => (
+                                                            <div key={item.ids.join('-')} className="flex items-center gap-2 border-b px-3 py-2 last:border-0">
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="truncate text-sm font-medium">{item.menu_item?.name}</p>
+                                                                    {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
+                                                                </div>
+                                                                <Badge variant={item.status === 'pending' ? 'destructive' : 'outline'} className="text-xs shrink-0">{item.status}</Badge>
+                                                                <span className="text-sm shrink-0">×{item.quantity}</span>
+                                                                <span className="w-18 text-right text-xs text-muted-foreground shrink-0">Rp {money(item.subtotal)}</span>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                ))}
-                                            </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    )}
 
-                                    <Button type="button" className="min-h-[44px] w-full" variant={pendingActiveItems.length > 0 ? 'default' : 'outline'} disabled={!['open', 'submitted'].includes(activeOrder.status) || pendingActiveItems.length === 0} onClick={() => router.post(`/pos/orders/${activeOrder.id}/submit`, {}, { preserveScroll: true })}>
+                                    {/* Step 1: Kirim ke dapur */}
+                                    <Button type="button" className="min-h-[44px] w-full"
+                                        variant={pendingActiveItems.length > 0 ? 'default' : 'outline'}
+                                        disabled={!['open', 'submitted'].includes(activeOrder.status) || pendingActiveItems.length === 0}
+                                        onClick={() => router.post(`/pos/orders/${activeOrder.id}/submit`, {}, { preserveScroll: true })}>
                                         <Send className="size-4" />
                                         {pendingActiveItems.length > 0 ? `Kirim ${pendingActiveItems.length} Item ke Dapur/Bar` : 'Semua Item Sudah Dikirim'}
                                     </Button>
 
-                                    <div className="space-y-3 rounded-lg border p-3">
+                                    {/* Step 2: Bayar */}
+                                    <div className="rounded-xl border p-3 space-y-3">
                                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proses Pembayaran</p>
                                         {!canPay && (
                                             <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-700">
                                                 <AlertCircle className="size-3 shrink-0" />
-                                                {activeOrder.status !== 'submitted' ? 'Kirim ke Dapur/Bar dulu sebelum bayar.' : 'Ada item belum dikirim ke Dapur/Bar.'}
+                                                {activeOrder.status !== 'submitted' ? 'Kirim item ke Dapur/Bar dulu sebelum bayar.' : 'Ada item baru belum dikirim ke Dapur/Bar.'}
                                             </div>
                                         )}
                                         <div className="space-y-2">
@@ -888,7 +905,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                 <Banknote className="size-3.5" /> Cash
                                             </div>
                                             <div className="flex justify-between text-sm">
-                                                <span className="text-muted-foreground">Total tagihan</span>
+                                                <span className="text-muted-foreground">Total</span>
                                                 <strong>Rp {money(activeOrderTotal)}</strong>
                                             </div>
                                             <Input type="text" inputMode="numeric"
@@ -899,8 +916,8 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             <div className="grid grid-cols-5 gap-1">
                                                 {quickAmounts.map((amt) => (
                                                     <button key={amt} type="button"
-                                                        className={`rounded-lg border py-1.5 text-xs font-semibold transition-colors ${cashForm.data.amount_paid === amt ? 'border-primary bg-primary/10 text-primary' : 'bg-muted hover:bg-muted/80'}`}
-                                                        onClick={() => cashForm.setData('amount_paid', amt)}>
+                                                        className="rounded-lg border bg-muted py-1.5 text-xs font-semibold hover:bg-muted/80"
+                                                        onClick={() => cashForm.setData('amount_paid', cashForm.data.amount_paid + amt)}>
                                                         {amt >= 1000 ? `${amt / 1000}rb` : amt}
                                                     </button>
                                                 ))}
@@ -911,15 +928,19 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                     <strong className="text-emerald-700">Rp {money(activeCashChange)}</strong>
                                                 </div>
                                             )}
-                                            <Button type="button" className="min-h-[44px] w-full" variant="outline" disabled={!canPay || activeCashPaid < activeOrderTotal || cashForm.processing} onClick={() => cashForm.post(`/pos/orders/${activeOrder.id}/pay`)}>
+                                            <Button type="button" className="min-h-[44px] w-full" variant="outline"
+                                                disabled={!canPay || activeCashPaid < activeOrderTotal || cashForm.processing}
+                                                onClick={() => cashForm.post(`/pos/orders/${activeOrder.id}/pay`)}>
                                                 Bayar Cash & Cetak Struk
                                             </Button>
                                         </div>
                                         <div className="space-y-2 border-t pt-3">
                                             <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                                                <QrCode className="size-3.5" /> QRIS Xendit
+                                                <QrCode className="size-3.5" /> QRIS
                                             </div>
-                                            <Button type="button" className="min-h-[44px] w-full" variant="outline" disabled={!canPay} onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit`, {}, { preserveScroll: true })}>
+                                            <Button type="button" className="min-h-[44px] w-full" variant="outline"
+                                                disabled={!canPay}
+                                                onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit`, {}, { preserveScroll: true })}>
                                                 Generate QRIS
                                             </Button>
                                             {xenditPayment && (
@@ -942,7 +963,8 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                             </Button>
                                                         </div>
                                                     ) : (
-                                                        <Button type="button" size="sm" className="min-h-[44px] w-full" variant="secondary" onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit/${xenditPayment.id}/simulate`, {}, { preserveScroll: true })}>
+                                                        <Button type="button" size="sm" className="min-h-[44px] w-full" variant="secondary"
+                                                            onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit/${xenditPayment.id}/simulate`, {}, { preserveScroll: true })}>
                                                             Simulasi Pembayaran
                                                         </Button>
                                                     )}
