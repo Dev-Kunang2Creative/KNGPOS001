@@ -104,6 +104,20 @@ type Props = {
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'POS', href: '/pos' }];
+
+function Pagination({ page, total, pageSize, onPage }: { page: number; total: number; pageSize: number; onPage: (p: number) => void }) {
+    const pages = Math.ceil(total / pageSize);
+    if (pages <= 1) return null;
+    return (
+        <div className="flex items-center justify-between border-t pt-2 text-xs text-muted-foreground">
+            <span>{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} dari {total}</span>
+            <div className="flex gap-1">
+                <button type="button" disabled={page <= 1} onClick={() => onPage(page - 1)} className="rounded px-2 py-1 hover:bg-muted disabled:opacity-40">‹ Prev</button>
+                <button type="button" disabled={page >= pages} onClick={() => onPage(page + 1)} className="rounded px-2 py-1 hover:bg-muted disabled:opacity-40">Next ›</button>
+            </div>
+        </div>
+    );
+}
 const money = (v: number | string) => Number(v || 0).toLocaleString('id-ID');
 const printTargetLabels: Record<string, string> = { kitchen: 'Kitchen', bar: 'Bar', kitchen_bar: 'Kitchen & Bar', kasir: 'Kasir' };
 
@@ -147,6 +161,15 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [selfOrders, setSelfOrders] = useState<PendingSelfOrder[]>(pendingSelfOrders);
     const [approvingAll, setApprovingAll] = useState(false);
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [selfOrderForCheckout, setSelfOrderForCheckout] = useState<PendingSelfOrder | null>(null);
+
+    // Pagination states
+    const PAGE_SIZE = 5;
+    const [billsPage, setBillsPage] = useState(1);
+    const [selfOrderPage, setSelfOrderPage] = useState(1);
+    const [receiptPage, setReceiptPage] = useState(1);
+    const [stationPage, setStationPage] = useState(1);
+    const [historyPage, setHistoryPage] = useState(1);
     const [activePanel, setActivePanel] = useState<CashierPanel>(
         activeOrder ? 'bills' : pendingSelfOrders.length > 0 ? 'self_order' : pendingStationTickets.length > 0 ? 'station_print' : 'bills',
     );
@@ -208,7 +231,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     }
 
     function updateQuantity(menuItemId: number, delta: number) {
-        setCart((cur) => cur.map((i) => (i.menu_item_id === menuItemId ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i)).filter((i) => i.quantity > 0));
+        setCart((cur) => cur.map((i) => (i.menu_item_id === menuItemId ? { ...i, quantity: i.quantity + delta } : i)).filter((i) => i.quantity > 0));
     }
 
     function removeItem(menuItemId: number) {
@@ -231,11 +254,53 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
             payment_method: billMode === 'close_bill' ? closeBillPaymentMethod : undefined,
             amount_paid: billMode === 'close_bill' && closeBillPaymentMethod === 'cash' ? Number(closeBillAmount || 0) : undefined,
             items,
+            self_order_id: selfOrderForCheckout?.id ?? undefined,
         }));
         form.post(billMode === 'close_bill' ? '/pos/orders/close-bill' : '/pos/orders', {
             preserveScroll: true,
-            onSuccess: () => { setCart([]); setSelectedTableId(''); setCartTarget('close_bill'); setCloseBillPaymentMethod('cash'); setCloseBillAmount(0); form.reset(); },
+            onSuccess: () => {
+                setCart([]);
+                setSelectedTableId('');
+                setCartTarget('close_bill');
+                setCloseBillPaymentMethod('cash');
+                setCloseBillAmount(0);
+                setSelfOrderForCheckout(null);
+                if (selfOrderForCheckout) {
+                    setSelfOrders((cur) => cur.filter((o) => o.id !== selfOrderForCheckout.id));
+                }
+                form.reset();
+            },
         });
+    }
+
+    // Paginated slices
+    const paginatedOpenOrders = openOrders.slice((billsPage - 1) * PAGE_SIZE, billsPage * PAGE_SIZE);
+    const paginatedSelfOrders = selfOrders.slice((selfOrderPage - 1) * PAGE_SIZE, selfOrderPage * PAGE_SIZE);
+    const paginatedPaidReceipts = paidSelfOrderReceipts.slice((receiptPage - 1) * PAGE_SIZE, receiptPage * PAGE_SIZE);
+    const paginatedPendingTickets = pendingStationTickets.slice((stationPage - 1) * PAGE_SIZE, stationPage * PAGE_SIZE);
+    const paginatedHistory = stationTicketHistory.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
+
+    const quickAmounts = [2000, 5000, 10000, 50000, 100000];
+
+    function openDrawerForCashierSelfOrder(so: PendingSelfOrder) {
+        const items: CartItem[] = so.items
+            .filter((item) => item.menu_item)
+            .map((item) => ({
+                menu_item_id: item.menu_item_id,
+                name: item.menu_item?.name ?? '',
+                quantity: item.quantity,
+                notes: item.notes ?? '',
+                price: Number(item.menu_item?.price ?? 0),
+            }));
+        setCart(items);
+        setSelectedTableId(String(so.table_id));
+        setCartTarget('close_bill');
+        setSelfOrderForCheckout(so);
+        setDrawerOpen(true);
+    }
+
+    function parseCashInput(value: string): number {
+        return Number(value.replace(/\./g, '').replace(/\D/g, '')) || 0;
     }
 
     function approveSelfOrder(selfOrderId: number) {
@@ -322,10 +387,16 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             <h2 className="flex items-center gap-2 font-semibold">
                                 <ShoppingCart className="size-4" /> Pesanan Baru
                             </h2>
-                            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full bg-muted" onClick={() => setDrawerOpen(false)}>
+                            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full bg-muted" onClick={() => { setDrawerOpen(false); setSelfOrderForCheckout(null); }}>
                                 <X className="size-4" />
                             </button>
                         </div>
+                        {selfOrderForCheckout && (
+                            <div className="mt-2 flex items-center gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
+                                <Bell className="size-3 shrink-0" />
+                                Self Order dari <strong className="mx-1">{selfOrderForCheckout.customer_name ?? 'Customer'}</strong> — {selfOrderForCheckout.table_name ?? `Meja ${selfOrderForCheckout.table_id}`}
+                            </div>
+                        )}
                     </div>
                     {/* Form */}
                     <form onSubmit={(e) => { submitOrder(e); setDrawerOpen(false); }} className="space-y-5 px-4 pb-10">
@@ -432,7 +503,20 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             <span className="text-muted-foreground">Total tagihan</span>
                                             <strong>Rp {money(cartTotal)}</strong>
                                         </div>
-                                        <Input type="number" value={closeBillAmount || ''} onChange={(e) => setCloseBillAmount(Number(e.target.value))} placeholder="Nominal uang pelanggan" className="min-h-[48px]" />
+                                        <Input type="text" inputMode="numeric"
+                                            value={closeBillAmount > 0 ? money(closeBillAmount) : ''}
+                                            onChange={(e) => setCloseBillAmount(parseCashInput(e.target.value))}
+                                            placeholder="0"
+                                            className="min-h-[48px] text-lg font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                                        <div className="grid grid-cols-5 gap-1.5">
+                                            {quickAmounts.map((amt) => (
+                                                <button key={amt} type="button"
+                                                    className={`rounded-lg border py-2 text-xs font-semibold transition-colors ${closeBillAmount === amt ? 'border-primary bg-primary/10 text-primary' : 'bg-muted hover:bg-muted/80'}`}
+                                                    onClick={() => setCloseBillAmount(amt)}>
+                                                    {amt >= 1000 ? `${amt / 1000}rb` : amt}
+                                                </button>
+                                            ))}
+                                        </div>
                                         {closeBillAmount > 0 && (
                                             <div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-2">
                                                 <span className="text-emerald-700">Kembalian</span>
@@ -674,7 +758,20 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                 <span className="text-muted-foreground">Total tagihan</span>
                                                 <strong>Rp {money(cartTotal)}</strong>
                                             </div>
-                                            <Input type="number" value={closeBillAmount || ''} onChange={(e) => setCloseBillAmount(Number(e.target.value))} placeholder="Nominal uang pelanggan" className="min-h-[44px]" />
+                                            <Input type="text" inputMode="numeric"
+                                                value={closeBillAmount > 0 ? money(closeBillAmount) : ''}
+                                                onChange={(e) => setCloseBillAmount(parseCashInput(e.target.value))}
+                                                placeholder="0"
+                                                className="min-h-[44px] text-base font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                                            <div className="grid grid-cols-5 gap-1">
+                                                {quickAmounts.map((amt) => (
+                                                    <button key={amt} type="button"
+                                                        className={`rounded-lg border py-1.5 text-xs font-semibold transition-colors ${closeBillAmount === amt ? 'border-primary bg-primary/10 text-primary' : 'bg-muted hover:bg-muted/80'}`}
+                                                        onClick={() => setCloseBillAmount(amt)}>
+                                                        {amt >= 1000 ? `${amt / 1000}rb` : amt}
+                                                    </button>
+                                                ))}
+                                            </div>
                                             {closeBillAmount > 0 && (
                                                 <div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-2">
                                                     <span className="text-emerald-700">Kembalian</span>
@@ -710,16 +807,19 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             {openOrders.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">Tidak ada tagihan aktif.</p>
                             ) : (
-                                <Select value={activeOrder ? String(activeOrder.id) : ''} onValueChange={(id) => router.visit(`/pos?order=${id}`)}>
-                                    <SelectTrigger className="min-h-[44px]">
-                                        <SelectValue placeholder="Pilih tagihan..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {openOrders.map((o) => (
-                                            <SelectItem key={o.id} value={String(o.id)}>#{o.id} – {o.table?.name ?? '-'} – Rp {money(o.total_amount)}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                <>
+                                    <Select value={activeOrder ? String(activeOrder.id) : ''} onValueChange={(id) => router.visit(`/pos?order=${id}`)}>
+                                        <SelectTrigger className="min-h-[44px]">
+                                            <SelectValue placeholder="Pilih tagihan..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {paginatedOpenOrders.map((o) => (
+                                                <SelectItem key={o.id} value={String(o.id)}>#{o.id} – {o.table?.name ?? '-'} – Rp {money(o.total_amount)}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <Pagination page={billsPage} total={openOrders.length} pageSize={PAGE_SIZE} onPage={setBillsPage} />
+                                </>
                             )}
 
                             {activeOrder && (
@@ -791,7 +891,20 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                                 <span className="text-muted-foreground">Total tagihan</span>
                                                 <strong>Rp {money(activeOrderTotal)}</strong>
                                             </div>
-                                            <Input type="number" value={cashForm.data.amount_paid} onChange={(e) => cashForm.setData('amount_paid', Number(e.target.value))} placeholder="Nominal uang pelanggan" className="min-h-[44px]" />
+                                            <Input type="text" inputMode="numeric"
+                                                value={cashForm.data.amount_paid > 0 ? money(cashForm.data.amount_paid) : ''}
+                                                onChange={(e) => cashForm.setData('amount_paid', parseCashInput(e.target.value))}
+                                                placeholder="0"
+                                                className="min-h-[44px] text-base font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                                            <div className="grid grid-cols-5 gap-1">
+                                                {quickAmounts.map((amt) => (
+                                                    <button key={amt} type="button"
+                                                        className={`rounded-lg border py-1.5 text-xs font-semibold transition-colors ${cashForm.data.amount_paid === amt ? 'border-primary bg-primary/10 text-primary' : 'bg-muted hover:bg-muted/80'}`}
+                                                        onClick={() => cashForm.setData('amount_paid', amt)}>
+                                                        {amt >= 1000 ? `${amt / 1000}rb` : amt}
+                                                    </button>
+                                                ))}
+                                            </div>
                                             {activeCashPaid >= activeOrderTotal && activeCashPaid > 0 && (
                                                 <div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-1.5 text-sm">
                                                     <span className="text-emerald-700">Kembalian</span>
@@ -858,7 +971,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             <Printer className="size-4" /> Cetak Semua Struk ({paidSelfOrderReceipts.length})
                                         </Button>
                                     )}
-                                    {paidSelfOrderReceipts.map((so) => {
+                                    {paginatedPaidReceipts.map((so) => {
                                         const tx = so.order?.transaction;
                                         return (
                                             <div key={`paid-${so.id}`} className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
@@ -876,6 +989,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             </div>
                                         );
                                     })}
+                                    <Pagination page={receiptPage} total={paidSelfOrderReceipts.length} pageSize={PAGE_SIZE} onPage={setReceiptPage} />
                                 </div>
                             )}
 
@@ -891,14 +1005,15 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                     <p className="text-sm text-muted-foreground">{paidSelfOrderReceipts.length === 0 ? 'Tidak ada self order saat ini.' : 'Tidak ada yang menunggu persetujuan.'}</p>
                                 )}
 
+
                                 {selfOrders.length > 1 && (
                                     <Button type="button" className="min-h-[44px] w-full" disabled={approvingAll} onClick={approveAllSelfOrders}>
                                         <CheckCircle2 className="size-4" />
-                                        {approvingAll ? 'Memproses...' : `Terima Semua (${selfOrders.length})`}
+                                        {approvingAll ? 'Memproses...' : `Terima Semua QRIS (${selfOrders.filter(s => s.payment_preference === 'qris').length})`}
                                     </Button>
                                 )}
 
-                                {selfOrders.map((so) => {
+                                {paginatedSelfOrders.map((so) => {
                                     const tableName = so.table_name ?? so.table?.name ?? '-';
                                     const isQris = so.payment_preference === 'qris';
                                     return (
@@ -928,17 +1043,32 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             <p className={`rounded px-2 py-1 text-xs ${isQris ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
                                                 {isQris ? 'Customer bayar via QRIS – setelah diterima, diarahkan ke halaman pembayaran.' : 'Customer bayar di kasir – setelah diterima, proses di tab Tagihan.'}
                                             </p>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <Button type="button" size="sm" className="min-h-[44px]" onClick={() => approveSelfOrder(so.id)}>
-                                                    <CheckCircle2 className="size-4" /> Terima
-                                                </Button>
-                                                <Button type="button" size="sm" className="min-h-[44px] border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" variant="outline" onClick={() => rejectSelfOrder(so.id)}>
-                                                    <XCircle className="size-4" /> Tolak
-                                                </Button>
-                                            </div>
+                                            {isQris ? (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <Button type="button" size="sm" className="min-h-[44px]" onClick={() => approveSelfOrder(so.id)}>
+                                                        <CheckCircle2 className="size-4" /> Terima
+                                                    </Button>
+                                                    <Button type="button" size="sm" className="min-h-[44px] border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" variant="outline" onClick={() => rejectSelfOrder(so.id)}>
+                                                        <XCircle className="size-4" /> Tolak
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <Button type="button" size="sm" className="min-h-[44px] xl:hidden" onClick={() => openDrawerForCashierSelfOrder(so)}>
+                                                        <Banknote className="size-4" /> Terima & Bayar
+                                                    </Button>
+                                                    <Button type="button" size="sm" className="min-h-[44px] hidden xl:flex" onClick={() => { openDrawerForCashierSelfOrder(so); setActivePanel('cart'); }}>
+                                                        <Banknote className="size-4" /> Terima & Bayar
+                                                    </Button>
+                                                    <Button type="button" size="sm" className="min-h-[44px] border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" variant="outline" onClick={() => rejectSelfOrder(so.id)}>
+                                                        <XCircle className="size-4" /> Tolak
+                                                    </Button>
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 })}
+                                <Pagination page={selfOrderPage} total={selfOrders.length} pageSize={PAGE_SIZE} onPage={setSelfOrderPage} />
                             </div>
                         </div>
                     )}
@@ -965,7 +1095,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         Cetak Semua ({pendingStationTickets.length} tiket)
                                     </Button>
                                     <p className="text-center text-xs text-muted-foreground">Atau cetak satu per satu di bawah</p>
-                                    {pendingStationTickets.map((ticket) => (
+                                    {paginatedPendingTickets.map((ticket) => (
                                         <div key={`${ticket.type}-${ticket.id}`} className="rounded-lg border p-3">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div>
@@ -983,6 +1113,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             </Button>
                                         </div>
                                     ))}
+                                    <Pagination page={stationPage} total={pendingStationTickets.length} pageSize={PAGE_SIZE} onPage={setStationPage} />
                                 </>
                             )}
                         </div>
@@ -997,7 +1128,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             {stationTicketHistory.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">Belum ada riwayat cetak.</p>
                             ) : (
-                                stationTicketHistory.map((ticket) => (
+                                paginatedHistory.map((ticket) => (
                                     <div key={`history-${ticket.type}-${ticket.id}`} className="rounded-lg border p-3">
                                         <div className="flex items-start justify-between gap-2">
                                             <div>
@@ -1017,6 +1148,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         </Button>
                                     </div>
                                 ))
+                            )}
+                            {stationTicketHistory.length > PAGE_SIZE && (
+                                <Pagination page={historyPage} total={stationTicketHistory.length} pageSize={PAGE_SIZE} onPage={setHistoryPage} />
                             )}
                         </div>
                     )}

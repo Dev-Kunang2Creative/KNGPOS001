@@ -123,7 +123,10 @@ class PaymentFlowTest extends TestCase
         $order = Order::query()->firstOrFail();
         $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
 
-        $response->assertRedirect(route('pos.transactions.receipt', $transaction));
+        // Now redirects to station ticket first, then receipt
+        $response->assertRedirect();
+        $this->assertStringContainsString('station-ticket', $response->headers->get('Location'));
+        $this->assertStringContainsString('receipt='.$transaction->id, $response->headers->get('Location'));
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid', 'change_amount' => 5000]);
         $this->assertDatabaseHas('kitchen_orders', ['order_id' => $order->id, 'kitchen_station_id' => $kitchen->id]);
@@ -188,7 +191,10 @@ class PaymentFlowTest extends TestCase
         $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
         $payment = XenditPayment::query()->where('transaction_id', $transaction->id)->firstOrFail();
 
-        $response->assertRedirect(route('pos.xendit.show', $payment));
+        // Now redirects to station ticket with QRIS payment param
+        $response->assertRedirect();
+        $this->assertStringContainsString('station-ticket', $response->headers->get('Location'));
+        $this->assertStringContainsString('payment='.$payment->id, $response->headers->get('Location'));
         $this->actingAs($cashier)
             ->get(route('pos.xendit.show', $payment))
             ->assertOk()
@@ -251,7 +257,8 @@ class PaymentFlowTest extends TestCase
         $order = Order::query()->firstOrFail();
         $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
 
-        $response->assertRedirect(route('pos.transactions.receipt', $transaction));
+        $response->assertRedirect();
+        $this->assertStringContainsString('station-ticket', $response->headers->get('Location'));
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
         $this->assertDatabaseHas('tables', ['id' => $table->id, 'status' => 'occupied']);
     }

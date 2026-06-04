@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ArrowLeft, Printer, QrCode } from 'lucide-react';
+import { ArrowLeft, Printer, QrCode, ReceiptText } from 'lucide-react';
 import { useEffect } from 'react';
 
 type TicketItem = {
@@ -28,12 +28,14 @@ type Props = {
     order: {
         id: number;
         status: string;
+        notes?: string | null;
         table?: { id: number; name: string; zone?: { id: number; name: string } | null } | null;
         cashier?: { id: number; name: string } | null;
     };
     kitchenOrders: StationBatch[];
     barOrders: StationBatch[];
     xenditPayment?: { id: number; status: string } | null;
+    receiptId?: number | null;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -88,14 +90,21 @@ function TicketBlock({ title, batch, order }: { title: string; batch: StationBat
                 ))}
             </div>
 
+            {order.notes && (
+                <>
+                    <div className="my-3 border-t border-dashed border-black" />
+                    <div className="text-xs"><span className="font-semibold">Catatan: </span>{order.notes}</div>
+                </>
+            )}
+
             <div className="my-3 border-t border-dashed border-black" />
 
-            <p className="text-center text-xs">UNPAID - OPEN BILL</p>
+            <p className="text-center text-xs">{order.status === 'paid' ? 'PAID' : 'OPEN BILL'}</p>
         </section>
     );
 }
 
-export default function StationTicket({ order, kitchenOrders, barOrders, xenditPayment }: Props) {
+export default function StationTicket({ order, kitchenOrders, barOrders, xenditPayment, receiptId }: Props) {
     const { restaurant } = usePage<SharedData>().props;
 
     useEffect(() => {
@@ -128,7 +137,7 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
             `}</style>
 
             <main className="flex flex-1 flex-col items-center gap-4 p-4">
-                <div className="no-print flex w-full max-w-sm items-center justify-between gap-2">
+                <div className="no-print flex w-full max-w-sm flex-wrap items-center gap-2">
                     <Button variant="outline" asChild>
                         <Link href={`/pos?order=${order.id}`}>
                             <ArrowLeft className="size-4" />
@@ -139,6 +148,14 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
                         <Printer className="size-4" />
                         Cetak Tiket
                     </Button>
+                    {receiptId && (
+                        <Button asChild>
+                            <Link href={`/pos/transactions/${receiptId}/receipt`}>
+                                <ReceiptText className="size-4" />
+                                Cetak Struk Customer
+                            </Link>
+                        </Button>
+                    )}
                     {xenditPayment && (
                         <Button variant="outline" asChild>
                             <Link href={`/pos?order=${order.id}&payment=${xenditPayment.id}`}>

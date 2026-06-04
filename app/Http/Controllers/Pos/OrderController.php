@@ -106,6 +106,9 @@ class OrderController extends Controller
             'order.items.menuItem:id,name,print_to',
         ]);
 
+        // Append order notes (not a relation, needs explicit select)
+        $transaction->order?->makeVisible('notes');
+
         return Inertia::render('Pos/Receipt', [
             'transaction' => $transaction,
         ]);
@@ -119,7 +122,7 @@ class OrderController extends Controller
             403
         );
 
-        $order->load(['table.zone:id,name', 'cashier:id,name']);
+        $order->load(['table.zone:id,name', 'cashier:id,name', 'transaction:id,order_id']);
         $kitchenOrderId = $request->integer('kitchen_order');
         $barOrderId = $request->integer('bar_order');
         $isBatchTicket = $kitchenOrderId || $barOrderId;
@@ -152,6 +155,7 @@ class OrderController extends Controller
             'xenditPayment' => $request->integer('payment')
                 ? XenditPayment::query()->find($request->integer('payment'))
                 : null,
+            'receiptId' => $request->integer('receipt') ?: null,
         ]);
     }
 
@@ -224,23 +228,28 @@ class OrderController extends Controller
         try {
             $validated = $request->validated();
             $order = $this->createOrder($request, $validated);
-            $routingService->routeOrder($order);
+            $routingResult = $routingService->routeOrder($order);
             $paymentMethod = $validated['payment_method'] ?? 'cash';
 
             if ($paymentMethod === 'qris') {
                 $result = $paymentService->createQrisPayment($order->fresh('items'), $request->user());
 
-                return redirect()
-                    ->route('pos.xendit.show', $result['payment'])
-                    ->with('success', 'Close bill QRIS Xendit berhasil dibuat.');
+                $this->linkSelfOrderIfProvided($validated['self_order_id'] ?? null, $order->id);
+
+                return $this->redirectToStationTicket(
+                    $order->fresh(),
+                    array_merge($routingResult, ['payment' => $result['payment']]),
+                );
             }
 
             $transaction = $paymentService->createCashPayment(
                 order: $order->fresh('items'),
                 cashier: $request->user(),
                 amountPaid: (float) ($validated['amount_paid'] ?? 0),
-                notes: 'Close bill POS',
+                notes: $validated['notes'] ?? null,
             );
+
+            $this->linkSelfOrderIfProvided($validated['self_order_id'] ?? null, $order->id);
         } catch (RequestException $exception) {
             Log::error('Close Bill Xendit Request Error', [
                 'response' => $exception->response->json(),
@@ -248,14 +257,12 @@ class OrderController extends Controller
             ]);
             $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API Xendit';
 
-            return back()->with('error', 'Gagal membuat pembayaran Xendit: ' . (is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
+            return back()->with('error', 'Gagal membuat pembayaran Xendit: '.(is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
         } catch (ZoneStationAssignmentMissingException|RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
 
-        return redirect()
-            ->route('pos.transactions.receipt', $transaction)
-            ->with('success', 'Close bill berhasil. Struk siap dicetak.');
+        return $this->redirectToStationTicket($order->fresh(), $routingResult, $transaction->id);
     }
 
     public function submit(SubmitOrderRequest $request, Order $order, OrderRoutingService $routingService): RedirectResponse
@@ -285,10 +292,22 @@ class OrderController extends Controller
         return $this->redirectToStationTicket($order->fresh(), $result);
     }
 
+    private function linkSelfOrderIfProvided(?int $selfOrderId, int $orderId): void
+    {
+        if (! $selfOrderId) {
+            return;
+        }
+
+        SelfOrder::query()
+            ->where('id', $selfOrderId)
+            ->where('status', 'pending')
+            ->update(['status' => 'converted_to_order', 'order_id' => $orderId]);
+    }
+
     /**
      * @param  array{kitchen_order: mixed, bar_order: mixed}  $result
      */
-    private function redirectToStationTicket(Order $order, array $result): RedirectResponse
+    private function redirectToStationTicket(Order $order, array $result, ?int $receiptId = null): RedirectResponse
     {
         $routeParams = ['order' => $order->id];
 
@@ -304,7 +323,17 @@ class OrderController extends Controller
             $routeParams['payment'] = $result['payment']->id;
         }
 
+        if ($receiptId) {
+            $routeParams['receipt'] = $receiptId;
+        }
+
         if (! $result['kitchen_order'] && ! $result['bar_order']) {
+            if ($receiptId) {
+                return redirect()
+                    ->route('pos.transactions.receipt', $receiptId)
+                    ->with('success', 'Pembayaran berhasil. Tidak ada item Kitchen/Bar.');
+            }
+
             return redirect()
                 ->route('pos.index', ['order' => $order->id])
                 ->with('success', 'Order berhasil disubmit. Tidak ada item baru untuk Kitchen/Bar.');

@@ -28,6 +28,7 @@ type ReceiptTransaction = {
         service_charge_amount?: string | null;
         tax_amount?: string | null;
         total_amount: string;
+        notes?: string | null;
         table?: { id: number; name: string; zone?: { id: number; name: string } | null } | null;
         items: ReceiptItem[];
     };
@@ -142,6 +143,13 @@ export default function Receipt({ transaction }: Props) {
                             <span>{new Date(transaction.paid_at).toLocaleString('id-ID')}</span>
                         </div>
                     </div>
+
+                    {order.notes && (
+                        <>
+                            <div className="my-3 border-t border-dashed border-black" />
+                            <div className="text-xs"><span className="font-semibold">Catatan: </span>{order.notes}</div>
+                        </>
+                    )}
 
                     <div className="my-3 border-t border-dashed border-black" />
 
