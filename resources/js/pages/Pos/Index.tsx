@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { CheckCircle2, ChevronDown, ChevronRight, Minus, Plus, ReceiptText, Send, ShoppingCart, Trash2 } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronDown, ChevronRight, Minus, Plus, ReceiptText, Send, ShoppingCart, Trash2, XCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 
@@ -36,9 +36,33 @@ type OpenOrder = {
 };
 type XenditPayment = { id: number; transaction_id: number; external_id: string; status: string; xendit_raw_response?: Record<string, unknown> | null } | null;
 type CartItem = { menu_item_id: number; name: string; quantity: number; notes: string; price: number };
+type PendingSelfOrderItem = {
+    id: number;
+    menu_item_id: number;
+    quantity: number;
+    subtotal: string;
+    notes?: string | null;
+    menu_item?: { id: number; name: string; price?: string; print_to?: string };
+    name?: string | null;
+};
+type PendingSelfOrder = {
+    id: number;
+    self_order_id?: number;
+    table_id: number;
+    table_name?: string | null;
+    zone_name?: string | null;
+    customer_name?: string | null;
+    customer_email?: string | null;
+    payment_preference?: 'qris' | 'cashier';
+    notes?: string | null;
+    total_amount: string;
+    created_at: string;
+    table?: { id: number; name: string; zone?: { id: number; name: string } | null };
+    items: PendingSelfOrderItem[];
+};
 type BillMode = 'open_bill' | 'close_bill';
 type CartTarget = 'close_bill' | 'open_bill' | `bill:${number}`;
-type Props = { tables: Table[]; openOrders: OpenOrder[]; categories: Category[]; activeOrder: ActiveOrder; xenditPayment: XenditPayment };
+type Props = { tables: Table[]; openOrders: OpenOrder[]; categories: Category[]; activeOrder: ActiveOrder; xenditPayment: XenditPayment; pendingSelfOrders: PendingSelfOrder[] };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'POS', href: '/pos' }];
 const money = (value: number | string) => Number(value || 0).toLocaleString('id-ID');
@@ -88,7 +112,7 @@ function groupOpenBillItems(items: ActiveOrderItem[]): GroupedOpenBillSection[] 
         .sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
 }
 
-export default function PosIndex({ tables, openOrders, categories, activeOrder, xenditPayment }: Props) {
+export default function PosIndex({ tables, openOrders, categories, activeOrder, xenditPayment, pendingSelfOrders }: Props) {
     const { flash } = usePage<SharedData>().props;
     const [selectedTableId, setSelectedTableId] = useState('');
     const [cartTarget, setCartTarget] = useState<CartTarget>('close_bill');
@@ -96,6 +120,8 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [itemNotice, setItemNotice] = useState('');
     const [showOpenBill, setShowOpenBill] = useState(Boolean(activeOrder));
     const [selectedCategoryId, setSelectedCategoryId] = useState(categories[0] ? String(categories[0].id) : '');
+    const [selfOrders, setSelfOrders] = useState<PendingSelfOrder[]>(pendingSelfOrders);
+    const [showSelfOrders, setShowSelfOrders] = useState(pendingSelfOrders.length > 0);
     const orderableTables = useMemo(() => tables.filter((table) => ['available', 'occupied'].includes(table.status)), [tables]);
     const selectedCategory = categories.find((category) => String(category.id) === selectedCategoryId) ?? categories[0];
     const selectedTable = tables.find((table) => String(table.id) === selectedTableId);
@@ -120,6 +146,26 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const closeBillChange = Math.max(0, Number(closeBillAmount || 0) - cartTotal);
     const activeCashPaid = Number(cashForm.data.amount_paid || 0);
     const activeCashChange = Math.max(0, activeCashPaid - activeOrderTotal);
+
+    useEffect(() => {
+        setSelfOrders(pendingSelfOrders);
+    }, [pendingSelfOrders]);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            if (document.hidden || form.processing || cashForm.processing) {
+                return;
+            }
+
+            router.reload({
+                only: ['pendingSelfOrders', 'openOrders'],
+                preserveScroll: true,
+                preserveState: true,
+            });
+        }, 7000);
+
+        return () => window.clearInterval(interval);
+    }, [form.processing, cashForm.processing]);
 
     useEffect(() => {
         if (activeOrder) {
@@ -211,6 +257,21 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
         });
     }
 
+    function approveSelfOrder(selfOrderId: number) {
+        router.post(`/pos/self-orders/${selfOrderId}/approve`, {}, { preserveScroll: true });
+    }
+
+    function rejectSelfOrder(selfOrderId: number) {
+        router.post(
+            `/pos/self-orders/${selfOrderId}/reject`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => setSelfOrders((current) => current.filter((order) => order.id !== selfOrderId)),
+            },
+        );
+    }
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="POS Kasir" />
@@ -272,6 +333,71 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                 </section>
 
                 <aside className="space-y-4">
+                    <Card className="rounded-md">
+                        <CardHeader>
+                            <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowSelfOrders((current) => !current)}>
+                                <CardTitle className="flex items-center gap-2 text-base">
+                                    <Bell className="size-4" />
+                                    Self Order QR
+                                    {selfOrders.length > 0 && <Badge variant="destructive">{selfOrders.length}</Badge>}
+                                </CardTitle>
+                                {showSelfOrders ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                            </button>
+                        </CardHeader>
+                        {showSelfOrders && (
+                            <CardContent className="space-y-3">
+                                {selfOrders.length === 0 && <p className="text-sm text-muted-foreground">Belum ada self-order pending.</p>}
+                                {selfOrders.map((selfOrder) => {
+                                    const tableName = selfOrder.table_name ?? selfOrder.table?.name ?? '-';
+                                    const zoneName = selfOrder.zone_name ?? selfOrder.table?.zone?.name ?? '-';
+
+                                    return (
+                                        <div key={selfOrder.id} className="rounded-md border p-3 text-sm">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="font-semibold">
+                                                        {tableName} <span className="text-xs font-normal text-muted-foreground">- {zoneName}</span>
+                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {selfOrder.customer_name || 'Customer'} - Rp {money(selfOrder.total_amount)}
+                                                    </p>
+                                                    {selfOrder.customer_email && <p className="text-xs text-muted-foreground">{selfOrder.customer_email}</p>}
+                                                </div>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <Badge variant="outline">{selfOrder.items.length} item</Badge>
+                                                    <Badge variant={selfOrder.payment_preference === 'qris' ? 'default' : 'secondary'}>
+                                                        {selfOrder.payment_preference === 'qris' ? 'QRIS' : 'Bayar Kasir'}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 space-y-2">
+                                                {selfOrder.items.map((item) => (
+                                                    <div key={item.id} className="flex justify-between gap-2 border-t pt-2">
+                                                        <span>
+                                                            {item.menu_item?.name ?? item.name} {item.notes && <span className="text-xs text-muted-foreground">({item.notes})</span>}
+                                                        </span>
+                                                        <span>x{item.quantity}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            {selfOrder.notes && <p className="mt-2 rounded-md bg-muted/40 p-2 text-xs text-muted-foreground">{selfOrder.notes}</p>}
+                                            <div className="mt-3 grid grid-cols-2 gap-2">
+                                                <Button type="button" size="sm" onClick={() => approveSelfOrder(selfOrder.id)}>
+                                                    <CheckCircle2 />
+                                                    Approve
+                                                </Button>
+                                                <Button type="button" size="sm" variant="outline" onClick={() => rejectSelfOrder(selfOrder.id)}>
+                                                    <XCircle />
+                                                    Reject
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </CardContent>
+                        )}
+                    </Card>
+
                     <Card className="rounded-md">
                         <CardHeader>
                             <button type="button" className="flex items-center justify-between text-left" onClick={() => setShowOpenBill((current) => !current)}>

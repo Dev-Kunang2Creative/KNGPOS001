@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, QrCode } from 'lucide-react';
 import { useEffect } from 'react';
 
 type TicketItem = {
@@ -33,6 +33,7 @@ type Props = {
     };
     kitchenOrders: StationBatch[];
     barOrders: StationBatch[];
+    xenditPayment?: { id: number; status: string } | null;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -94,7 +95,7 @@ function TicketBlock({ title, batch, order }: { title: string; batch: StationBat
     );
 }
 
-export default function StationTicket({ order, kitchenOrders, barOrders }: Props) {
+export default function StationTicket({ order, kitchenOrders, barOrders, xenditPayment }: Props) {
     const { restaurant } = usePage<SharedData>().props;
 
     useEffect(() => {
@@ -138,6 +139,14 @@ export default function StationTicket({ order, kitchenOrders, barOrders }: Props
                         <Printer className="size-4" />
                         Cetak Tiket
                     </Button>
+                    {xenditPayment && (
+                        <Button variant="outline" asChild>
+                            <Link href={`/pos?order=${order.id}&payment=${xenditPayment.id}`}>
+                                <QrCode className="size-4" />
+                                QRIS
+                            </Link>
+                        </Button>
+                    )}
                 </div>
 
                 <div id="station-ticket-print-area" className="w-full max-w-sm rounded-md border bg-white shadow-sm">

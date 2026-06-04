@@ -228,7 +228,7 @@ return new class extends Migration
             Schema::create('transactions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->constrained()->restrictOnDelete();
-            $table->foreignId('kasir_id')->constrained('users')->restrictOnDelete();
+            $table->foreignId('kasir_id')->nullable()->constrained('users')->nullOnDelete();
             $table->enum('payment_method', ['cash', 'qris', 'ewallet', 'bank_transfer', 'va']);
             $table->decimal('amount_paid', 12, 2);
             $table->decimal('change_amount', 12, 2)->default(0);

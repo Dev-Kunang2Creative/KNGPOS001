@@ -51,4 +51,9 @@ class Order extends Model
     {
         return $this->hasOne(Transaction::class);
     }
+
+    public function selfOrder(): HasOne
+    {
+        return $this->hasOne(SelfOrder::class);
+    }
 }

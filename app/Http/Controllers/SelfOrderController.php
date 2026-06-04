@@ -4,15 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\SelfOrder\CheckoutRequest;
 use App\Models\MenuCategory;
-use App\Models\MenuItem;
-use App\Models\Order;
-use App\Models\Shift;
+use App\Models\SelfOrder;
 use App\Models\TableQrcode;
 use App\Models\XenditPayment;
 use App\Services\PaymentService;
+use App\Services\SelfOrderService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -37,96 +36,57 @@ class SelfOrderController extends Controller
         return ['categories' => $this->menuCategories()];
     }
 
-    public function checkout(CheckoutRequest $request, string $qrToken, PaymentService $paymentService): RedirectResponse
+    public function checkout(CheckoutRequest $request, string $qrToken, SelfOrderService $selfOrderService, PaymentService $paymentService): RedirectResponse
     {
         $qrCode = $this->activeQrCode($qrToken);
-        $cashier = Shift::query()
-            ->with('cashier')
-            ->where('status', 'open')
-            ->latest('opened_at')
-            ->first()?->cashier;
-
-        if (! $cashier) {
-            return back()->with('error', 'Kasir aktif belum tersedia.');
-        }
-
         $validated = $request->validated();
-        $order = DB::transaction(function () use ($qrCode, $validated): Order {
-            $menuItems = MenuItem::query()
-                ->where('is_available', true)
-                ->whereIn('id', collect($validated['items'])->pluck('menu_item_id'))
-                ->get()
-                ->keyBy('id');
-
-            if ($menuItems->count() !== collect($validated['items'])->pluck('menu_item_id')->unique()->count()) {
-                throw new RuntimeException('Menu tidak tersedia.');
-            }
-
-            $subtotal = collect($validated['items'])->sum(fn (array $item): float => (float) $menuItems[$item['menu_item_id']]->price * (int) $item['quantity']);
-
-            $order = Order::query()->create([
-                'table_id' => $qrCode->table_id,
-                'kasir_id' => null,
-                'order_type' => 'self_order',
-                'status' => 'open',
-                'notes' => $validated['notes'] ?? null,
-                'subtotal' => $subtotal,
-                'total_amount' => $subtotal,
-            ]);
-
-            foreach ($validated['items'] as $item) {
-                $menuItem = $menuItems[$item['menu_item_id']];
-                $quantity = (int) $item['quantity'];
-
-                $order->items()->create([
-                    'menu_item_id' => $menuItem->id,
-                    'quantity' => $quantity,
-                    'unit_price' => $menuItem->price,
-                    'subtotal' => (float) $menuItem->price * $quantity,
-                    'notes' => $item['notes'] ?? null,
-                    'status' => 'pending',
-                ]);
-            }
-
-            return $order;
-        });
 
         try {
-            $result = $paymentService->createQrisPayment($order, $cashier);
-        } catch (RequestException) {
-            return back()->with('error', 'Gagal membuat pembayaran Xendit.');
+            if ($validated['payment_preference'] === 'qris') {
+                $result = $selfOrderService->submitQris($qrCode, $validated, $paymentService);
+                $selfOrder = $result['self_order'];
+            } else {
+                $selfOrder = $selfOrderService->submit($qrCode, $validated);
+            }
+        } catch (RequestException $exception) {
+            Log::error('Self-order Xendit Request Error', [
+                'response' => $exception->response->json(),
+                'status' => $exception->response->status(),
+            ]);
+            $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API Xendit';
+
+            return back()->with('error', 'Gagal membuat QRIS: ' . (is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
         } catch (RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
 
         return redirect()->route('self-order.status', [
             'qr_token' => $qrToken,
-            'order' => $order->id,
-            'payment' => $result['payment']->id,
+            'selfOrder' => $selfOrder->id,
         ]);
     }
 
-    public function status(string $qrToken, Order $order): Response
+    public function status(string $qrToken, SelfOrder $selfOrder): Response
     {
-        $this->activeQrCode($qrToken);
-
-        abort_unless($order->order_type === 'self_order', 404);
+        $qrCode = $this->activeQrCode($qrToken);
+        abort_unless($selfOrder->table_qrcode_id === $qrCode->id, 404);
 
         return Inertia::render('SelfOrder/Status', [
             'qrToken' => $qrToken,
-            'order' => $order->load('items.menuItem:id,name'),
-            'payment' => request('payment')
-                ? XenditPayment::query()->find(request('payment'))
-                : XenditPayment::query()
-                    ->whereHas('transaction', fn ($query) => $query->where('order_id', $order->id))
+            'selfOrder' => $selfOrder->load(['table:id,name', 'items.menuItem:id,name']),
+            'payment' => $selfOrder->order_id
+                ? XenditPayment::query()
+                    ->whereHas('transaction', fn ($query) => $query->where('order_id', $selfOrder->order_id))
                     ->latest()
-                    ->first(),
+                    ->first()
+                : null,
         ]);
     }
 
     private function activeQrCode(string $qrToken): TableQrcode
     {
         return TableQrcode::query()
+            ->with('table')
             ->where('qr_token', $qrToken)
             ->where('is_active', true)
             ->firstOrFail();

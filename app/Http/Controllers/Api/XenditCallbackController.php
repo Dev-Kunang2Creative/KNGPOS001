@@ -2,11 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Events\SelfOrderReceived;
-use App\Exceptions\ZoneStationAssignmentMissingException;
 use App\Http\Controllers\Controller;
-use App\Models\KitchenOrder;
-use App\Models\Order;
 use App\Models\SystemSettings;
 use App\Models\XenditPayment;
 use App\Models\XenditWebhookLog;
@@ -14,7 +10,6 @@ use App\Services\OrderRoutingService;
 use App\Services\PaymentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
@@ -54,8 +49,7 @@ class XenditCallbackController extends Controller
 
         try {
             if ($isPaid) {
-                $payment = $paymentService->markXenditPaymentPaid($externalId, $payload);
-                $this->routeSelfOrderIfNeeded($payment, $routingService);
+                $paymentService->markXenditPaymentPaid($externalId, $payload, $routingService);
             }
 
             $log->update(['processed' => true]);
@@ -86,30 +80,4 @@ class XenditCallbackController extends Controller
             || str_contains($event, 'SUCCEEDED');
     }
 
-    private function routeSelfOrderIfNeeded(?XenditPayment $payment, OrderRoutingService $routingService): void
-    {
-        if (! $payment) {
-            return;
-        }
-
-        $order = Order::query()
-            ->with(['items', 'table'])
-            ->whereHas('items', fn ($query) => $query->where('status', 'pending'))
-            ->find($payment->transaction->order_id);
-
-        if (! $order || $order->order_type !== 'self_order') {
-            return;
-        }
-
-        if (KitchenOrder::query()->where('order_id', $order->id)->exists()) {
-            return;
-        }
-
-        try {
-            DB::transaction(fn () => $routingService->routeOrder($order));
-            SelfOrderReceived::dispatch($order->fresh(), $payment->transaction->kasir_id);
-        } catch (ZoneStationAssignmentMissingException $exception) {
-            throw $exception;
-        }
-    }
 }

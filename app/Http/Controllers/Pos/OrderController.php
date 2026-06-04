@@ -5,16 +5,20 @@ namespace App\Http\Controllers\Pos;
 use App\Exceptions\ZoneStationAssignmentMissingException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Pos\AddOrderItemsRequest;
+use App\Http\Requests\Pos\ApproveSelfOrderRequest;
+use App\Http\Requests\Pos\RejectSelfOrderRequest;
 use App\Http\Requests\Pos\StoreOrderRequest;
 use App\Http\Requests\Pos\SubmitOrderRequest;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Order;
+use App\Models\SelfOrder;
 use App\Models\Table;
 use App\Models\Transaction;
 use App\Models\XenditPayment;
 use App\Services\OrderRoutingService;
 use App\Services\PaymentService;
+use App\Services\SelfOrderService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -58,12 +62,24 @@ class OrderController extends Controller
             'xenditPayment' => request('payment')
                 ? XenditPayment::query()->find(request('payment'))
                 : null,
+            'pendingSelfOrders' => SelfOrder::query()
+                ->with(['table.zone:id,name,color_hex', 'items.menuItem:id,name,price,print_to'])
+                ->where('status', 'pending')
+                ->latest()
+                ->limit(20)
+                ->get(),
         ]);
     }
 
     public function receipt(Transaction $transaction): Response
     {
-        abort_unless($transaction->kasir_id === auth()->id(), 403);
+        $transaction->loadMissing('order:id,order_type');
+
+        abort_unless(
+            $transaction->kasir_id === auth()->id()
+                || ($transaction->kasir_id === null && $transaction->order?->order_type === 'self_order'),
+            403
+        );
         abort_unless($transaction->status === 'paid', 404);
 
         $transaction->load([
@@ -106,6 +122,9 @@ class OrderController extends Controller
             'order' => $order,
             'kitchenOrders' => $kitchenOrders,
             'barOrders' => $barOrders,
+            'xenditPayment' => $request->integer('payment')
+                ? XenditPayment::query()->find($request->integer('payment'))
+                : null,
         ]);
     }
 
@@ -208,6 +227,10 @@ class OrderController extends Controller
             $routeParams['bar_order'] = $result['bar_order']->id;
         }
 
+        if ($result['payment'] ?? null) {
+            $routeParams['payment'] = $result['payment']->id;
+        }
+
         if (! $result['kitchen_order'] && ! $result['bar_order']) {
             return redirect()
                 ->route('pos.index', ['order' => $order->id])
@@ -232,6 +255,48 @@ class OrderController extends Controller
         return redirect()
             ->route('pos.index', ['order' => $order->id])
             ->with('success', 'Item berhasil ditambahkan ke open bill. Cetak ke Kitchen/Bar untuk mengirim item baru.');
+    }
+
+    public function approveSelfOrder(
+        ApproveSelfOrderRequest $request,
+        SelfOrder $selfOrder,
+        SelfOrderService $selfOrderService,
+        OrderRoutingService $routingService,
+        PaymentService $paymentService,
+    ): RedirectResponse {
+        $paymentPreference = $selfOrder->payment_preference;
+
+        try {
+            $result = $selfOrderService->approve($selfOrder, $request->user(), $routingService);
+        } catch (ZoneStationAssignmentMissingException|RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        if ($paymentPreference === 'qris') {
+            try {
+                $paymentResult = $paymentService->createQrisPayment($result['order']->fresh('items'), $request->user());
+                $result['routing']['payment'] = $paymentResult['payment'];
+            } catch (RequestException|RuntimeException $exception) {
+                return $this->redirectToStationTicket($result['order'], $result['routing'])
+                    ->with('error', 'Self-order diterima, tetapi QRIS gagal dibuat: '.$exception->getMessage());
+            }
+        }
+
+        return $this->redirectToStationTicket($result['order'], $result['routing']);
+    }
+
+    public function rejectSelfOrder(
+        RejectSelfOrderRequest $request,
+        SelfOrder $selfOrder,
+        SelfOrderService $selfOrderService,
+    ): RedirectResponse {
+        try {
+            $selfOrderService->reject($selfOrder, $request->user(), $request->validated('reason'));
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return back()->with('success', 'Self-order berhasil ditolak.');
     }
 
     private function createOrder(StoreOrderRequest $request, array $validated): Order

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendSelfOrderReceiptEmail;
 use App\Models\Order;
 use App\Models\SystemSettings;
 use App\Models\Transaction;
@@ -43,6 +44,8 @@ class PaymentService
 
             $order->table()->update(['status' => 'occupied']);
 
+            DB::afterCommit(fn () => SendSelfOrderReceiptEmail::dispatch($order->id));
+
             return $transaction;
         });
     }
@@ -52,7 +55,7 @@ class PaymentService
      *
      * @throws RequestException
      */
-    public function createQrisPayment(Order $order, User $cashier): array
+    public function createQrisPayment(Order $order, ?User $cashier = null, ?string $notes = null): array
     {
         $secretKey = SystemSettings::get('xendit_secret_key');
 
@@ -63,15 +66,15 @@ class PaymentService
         $total = $this->calculateOrderTotal($order);
         $externalId = 'karcisqu-'.$order->id.'-'.now()->timestamp.'-'.Str::lower(Str::random(6));
 
-        return DB::transaction(function () use ($order, $cashier, $total, $externalId, $secretKey): array {
+        return DB::transaction(function () use ($order, $cashier, $total, $externalId, $secretKey, $notes): array {
             $transaction = Transaction::query()->create([
                 'order_id' => $order->id,
-                'kasir_id' => $cashier->id,
+                'kasir_id' => $cashier?->id,
                 'payment_method' => 'qris',
                 'amount_paid' => $total,
                 'change_amount' => 0,
                 'status' => 'pending',
-                'notes' => 'Xendit QRIS',
+                'notes' => $notes ?? 'Xendit QRIS',
             ]);
 
             $response = Http::withBasicAuth($secretKey, '')
@@ -111,9 +114,9 @@ class PaymentService
         });
     }
 
-    public function markXenditPaymentPaid(string $externalId, array $payload): ?XenditPayment
+    public function markXenditPaymentPaid(string $externalId, array $payload, ?OrderRoutingService $routingService = null): ?XenditPayment
     {
-        return DB::transaction(function () use ($externalId, $payload): ?XenditPayment {
+        return DB::transaction(function () use ($externalId, $payload, $routingService): ?XenditPayment {
             $payment = XenditPayment::query()
                 ->where('external_id', $externalId)
                 ->lockForUpdate()
@@ -142,6 +145,19 @@ class PaymentService
 
             $order->update(['status' => 'paid']);
             $order->table()->update(['status' => 'occupied']);
+
+            if ($order->order_type === 'self_order') {
+                $order->selfOrder()->update([
+                    'status' => 'converted_to_order',
+                    'approved_at' => now(),
+                ]);
+
+                if ($routingService && $order->items()->where('status', 'pending')->exists()) {
+                    $routingService->routeOrder($order->fresh(['table', 'items.menuItem']));
+                }
+            }
+
+            DB::afterCommit(fn () => SendSelfOrderReceiptEmail::dispatch($order->id));
 
             return $payment;
         });

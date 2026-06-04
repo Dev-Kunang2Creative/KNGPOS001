@@ -22,7 +22,7 @@ Route::get('/', function () {
 Route::get('s/{qr_token}', [SelfOrderController::class, 'show'])->name('self-order.show');
 Route::get('s/{qr_token}/menu', [SelfOrderController::class, 'menu'])->name('self-order.menu');
 Route::post('s/{qr_token}/orders', [SelfOrderController::class, 'checkout'])->name('self-order.checkout');
-Route::get('s/{qr_token}/status/{order}', [SelfOrderController::class, 'status'])->name('self-order.status');
+Route::get('s/{qr_token}/status/{selfOrder}', [SelfOrderController::class, 'status'])->name('self-order.status');
 
 Route::middleware(['auth', 'permission:dashboard.view'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
@@ -38,6 +38,8 @@ Route::middleware(['auth', 'permission:pos.create', 'active.shift'])->group(func
     Route::post('pos/orders/{order}/items/submit', [OrderController::class, 'addItemsAndSubmit'])->name('pos.orders.items.submit');
     Route::post('pos/orders/{order}/submit', [OrderController::class, 'submit'])->name('pos.orders.submit');
     Route::get('pos/orders/{order}/station-ticket', [OrderController::class, 'stationTicket'])->name('pos.orders.station-ticket');
+    Route::post('pos/self-orders/{selfOrder}/approve', [OrderController::class, 'approveSelfOrder'])->name('pos.self-orders.approve');
+    Route::post('pos/self-orders/{selfOrder}/reject', [OrderController::class, 'rejectSelfOrder'])->name('pos.self-orders.reject');
 });
 
 Route::middleware(['auth', 'permission:pos.create', 'permission:pos.checkout', 'active.shift'])->group(function () {

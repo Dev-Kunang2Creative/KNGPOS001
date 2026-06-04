@@ -14,6 +14,9 @@ class CheckoutRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'customer_name' => ['required', 'string', 'max:100'],
+            'customer_email' => ['required', 'email', 'max:255'],
+            'payment_preference' => ['required', 'in:qris,cashier'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.menu_item_id' => ['required', 'exists:menu_items,id'],

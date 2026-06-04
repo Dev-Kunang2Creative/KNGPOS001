@@ -12,7 +12,13 @@ type Props = { qrToken: string; table: Table; categories: Category[] };
 
 export default function SelfOrderShow({ qrToken, table, categories }: Props) {
     const { flash } = usePage<{ flash?: { error?: string; success?: string } }>().props;
-    const form = useForm({ notes: '', items: [] as { menu_item_id: number; quantity: number; notes?: string }[] });
+    const form = useForm({
+        customer_name: '',
+        customer_email: '',
+        payment_preference: 'cashier' as 'cashier' | 'qris',
+        notes: '',
+        items: [] as { menu_item_id: number; quantity: number; notes?: string }[],
+    });
     const [cart, setCart] = useState<CartItem[]>([]);
     const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
@@ -36,7 +42,8 @@ export default function SelfOrderShow({ qrToken, table, categories }: Props) {
         form.transform((data) => ({
             ...data,
             items: cart.map((item) => ({ menu_item_id: item.menu_item_id, quantity: item.quantity, notes: item.notes || undefined })),
-        })).post(`/s/${qrToken}/orders`, { preserveScroll: true });
+        }));
+        form.post(`/s/${qrToken}/orders`, { preserveScroll: true });
     }
 
     return (
@@ -82,12 +89,26 @@ export default function SelfOrderShow({ qrToken, table, categories }: Props) {
                                     </div>
                                 </div>
                             ))}
+                            <Input value={form.data.customer_name} onChange={(event) => form.setData('customer_name', event.target.value)} placeholder="Nama customer" />
+                            {form.errors.customer_name && <p className="text-xs text-destructive">{form.errors.customer_name}</p>}
+                            <Input type="email" value={form.data.customer_email} onChange={(event) => form.setData('customer_email', event.target.value)} placeholder="Email untuk struk" />
+                            {form.errors.customer_email && <p className="text-xs text-destructive">{form.errors.customer_email}</p>}
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button type="button" variant={form.data.payment_preference === 'cashier' ? 'default' : 'outline'} onClick={() => form.setData('payment_preference', 'cashier')}>
+                                    Bayar di Kasir
+                                </Button>
+                                <Button type="button" variant={form.data.payment_preference === 'qris' ? 'default' : 'outline'} onClick={() => form.setData('payment_preference', 'qris')}>
+                                    QRIS
+                                </Button>
+                            </div>
                             <Input value={form.data.notes} onChange={(event) => form.setData('notes', event.target.value)} placeholder="Catatan pesanan" />
                             <div className="flex items-center justify-between border-t pt-3 text-sm font-semibold">
                                 <span>Total</span>
                                 <span>Rp {total.toLocaleString('id-ID')}</span>
                             </div>
-                            <Button type="button" className="w-full" disabled={cart.length === 0 || form.processing} onClick={checkout}>Checkout QRIS</Button>
+                            <Button type="button" className="w-full" disabled={cart.length === 0 || form.processing} onClick={checkout}>
+                                {form.data.payment_preference === 'qris' ? 'Buat QRIS & Bayar' : 'Kirim ke Kasir'}
+                            </Button>
                         </div>
                     </aside>
                 </div>
