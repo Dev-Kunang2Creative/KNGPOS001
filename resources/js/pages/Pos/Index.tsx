@@ -162,6 +162,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [selfOrders, setSelfOrders] = useState<PendingSelfOrder[]>(pendingSelfOrders);
     const [approvingAll, setApprovingAll] = useState(false);
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [drawerMode, setDrawerMode] = useState<'new_order' | 'pay_bill'>('new_order');
     const [billItemsExpanded, setBillItemsExpanded] = useState(false);
     const [selfOrderForCheckout, setSelfOrderForCheckout] = useState<PendingSelfOrder | null>(null);
 
@@ -284,6 +285,17 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
     const quickAmounts = [2000, 5000, 10000, 50000, 100000];
 
+    function openDrawerForPayBill() {
+        setDrawerMode('pay_bill');
+        setDrawerOpen(true);
+    }
+
+    function closeDrawer() {
+        setDrawerOpen(false);
+        setDrawerMode('new_order');
+        setSelfOrderForCheckout(null);
+    }
+
     function openDrawerForCashierSelfOrder(so: PendingSelfOrder) {
         const items: CartItem[] = so.items
             .filter((item) => item.menu_item)
@@ -379,7 +391,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
             {/* ── MOBILE CART DRAWER ── */}
             <div className={`fixed inset-0 z-50 xl:hidden transition-opacity duration-300 ${drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
                 {/* Backdrop */}
-                <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} />
+                <div className="absolute inset-0 bg-black/50" onClick={closeDrawer} />
                 {/* Panel */}
                 <div className={`absolute bottom-0 left-0 right-0 max-h-[92vh] overflow-y-auto rounded-t-2xl bg-background transition-transform duration-300 ${drawerOpen ? 'translate-y-0' : 'translate-y-full'}`}>
                     {/* Handle + header */}
@@ -387,9 +399,13 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                         <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-muted-foreground/30" />
                         <div className="flex items-center justify-between">
                             <h2 className="flex items-center gap-2 font-semibold">
-                                <ShoppingCart className="size-4" /> Pesanan Baru
+                                {drawerMode === 'pay_bill' ? (
+                                    <><Banknote className="size-4" /> Bayar Tagihan</>
+                                ) : (
+                                    <><ShoppingCart className="size-4" /> Pesanan Baru</>
+                                )}
                             </h2>
-                            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full bg-muted" onClick={() => { setDrawerOpen(false); setSelfOrderForCheckout(null); }}>
+                            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full bg-muted" onClick={closeDrawer}>
                                 <X className="size-4" />
                             </button>
                         </div>
@@ -407,7 +423,117 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                         )}
                     </div>
                     {/* Form */}
-                    <form onSubmit={(e) => { submitOrder(e); setDrawerOpen(false); }} className="space-y-5 px-4 pb-10">
+                    {/* ── PAY BILL MODE ── */}
+                    {drawerMode === 'pay_bill' && activeOrder && (
+                        <div className="space-y-5 px-4 pb-10">
+                            {/* Order summary */}
+                            <div className="rounded-xl bg-muted/50 px-4 py-3">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="font-semibold">{activeOrder.table?.name}</p>
+                                        <p className="text-xs text-muted-foreground">Order #{activeOrder.id} · {activeOrder.items.length} item</p>
+                                    </div>
+                                    <p className="text-lg font-bold">Rp {money(activeOrderTotal)}</p>
+                                </div>
+                            </div>
+
+                            {/* Warning if not ready */}
+                            {!canPay && (
+                                <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                                    <AlertCircle className="size-4 shrink-0" />
+                                    <div>
+                                        <p className="font-medium">Belum bisa bayar</p>
+                                        <p className="text-xs">{activeOrder.status !== 'submitted' ? 'Kirim item ke Dapur/Bar dulu.' : 'Ada item baru yang belum dikirim.'}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Kirim ke dapur if needed */}
+                            {pendingActiveItems.length > 0 && (
+                                <Button type="button" className="min-h-[48px] w-full"
+                                    onClick={() => router.post(`/pos/orders/${activeOrder.id}/submit`, {}, { preserveScroll: true, onSuccess: () => {} })}>
+                                    <Send className="size-4" />
+                                    Kirim {pendingActiveItems.length} Item ke Dapur/Bar Dulu
+                                </Button>
+                            )}
+
+                            {/* Cash payment */}
+                            <div className="space-y-3 rounded-xl border p-4">
+                                <div className="flex items-center gap-2 font-medium">
+                                    <Banknote className="size-4" /> Cash
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-muted-foreground">Total tagihan</span>
+                                    <strong>Rp {money(activeOrderTotal)}</strong>
+                                </div>
+                                <Input type="text" inputMode="numeric"
+                                    value={cashForm.data.amount_paid > 0 ? money(cashForm.data.amount_paid) : ''}
+                                    onChange={(e) => cashForm.setData('amount_paid', parseCashInput(e.target.value))}
+                                    placeholder="0"
+                                    className="min-h-[48px] text-lg font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                                <div className="grid grid-cols-5 gap-1.5">
+                                    {quickAmounts.map((amt) => (
+                                        <button key={amt} type="button"
+                                            className="rounded-lg border bg-muted py-2 text-xs font-semibold hover:bg-muted/80"
+                                            onClick={() => cashForm.setData('amount_paid', cashForm.data.amount_paid + amt)}>
+                                            {amt >= 1000 ? `${amt / 1000}rb` : amt}
+                                        </button>
+                                    ))}
+                                </div>
+                                {activeCashPaid >= activeOrderTotal && activeCashPaid > 0 && (
+                                    <div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-2">
+                                        <span className="text-emerald-700">Kembalian</span>
+                                        <strong className="text-emerald-700">Rp {money(activeCashChange)}</strong>
+                                    </div>
+                                )}
+                                <Button type="button" className="min-h-[52px] w-full text-base font-semibold"
+                                    disabled={!canPay || activeCashPaid < activeOrderTotal || cashForm.processing}
+                                    onClick={() => { cashForm.post(`/pos/orders/${activeOrder.id}/pay`); closeDrawer(); }}>
+                                    Bayar Cash & Cetak Struk
+                                </Button>
+                            </div>
+
+                            {/* QRIS */}
+                            <div className="space-y-3 rounded-xl border p-4">
+                                <div className="flex items-center gap-2 font-medium">
+                                    <QrCode className="size-4" /> QRIS
+                                </div>
+                                <Button type="button" className="min-h-[48px] w-full" variant="outline"
+                                    disabled={!canPay}
+                                    onClick={() => { router.post(`/pos/orders/${activeOrder.id}/xendit`, {}, { preserveScroll: true }); closeDrawer(); }}>
+                                    Generate QRIS
+                                </Button>
+                                {xenditPayment && (
+                                    <div className="space-y-2 rounded-xl border p-3">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-medium">Status QRIS</p>
+                                            <Badge variant={isXenditPaid ? 'default' : 'secondary'}>{isXenditPaid ? 'Lunas' : xenditPayment.status}</Badge>
+                                        </div>
+                                        {typeof xenditPayment.xendit_raw_response?.qr_string === 'string' && !isXenditPaid && (
+                                            <div className="rounded-lg bg-white p-3">
+                                                <QRCodeSVG value={xenditPayment.xendit_raw_response.qr_string as string} size={220} className="mx-auto" />
+                                            </div>
+                                        )}
+                                        {isXenditPaid && (
+                                            <Button type="button" className="min-h-[48px] w-full" onClick={() => { router.visit(`/pos/xendit/${xenditPayment.id}/success`); closeDrawer(); }}>
+                                                <ReceiptText className="size-4" /> Buka & Cetak Struk
+                                            </Button>
+                                        )}
+                                        {!isXenditPaid && (
+                                            <Button type="button" size="sm" className="min-h-[44px] w-full" variant="secondary"
+                                                onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit/${xenditPayment.id}/simulate`, {}, { preserveScroll: true })}>
+                                                Simulasi Pembayaran
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ── NEW ORDER MODE ── */}
+                    {drawerMode === 'new_order' && (
+                    <form onSubmit={(e) => { submitOrder(e); closeDrawer(); }} className="space-y-5 px-4 pb-10">
                         {/* Tipe pesanan */}
                         <div className="space-y-2">
                             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">1. Tipe Pesanan</p>
@@ -545,6 +671,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             {selectedCartOrder ? 'Tambah & Cetak ke Dapur/Bar' : cartTarget === 'close_bill' ? (closeBillPaymentMethod === 'qris' ? 'Bayar via QRIS' : 'Bayar Cash & Cetak Struk') : 'Simpan Open Bill'}
                         </Button>
                     </form>
+                    )}
                 </div>
             </div>
 
@@ -806,6 +933,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     )}
 
                     {/* ── PANEL: TAGIHAN AKTIF ── */}
+
                     {activePanel === 'bills' && (
                         <div className="space-y-3">
                             {/* Open bills dropdown */}
@@ -846,11 +974,17 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         <Badge variant={activeOrder.status === 'submitted' ? 'default' : 'secondary'}>{activeOrder.status}</Badge>
                                     </div>
 
-                                    {/* Tambah Item — primary action */}
-                                    <Button type="button" className="min-h-[48px] w-full"
-                                        onClick={() => { setCartTarget(`bill:${activeOrder.id}` as CartTarget); setDrawerOpen(true); }}>
-                                        <Plus className="size-4" /> Tambah Item ke Tagihan Ini
-                                    </Button>
+                                    {/* Primary actions */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Button type="button" className="min-h-[48px]"
+                                            onClick={() => { setCartTarget(`bill:${activeOrder.id}` as CartTarget); setDrawerMode('new_order'); setDrawerOpen(true); }}>
+                                            <Plus className="size-4" /> Tambah Item
+                                        </Button>
+                                        <Button type="button" className="min-h-[48px]" variant="outline"
+                                            onClick={openDrawerForPayBill}>
+                                            <Banknote className="size-4" /> Bayar
+                                        </Button>
+                                    </div>
 
                                     {/* Items collapsible */}
                                     <button type="button" className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground"
@@ -891,87 +1025,6 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         {pendingActiveItems.length > 0 ? `Kirim ${pendingActiveItems.length} Item ke Dapur/Bar` : 'Semua Item Sudah Dikirim'}
                                     </Button>
 
-                                    {/* Step 2: Bayar */}
-                                    <div className="rounded-xl border p-3 space-y-3">
-                                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Proses Pembayaran</p>
-                                        {!canPay && (
-                                            <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-700">
-                                                <AlertCircle className="size-3 shrink-0" />
-                                                {activeOrder.status !== 'submitted' ? 'Kirim item ke Dapur/Bar dulu sebelum bayar.' : 'Ada item baru belum dikirim ke Dapur/Bar.'}
-                                            </div>
-                                        )}
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                                                <Banknote className="size-3.5" /> Cash
-                                            </div>
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-muted-foreground">Total</span>
-                                                <strong>Rp {money(activeOrderTotal)}</strong>
-                                            </div>
-                                            <Input type="text" inputMode="numeric"
-                                                value={cashForm.data.amount_paid > 0 ? money(cashForm.data.amount_paid) : ''}
-                                                onChange={(e) => cashForm.setData('amount_paid', parseCashInput(e.target.value))}
-                                                placeholder="0"
-                                                className="min-h-[44px] text-base font-semibold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
-                                            <div className="grid grid-cols-5 gap-1">
-                                                {quickAmounts.map((amt) => (
-                                                    <button key={amt} type="button"
-                                                        className="rounded-lg border bg-muted py-1.5 text-xs font-semibold hover:bg-muted/80"
-                                                        onClick={() => cashForm.setData('amount_paid', cashForm.data.amount_paid + amt)}>
-                                                        {amt >= 1000 ? `${amt / 1000}rb` : amt}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            {activeCashPaid >= activeOrderTotal && activeCashPaid > 0 && (
-                                                <div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-1.5 text-sm">
-                                                    <span className="text-emerald-700">Kembalian</span>
-                                                    <strong className="text-emerald-700">Rp {money(activeCashChange)}</strong>
-                                                </div>
-                                            )}
-                                            <Button type="button" className="min-h-[44px] w-full" variant="outline"
-                                                disabled={!canPay || activeCashPaid < activeOrderTotal || cashForm.processing}
-                                                onClick={() => cashForm.post(`/pos/orders/${activeOrder.id}/pay`)}>
-                                                Bayar Cash & Cetak Struk
-                                            </Button>
-                                        </div>
-                                        <div className="space-y-2 border-t pt-3">
-                                            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                                                <QrCode className="size-3.5" /> QRIS
-                                            </div>
-                                            <Button type="button" className="min-h-[44px] w-full" variant="outline"
-                                                disabled={!canPay}
-                                                onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit`, {}, { preserveScroll: true })}>
-                                                Generate QRIS
-                                            </Button>
-                                            {xenditPayment && (
-                                                <div className="space-y-2 rounded-lg border p-3">
-                                                    <div className="flex items-center justify-between">
-                                                        <p className="text-xs font-medium">Status QRIS</p>
-                                                        <Badge variant={isXenditPaid ? 'default' : 'secondary'}>{isXenditPaid ? 'Lunas' : xenditPayment.status}</Badge>
-                                                    </div>
-                                                    {typeof xenditPayment.xendit_raw_response?.qr_string === 'string' && !isXenditPaid && (
-                                                        <div className="rounded-lg bg-white p-3">
-                                                            <QRCodeSVG value={xenditPayment.xendit_raw_response.qr_string as string} size={200} className="mx-auto" />
-                                                        </div>
-                                                    )}
-                                                    {isXenditPaid ? (
-                                                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
-                                                            <CheckCircle2 className="mx-auto size-8 text-emerald-600" />
-                                                            <p className="mt-2 text-sm font-semibold text-emerald-800">Pembayaran QRIS berhasil!</p>
-                                                            <Button type="button" className="mt-3 min-h-[44px] w-full" onClick={() => router.visit(`/pos/xendit/${xenditPayment.id}/success`)}>
-                                                                <ReceiptText className="size-4" /> Buka & Cetak Struk
-                                                            </Button>
-                                                        </div>
-                                                    ) : (
-                                                        <Button type="button" size="sm" className="min-h-[44px] w-full" variant="secondary"
-                                                            onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit/${xenditPayment.id}/simulate`, {}, { preserveScroll: true })}>
-                                                            Simulasi Pembayaran
-                                                        </Button>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
                                 </div>
                             )}
                         </div>
