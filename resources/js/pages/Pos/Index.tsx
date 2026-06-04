@@ -894,11 +894,6 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             onClick={() => addItem(item)}
                                             className={`relative min-h-[80px] rounded-xl border border-border p-3 text-left transition-all active:scale-95 ${cartItem ? 'bg-primary/5 ring-2 ring-primary/60' : 'hover:ring-1 hover:ring-primary/30'}`}
                                         >
-                                            {cartItem && (
-                                                <span className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow">
-                                                    {cartItem.quantity}
-                                                </span>
-                                            )}
                                             <span className="block text-sm font-semibold leading-tight">{item.name}</span>
                                             <span className="mt-1.5 block text-sm font-bold text-primary">Rp {money(item.price)}</span>
                                             <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
