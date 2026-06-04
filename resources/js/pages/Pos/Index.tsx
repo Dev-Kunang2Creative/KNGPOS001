@@ -311,7 +311,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
             <main className="flex flex-col gap-4 p-3 pb-24 xl:grid xl:grid-cols-[1fr_460px] xl:p-4 xl:pb-4">
 
                 {/* ── RIGHT: Cashier Panel ── */}
-                <aside id="cashier-panel" className="order-2 flex flex-col gap-3 xl:order-2">
+                <aside id="cashier-panel" className="order-1 flex flex-col gap-3 xl:order-2">
 
                     {/* Flash messages */}
                     {flash.error && <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{flash.error}</div>}
@@ -857,8 +857,8 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     )}
                 </aside>
 
-                {/* ── LEFT: Menu Browser (order-1 on mobile = appears first, no layout shift) ── */}
-                <section ref={menuRef} className="order-1 space-y-4 xl:order-1">
+                {/* ── LEFT: Menu Browser ── */}
+                <section ref={menuRef} className="order-2 space-y-4 xl:order-1">
                     <div className="hidden xl:block">
                         <h1 className="text-2xl font-semibold">POS Kasir</h1>
                         <p className="text-sm text-muted-foreground">Pilih menu lalu atur di panel kanan.</p>
