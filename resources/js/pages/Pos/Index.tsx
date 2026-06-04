@@ -872,7 +872,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         <button
                                             key={item.id}
                                             type="button"
-                                            onClick={() => { addItem(item); setActivePanel('cart'); }}
+                                            onClick={() => addItem(item)}
                                             className={`relative min-h-[80px] rounded-xl border-2 p-3 text-left transition-all active:scale-95 ${cartItem ? 'border-primary/60 bg-primary/5' : 'border-border hover:border-primary/30 hover:shadow-sm'}`}
                                         >
                                             {cartItem && (
