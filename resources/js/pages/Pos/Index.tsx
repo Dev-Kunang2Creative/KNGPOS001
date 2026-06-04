@@ -164,6 +164,21 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [drawerMode, setDrawerMode] = useState<'new_order' | 'pay_bill'>('new_order');
     const [billItemsExpanded, setBillItemsExpanded] = useState(false);
+    const [expandedPanels, setExpandedPanels] = useState<Set<CashierPanel>>(() => {
+        const s = new Set<CashierPanel>();
+        if (activeOrder) s.add('bills');
+        if (pendingSelfOrders.length > 0 || paidSelfOrderReceipts.length > 0) s.add('self_order');
+        if (pendingStationTickets.length > 0) s.add('station_print');
+        return s;
+    });
+
+    function togglePanel(key: CashierPanel) {
+        setExpandedPanels((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) { next.delete(key); } else { next.add(key); }
+            return next;
+        });
+    }
     const [selfOrderForCheckout, setSelfOrderForCheckout] = useState<PendingSelfOrder | null>(null);
 
     // Pagination states
@@ -195,6 +210,19 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const closeBillChange = Math.max(0, Number(closeBillAmount || 0) - cartTotal);
     const activeCashPaid = Number(cashForm.data.amount_paid || 0);
     const activeCashChange = Math.max(0, activeCashPaid - activeOrderTotal);
+
+    const [mobilePanelOpen, setMobilePanelOpen] = useState<Set<CashierPanel>>(() => {
+        const s = new Set<CashierPanel>();
+        if (activeOrder) s.add('bills');
+        return s;
+    });
+    function toggleMobilePanel(key: CashierPanel) {
+        setMobilePanelOpen((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) { next.delete(key); } else { next.add(key); }
+            return next;
+        });
+    }
 
     const cashierPanels: { key: CashierPanel; label: string; icon: typeof ShoppingCart; count?: number }[] = [
         { key: 'cart', label: 'Pesanan', icon: ShoppingCart, count: cart.length || undefined },
@@ -500,7 +528,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                 </div>
                                 <Button type="button" className="min-h-[48px] w-full" variant="outline"
                                     disabled={!canPay}
-                                    onClick={() => { router.post(`/pos/orders/${activeOrder.id}/xendit`, {}, { preserveScroll: true }); closeDrawer(); }}>
+                                    onClick={() => router.post(`/pos/orders/${activeOrder.id}/xendit`, {}, { preserveScroll: true, preserveState: true })}>
                                     Generate QRIS
                                 </Button>
                                 {xenditPayment && (
@@ -711,27 +739,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                         </div>
                     )}
 
-                    {/* Sticky tab navigation */}
-                    <div className="sticky top-0 z-10 bg-background pb-1 pt-0">
-                        {/* Mobile: 4 tabs (no Pesanan – accessible via floating bar) */}
-                        <div className="grid grid-cols-4 gap-1 rounded-xl bg-muted p-1 xl:hidden">
-                            {cashierPanels.filter((p) => p.key !== 'cart').map((panel) => {
-                                const Icon = panel.icon;
-                                return (
-                                    <button key={panel.key} type="button"
-                                        className={`relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium transition-colors ${activePanel === panel.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/50 hover:text-foreground'}`}
-                                        onClick={() => setActivePanel(panel.key)}>
-                                        <Icon className="size-4 shrink-0" />
-                                        <span className="w-full truncate text-center leading-tight">{panel.label}</span>
-                                        {Boolean(panel.count) && (
-                                            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">{panel.count}</span>
-                                        )}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        {/* Desktop: 5 tabs (includes Pesanan) */}
-                        <div className="hidden grid-cols-5 gap-1 rounded-xl bg-muted p-1 xl:grid">
+                    {/* Desktop: 5 tabs */}
+                    <div className="sticky top-0 z-10 hidden bg-background pb-1 pt-0 xl:block">
+                        <div className="grid grid-cols-5 gap-1 rounded-xl bg-muted p-1">
                             {cashierPanels.map((panel) => {
                                 const Icon = panel.icon;
                                 return (
@@ -932,10 +942,222 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                         </form>
                     )}
 
+                    {/* ── MOBILE ACCORDION PANELS ── */}
+                    <div className="flex flex-col gap-2 xl:hidden">
+                        {/* Open Bill */}
+                        <div className="rounded-xl border bg-card overflow-hidden">
+                            <button type="button"
+                                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold transition-colors hover:bg-muted/50"
+                                onClick={() => toggleMobilePanel('bills')}>
+                                <ReceiptText className="size-4 shrink-0" />
+                                <span className="flex-1 text-left">Open Bill</span>
+                                {openOrders.length > 0 && <Badge variant="secondary">{openOrders.length}</Badge>}
+                                {mobilePanelOpen.has('bills') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+                            </button>
+                            {mobilePanelOpen.has('bills') && (
+                                <div className="border-t px-4 pb-4 pt-3 space-y-3">
+                                    <div className="space-y-2">
+                                        {openOrders.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">Tidak ada open bill aktif.</p>
+                                        ) : (
+                                            <Select value={activeOrder ? String(activeOrder.id) : ''} onValueChange={(id) => router.visit(`/pos?order=${id}`)}>
+                                                <SelectTrigger className="min-h-[44px]"><SelectValue placeholder="Pilih open bill..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    {openOrders.map((o) => (
+                                                        <SelectItem key={o.id} value={String(o.id)}>
+                                                            #{o.id} – {o.table?.name ?? '-'} – Rp {money(o.total_amount)}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        )}
+                                    </div>
+                                    {activeOrder && (
+                                        <div className="rounded-xl border bg-muted/30 p-3 space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="font-semibold text-sm">{activeOrder.table?.name} · Rp {money(activeOrderTotal)}</p>
+                                                    <p className="text-xs text-muted-foreground">Order #{activeOrder.id}</p>
+                                                </div>
+                                                <Badge variant={activeOrder.status === 'submitted' ? 'default' : 'secondary'}>{activeOrder.status}</Badge>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <Button type="button" className="min-h-[44px]" size="sm"
+                                                    onClick={() => { setCartTarget(`bill:${activeOrder.id}` as CartTarget); setDrawerMode('new_order'); setDrawerOpen(true); }}>
+                                                    <Plus className="size-4" /> Tambah Item
+                                                </Button>
+                                                <Button type="button" className="min-h-[44px]" size="sm" variant="outline" onClick={openDrawerForPayBill}>
+                                                    <Banknote className="size-4" /> Bayar
+                                                </Button>
+                                            </div>
+                                            <Button type="button" className="min-h-[44px] w-full" size="sm"
+                                                variant={pendingActiveItems.length > 0 ? 'default' : 'outline'}
+                                                disabled={!['open', 'submitted'].includes(activeOrder.status) || pendingActiveItems.length === 0}
+                                                onClick={() => router.post(`/pos/orders/${activeOrder.id}/submit`, {}, { preserveScroll: true })}>
+                                                <Send className="size-4" />
+                                                {pendingActiveItems.length > 0 ? `Kirim ${pendingActiveItems.length} Item ke Dapur/Bar` : 'Semua Item Sudah Dikirim'}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Self Order */}
+                        <div className="rounded-xl border bg-card overflow-hidden">
+                            <button type="button"
+                                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold transition-colors hover:bg-muted/50"
+                                onClick={() => toggleMobilePanel('self_order')}>
+                                <Bell className="size-4 shrink-0" />
+                                <span className="flex-1 text-left">Self Order</span>
+                                {(selfOrders.length + paidSelfOrderReceipts.length) > 0 && (
+                                    <Badge variant={selfOrders.length > 0 ? 'destructive' : 'secondary'}>{selfOrders.length + paidSelfOrderReceipts.length}</Badge>
+                                )}
+                                {mobilePanelOpen.has('self_order') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+                            </button>
+                            {mobilePanelOpen.has('self_order') && (
+                                <div className="border-t px-4 pb-4 pt-3 space-y-3">
+                                    {paidSelfOrderReceipts.length > 0 && (
+                                        <div className="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                                            <p className="flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 className="size-4" /> {paidSelfOrderReceipts.length} QRIS Lunas</p>
+                                            {paginatedPaidReceipts.map((so) => {
+                                                const tx = so.order?.transaction;
+                                                return (
+                                                    <div key={`m-paid-${so.id}`} className="rounded-lg border border-emerald-200 bg-white p-2">
+                                                        <p className="text-xs font-semibold">{so.table_name ?? so.table?.name ?? '-'} · {so.customer_name}</p>
+                                                        <Button type="button" size="sm" className="mt-2 min-h-[40px] w-full" variant="outline" disabled={!tx} onClick={() => tx && router.visit(`/pos/transactions/${tx.id}/receipt`)}>
+                                                            <ReceiptText className="size-3" /> Cetak Struk
+                                                        </Button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    {selfOrders.length === 0 && paidSelfOrderReceipts.length === 0 && (
+                                        <p className="text-sm text-muted-foreground">Tidak ada self order saat ini.</p>
+                                    )}
+                                    {selfOrders.length > 1 && (
+                                        <Button type="button" className="min-h-[44px] w-full" size="sm" disabled={approvingAll} onClick={approveAllSelfOrders}>
+                                            <CheckCircle2 className="size-4" />
+                                            {approvingAll ? 'Memproses...' : `Terima Semua QRIS (${selfOrders.filter(s => s.payment_preference === 'qris').length})`}
+                                        </Button>
+                                    )}
+                                    {paginatedSelfOrders.map((so) => {
+                                        const tableName = so.table_name ?? so.table?.name ?? '-';
+                                        const isQris = so.payment_preference === 'qris';
+                                        return (
+                                            <div key={`m-so-${so.id}`} className="space-y-2 rounded-lg border p-3">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <p className="text-sm font-semibold">{tableName}</p>
+                                                        <p className="text-xs text-muted-foreground">{so.customer_name ?? 'Customer'} · Rp {money(so.total_amount)}</p>
+                                                    </div>
+                                                    <Badge variant={isQris ? 'default' : 'secondary'}>
+                                                        {isQris ? <><QrCode className="mr-1 size-3" />QRIS</> : <><Banknote className="mr-1 size-3" />Kasir</>}
+                                                    </Badge>
+                                                </div>
+                                                {isQris ? (
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <Button type="button" size="sm" className="min-h-[44px]" onClick={() => approveSelfOrder(so.id)}><CheckCircle2 className="size-4" /> Terima</Button>
+                                                        <Button type="button" size="sm" className="min-h-[44px] border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" variant="outline" onClick={() => rejectSelfOrder(so.id)}><XCircle className="size-4" /> Tolak</Button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <Button type="button" size="sm" className="min-h-[44px]" onClick={() => openDrawerForCashierSelfOrder(so)}><Banknote className="size-4" /> Terima & Bayar</Button>
+                                                        <Button type="button" size="sm" className="min-h-[44px] border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground" variant="outline" onClick={() => rejectSelfOrder(so.id)}><XCircle className="size-4" /> Tolak</Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Dapur/Bar */}
+                        <div className="rounded-xl border bg-card overflow-hidden">
+                            <button type="button"
+                                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold transition-colors hover:bg-muted/50"
+                                onClick={() => toggleMobilePanel('station_print')}>
+                                <Printer className="size-4 shrink-0" />
+                                <span className="flex-1 text-left">Dapur/Bar</span>
+                                {pendingStationTickets.length > 0 && <Badge variant="destructive">{pendingStationTickets.length}</Badge>}
+                                {mobilePanelOpen.has('station_print') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+                            </button>
+                            {mobilePanelOpen.has('station_print') && (
+                                <div className="border-t px-4 pb-4 pt-3 space-y-3">
+                                    {pendingStationTickets.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">Tidak ada tiket yang menunggu cetak.</p>
+                                    ) : (
+                                        <>
+                                            <Button type="button" className="min-h-[48px] w-full" onClick={printAllTickets}>
+                                                <Printer className="size-4" /> Cetak Semua ({pendingStationTickets.length} tiket)
+                                            </Button>
+                                            {paginatedPendingTickets.map((ticket) => (
+                                                <div key={`m-${ticket.type}-${ticket.id}`} className="rounded-lg border p-3">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div>
+                                                            <p className="flex items-center gap-1.5 text-sm font-semibold">
+                                                                {ticket.type === 'kitchen' ? <ChefHat className="size-4 text-orange-500" /> : <GlassWater className="size-4 text-blue-500" />}
+                                                                {ticket.type === 'kitchen' ? 'Kitchen' : 'Bar'} – {ticket.station_name ?? '-'}
+                                                            </p>
+                                                            <p className="mt-0.5 text-xs text-muted-foreground">Order #{ticket.order_id} · {ticket.table_name ?? '-'}</p>
+                                                        </div>
+                                                        <Badge variant="outline" className="border-amber-400 text-amber-600">Belum Cetak</Badge>
+                                                    </div>
+                                                    <Button type="button" size="sm" className="mt-2 min-h-[44px] w-full" variant="outline" onClick={() => router.visit(stationTicketUrl(ticket))}>
+                                                        <Printer className="size-4" /> Cetak Tiket
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Riwayat */}
+                        <div className="rounded-xl border bg-card overflow-hidden">
+                            <button type="button"
+                                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-semibold transition-colors hover:bg-muted/50"
+                                onClick={() => toggleMobilePanel('station_history')}>
+                                <ReceiptText className="size-4 shrink-0" />
+                                <span className="flex-1 text-left">Riwayat Cetak</span>
+                                {mobilePanelOpen.has('station_history') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+                            </button>
+                            {mobilePanelOpen.has('station_history') && (
+                                <div className="border-t px-4 pb-4 pt-3 space-y-3">
+                                    {stationTicketHistory.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">Belum ada riwayat cetak.</p>
+                                    ) : (
+                                        paginatedHistory.map((ticket) => (
+                                            <div key={`m-history-${ticket.type}-${ticket.id}`} className="rounded-lg border p-3">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <p className="flex items-center gap-1.5 text-sm font-semibold">
+                                                            {ticket.type === 'kitchen' ? <ChefHat className="size-4 text-orange-500" /> : <GlassWater className="size-4 text-blue-500" />}
+                                                            {ticket.type === 'kitchen' ? 'Kitchen' : 'Bar'} – {ticket.station_name ?? '-'}
+                                                        </p>
+                                                        <p className="mt-0.5 text-xs text-muted-foreground">Order #{ticket.order_id} · {ticket.table_name ?? '-'}</p>
+                                                        {ticket.printed_at && <p className="text-xs text-muted-foreground">Dicetak: {new Date(ticket.printed_at).toLocaleString('id-ID')}</p>}
+                                                    </div>
+                                                    <Badge variant="secondary"><CheckCircle2 className="mr-1 size-3" /> Tercetak</Badge>
+                                                </div>
+                                                <Button type="button" size="sm" variant="outline" className="mt-2 min-h-[44px] w-full" onClick={() => router.visit(stationTicketUrl(ticket, true))}>
+                                                    <Printer className="size-4" /> Cetak Ulang
+                                                </Button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     {/* ── PANEL: TAGIHAN AKTIF ── */}
 
                     {activePanel === 'bills' && (
-                        <div className="space-y-3">
+                        <div className="hidden xl:block space-y-3">
                             {/* Open bills dropdown */}
                             <div className="rounded-xl border bg-card p-4 space-y-3">
                                 <div className="flex items-center justify-between">
@@ -1032,7 +1254,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
                     {/* ── PANEL: SELF ORDER ── */}
                     {activePanel === 'self_order' && (
-                        <div className="space-y-4">
+                        <div className="hidden xl:block space-y-4">
                             {paidSelfOrderReceipts.length > 0 && (
                                 <div className="space-y-3 rounded-xl border bg-card p-4">
                                     <div className="flex items-center justify-between">
@@ -1150,7 +1372,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
                     {/* ── PANEL: CETAK DAPUR/BAR ── */}
                     {activePanel === 'station_print' && (
-                        <div className="space-y-3 rounded-xl border bg-card p-4">
+                        <div className="hidden xl:block space-y-3 rounded-xl border bg-card p-4">
                             <div className="flex items-center justify-between">
                                 <h2 className="flex items-center gap-2 font-semibold">
                                     <Printer className="size-4" /> Cetak Dapur/Bar
@@ -1196,7 +1418,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
                     {/* ── PANEL: RIWAYAT CETAK ── */}
                     {activePanel === 'station_history' && (
-                        <div className="space-y-3 rounded-xl border bg-card p-4">
+                        <div className="hidden xl:block space-y-3 rounded-xl border bg-card p-4">
                             <h2 className="flex items-center gap-2 font-semibold">
                                 <ReceiptText className="size-4" /> Riwayat Cetak
                             </h2>
