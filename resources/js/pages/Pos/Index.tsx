@@ -462,24 +462,28 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                 ) : (
                                     <div className="space-y-2">
                                         {cart.map((item) => (
-                                            <div key={item.menu_item_id} className="flex items-center gap-2 rounded-lg border px-3 py-2">
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="truncate text-sm font-medium">{item.name}</p>
-                                                    <p className="text-xs text-muted-foreground">Rp {money(item.price)} / item</p>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                    <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQuantity(item.menu_item_id, -1)}>
-                                                        <Minus className="size-3" />
-                                                    </Button>
-                                                    <span className="w-7 text-center text-sm font-medium">{item.quantity}</span>
-                                                    <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQuantity(item.menu_item_id, 1)}>
-                                                        <Plus className="size-3" />
+                                            <div key={item.menu_item_id} className="space-y-2 rounded-lg border px-3 py-2.5">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-medium">{item.name}</p>
+                                                        <p className="text-xs text-muted-foreground">Rp {money(item.price)} / item</p>
+                                                    </div>
+                                                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive" onClick={() => removeItem(item.menu_item_id)}>
+                                                        <Trash2 className="size-3" />
                                                     </Button>
                                                 </div>
-                                                <span className="w-16 text-right text-sm font-semibold">Rp {money(item.price * item.quantity)}</span>
-                                                <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeItem(item.menu_item_id)}>
-                                                    <Trash2 className="size-3" />
-                                                </Button>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-1">
+                                                        <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQuantity(item.menu_item_id, -1)}>
+                                                            <Minus className="size-3" />
+                                                        </Button>
+                                                        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                                                        <Button type="button" size="icon" variant="outline" className="h-8 w-8" onClick={() => updateQuantity(item.menu_item_id, 1)}>
+                                                            <Plus className="size-3" />
+                                                        </Button>
+                                                    </div>
+                                                    <span className="text-sm font-semibold">Rp {money(item.price * item.quantity)}</span>
+                                                </div>
                                             </div>
                                         ))}
                                         <div className="flex justify-between border-t pt-2 text-sm font-bold">
