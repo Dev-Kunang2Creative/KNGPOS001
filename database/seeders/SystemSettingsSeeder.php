@@ -19,10 +19,6 @@ class SystemSettingsSeeder extends Seeder
             'tax_is_active' => '1',
             'service_charge_percentage' => '5',
             'service_charge_is_active' => '1',
-            'xendit_secret_key' => 'xnd_development_placeholder',
-            'xendit_webhook_token' => 'webhook_placeholder',
-            'xendit_enabled' => '0',
-            'xendit_active_methods' => json_encode(['qris', 'ewallet', 'bank_transfer', 'va']),
         ];
 
         foreach ($settings as $key => $value) {

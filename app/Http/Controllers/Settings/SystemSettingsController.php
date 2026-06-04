@@ -28,10 +28,10 @@ class SystemSettingsController extends Controller
                 'tax_is_active' => SystemSettings::get('tax_is_active', '0'),
                 'service_charge_percentage' => SystemSettings::get('service_charge_percentage', '0'),
                 'service_charge_is_active' => SystemSettings::get('service_charge_is_active', '0'),
-                'xendit_enabled' => SystemSettings::get('xendit_enabled', '0'),
-                'xendit_active_methods' => SystemSettings::get('xendit_active_methods', '[]'),
-                'has_xendit_secret_key' => filled(SystemSettings::get('xendit_secret_key')),
-                'has_xendit_webhook_token' => filled(SystemSettings::get('xendit_webhook_token')),
+                'xendit_enabled' => config('services.xendit.enabled') ? '1' : '0',
+                'xendit_active_methods' => json_encode(config('services.xendit.active_methods', ['qris'])),
+                'has_xendit_secret_key' => filled(config('services.xendit.secret_key')),
+                'has_xendit_webhook_token' => filled(config('services.xendit.webhook_token')),
             ],
             'printers' => Printer::query()->with(['kitchenStation:id,name', 'barStation:id,name'])->orderBy('name')->get(),
             'kitchenStations' => KitchenStation::query()->orderBy('name')->get(['id', 'name']),
@@ -51,24 +51,11 @@ class SystemSettingsController extends Controller
             'tax_is_active' => ['required', 'boolean'],
             'service_charge_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'service_charge_is_active' => ['required', 'boolean'],
-            'xendit_enabled' => ['required', 'boolean'],
-            'xendit_active_methods' => ['nullable', 'array'],
-            'xendit_secret_key' => ['nullable', 'string'],
-            'xendit_public_key' => ['nullable', 'string'],
-            'xendit_webhook_token' => ['nullable', 'string'],
         ]);
 
         $oldValue = collect($validated)->keys()->mapWithKeys(fn ($key) => [$key => str_contains($key, 'key') || str_contains($key, 'token') ? '[redacted]' : SystemSettings::get($key)])->all();
 
         foreach ($validated as $key => $value) {
-            if (in_array($key, ['xendit_secret_key', 'xendit_public_key', 'xendit_webhook_token'], true)) {
-                if (filled($value)) {
-                    SystemSettings::setEncrypted($key, $value);
-                }
-
-                continue;
-            }
-
             SystemSettings::set($key, is_array($value) ? json_encode($value) : (string) $value);
         }
 

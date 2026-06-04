@@ -10,7 +10,6 @@ use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\Shift;
-use App\Models\SystemSettings;
 use App\Models\Table;
 use App\Models\Transaction;
 use App\Models\User;
@@ -144,8 +143,10 @@ class PaymentFlowTest extends TestCase
                 'qr_string' => '000201010212-close-bill',
             ]),
         ]);
-        SystemSettings::setEncrypted('xendit_secret_key', 'xnd_development_test');
-        SystemSettings::set('xendit_enabled', '1');
+        config([
+            'services.xendit.secret_key' => 'xnd_development_test',
+            'services.xendit.enabled' => true,
+        ]);
 
         $cashier = User::factory()->create(['role' => 'kasir']);
         $cashier->givePermissionTo(['pos.create', 'pos.checkout', 'shift.view']);
@@ -423,7 +424,7 @@ class PaymentFlowTest extends TestCase
 
     public function test_xendit_callback_validates_token_logs_and_is_idempotent(): void
     {
-        SystemSettings::setEncrypted('xendit_webhook_token', 'verify-token');
+        config(['services.xendit.webhook_token' => 'verify-token']);
         $cashier = User::factory()->create(['role' => 'kasir']);
         $order = $this->orderWithItemTotal($cashier, 20000);
         $transaction = Transaction::query()->create([
@@ -466,8 +467,10 @@ class PaymentFlowTest extends TestCase
                 'qr_string' => '000201010212...',
             ]),
         ]);
-        SystemSettings::setEncrypted('xendit_secret_key', 'xnd_development_test');
-        SystemSettings::set('xendit_enabled', '1');
+        config([
+            'services.xendit.secret_key' => 'xnd_development_test',
+            'services.xendit.enabled' => true,
+        ]);
         $cashier = User::factory()->create(['role' => 'kasir']);
         $order = $this->orderWithItemTotal($cashier, 15000);
 
@@ -497,8 +500,10 @@ class PaymentFlowTest extends TestCase
             ]),
         ]);
 
-        SystemSettings::setEncrypted('xendit_secret_key', 'xnd_development_test');
-        SystemSettings::set('xendit_enabled', '1');
+        config([
+            'services.xendit.secret_key' => 'xnd_development_test',
+            'services.xendit.enabled' => true,
+        ]);
 
         $cashier = User::factory()->create(['role' => 'kasir']);
         $cashier->givePermissionTo(['pos.checkout', 'shift.view']);
@@ -553,8 +558,10 @@ class PaymentFlowTest extends TestCase
 
         Http::fake();
 
-        SystemSettings::setEncrypted('xendit_secret_key', 'xnd_production_test');
-        SystemSettings::set('xendit_enabled', '1');
+        config([
+            'services.xendit.secret_key' => 'xnd_production_test',
+            'services.xendit.enabled' => true,
+        ]);
 
         $cashier = User::factory()->create(['role' => 'kasir']);
         $cashier->givePermissionTo(['pos.checkout', 'shift.view']);

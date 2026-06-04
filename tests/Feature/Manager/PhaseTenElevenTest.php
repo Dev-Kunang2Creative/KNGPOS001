@@ -97,7 +97,6 @@ class PhaseTenElevenTest extends TestCase
                 'tax_is_active' => true,
                 'service_charge_percentage' => 5,
                 'service_charge_is_active' => true,
-                'xendit_enabled' => true,
             ])
             ->assertRedirect();
 

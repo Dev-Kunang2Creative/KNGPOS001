@@ -12,7 +12,9 @@
       "Bash(php artisan *)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(curl -s \"https://raw.githubusercontent.com/laravel/react-starter-kit/main/resources/js/pages/welcome.tsx\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(tail -5)"
     ]
   }
 }

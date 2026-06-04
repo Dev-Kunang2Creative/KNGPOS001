@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\SystemSettings;
 use App\Models\XenditPayment;
 use App\Models\XenditWebhookLog;
 use App\Services\OrderRoutingService;
@@ -17,7 +16,7 @@ class XenditCallbackController extends Controller
 {
     public function __invoke(Request $request, PaymentService $paymentService, OrderRoutingService $routingService): JsonResponse
     {
-        $expectedToken = SystemSettings::get('xendit_webhook_token');
+        $expectedToken = config('services.xendit.webhook_token');
 
         if (! $expectedToken || ! hash_equals($expectedToken, (string) $request->header('x-callback-token'))) {
             return response()->json(['message' => 'Invalid callback token.'], Response::HTTP_UNAUTHORIZED);

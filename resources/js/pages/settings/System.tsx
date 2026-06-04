@@ -24,11 +24,6 @@ export default function SystemSettings({ settings, printers, kitchenStations, ba
         tax_is_active: settings.tax_is_active === '1',
         service_charge_percentage: Number(settings.service_charge_percentage ?? 0),
         service_charge_is_active: settings.service_charge_is_active === '1',
-        xendit_enabled: settings.xendit_enabled === '1',
-        xendit_active_methods: ['qris'],
-        xendit_secret_key: '',
-        xendit_public_key: '',
-        xendit_webhook_token: '',
     });
 
     function submit(event: FormEvent) {
@@ -52,10 +47,16 @@ export default function SystemSettings({ settings, printers, kitchenStations, ba
                         <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.data.tax_is_active} onCheckedChange={(v) => form.setData('tax_is_active', Boolean(v))} />Tax aktif</label>
                         <Input type="number" value={form.data.service_charge_percentage} onChange={(e) => form.setData('service_charge_percentage', Number(e.target.value))} placeholder="Service charge %" />
                         <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.data.service_charge_is_active} onCheckedChange={(v) => form.setData('service_charge_is_active', Boolean(v))} />Service charge aktif</label>
-                        <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.data.xendit_enabled} onCheckedChange={(v) => form.setData('xendit_enabled', Boolean(v))} />Xendit aktif</label>
-                        <Input value={form.data.xendit_secret_key} onChange={(e) => form.setData('xendit_secret_key', e.target.value)} placeholder={settings.has_xendit_secret_key ? 'Secret key tersimpan' : 'Xendit secret key'} />
-                        <Input value={form.data.xendit_public_key} onChange={(e) => form.setData('xendit_public_key', e.target.value)} placeholder="Xendit public key" />
-                        <Input value={form.data.xendit_webhook_token} onChange={(e) => form.setData('xendit_webhook_token', e.target.value)} placeholder={settings.has_xendit_webhook_token ? 'Webhook token tersimpan' : 'Webhook token'} />
+                        <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <span className="font-medium">Xendit dari .env</span>
+                                <Badge variant={settings.xendit_enabled === '1' ? 'default' : 'secondary'}>{settings.xendit_enabled === '1' ? 'Aktif' : 'Nonaktif'}</Badge>
+                            </div>
+                            <div className="grid gap-1 text-muted-foreground">
+                                <span>Secret key: {settings.has_xendit_secret_key ? 'tersedia' : 'belum ada'}</span>
+                                <span>Webhook token: {settings.has_xendit_webhook_token ? 'tersedia' : 'belum ada'}</span>
+                            </div>
+                        </div>
                         <Button type="submit">Simpan Settings</Button>
                     </div>
                 </form>
