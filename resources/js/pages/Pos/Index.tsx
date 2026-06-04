@@ -948,14 +948,14 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                         <div className="space-y-3">
                             {/* Open bills dropdown */}
                             <div className="rounded-xl border bg-card space-y-3">
-                                <button type="button" className="flex w-full items-center gap-2 p-4 pb-0 font-semibold" onClick={() => toggleCard('bills')}>
+                                <button type="button" className="flex w-full items-center gap-2 px-4 py-3 font-semibold" onClick={() => toggleCard('bills')}>
                                     <ReceiptText className="size-4" />
                                     <span className="flex-1 text-left">Open Bill</span>
                                     {openOrders.length > 0 && <Badge variant="secondary">{openOrders.length}</Badge>}
                                     {expandedCards.has('bills') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
                                 </button>
                                 {expandedCards.has('bills') && (
-                                    <div className="px-4 pb-4">
+                                    <div className="border-t px-4 py-4">
                                         {openOrders.length === 0 ? (
                                             <p className="text-sm text-muted-foreground">Tidak ada open bill aktif.</p>
                                         ) : (
@@ -989,7 +989,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         {expandedCards.has('bills_detail') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
                                     </button>
 
-                                    {expandedCards.has('bills_detail') && <div className="px-4 pb-4 space-y-3">
+                                    {expandedCards.has('bills_detail') && <div className="border-t px-4 py-4 space-y-3">
                                     {/* Primary actions */}
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button type="button" className="min-h-[48px]"
@@ -1085,13 +1085,13 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             )}
 
                             <div className="rounded-xl border bg-card">
-                                <button type="button" className="flex w-full items-center gap-2 p-4 pb-0 font-semibold" onClick={() => toggleCard('self_order')}>
+                                <button type="button" className="flex w-full items-center gap-2 px-4 py-3 font-semibold" onClick={() => toggleCard('self_order')}>
                                     <Bell className="size-4" />
                                     <span className="flex-1 text-left">Menunggu Persetujuan</span>
                                     {selfOrders.length > 0 && <Badge variant="destructive">{selfOrders.length}</Badge>}
                                     {expandedCards.has('self_order') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
                                 </button>
-                                {expandedCards.has('self_order') && <div className="px-4 pb-4 pt-3 space-y-3">
+                                {expandedCards.has('self_order') && <div className="border-t px-4 py-4 space-y-3">
                                 {selfOrders.length === 0 && (
                                     <p className="text-sm text-muted-foreground">{paidSelfOrderReceipts.length === 0 ? 'Tidak ada self order saat ini.' : 'Tidak ada yang menunggu persetujuan.'}</p>
                                 )}
@@ -1168,13 +1168,13 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     {/* ── PANEL: CETAK DAPUR/BAR ── */}
                     {activePanel === 'station_print' && (
                         <div className="rounded-xl border bg-card">
-                            <button type="button" className="flex w-full items-center gap-2 p-4 pb-0 font-semibold" onClick={() => toggleCard('station_print')}>
+                            <button type="button" className="flex w-full items-center gap-2 px-4 py-3 font-semibold" onClick={() => toggleCard('station_print')}>
                                 <Printer className="size-4" />
                                 <span className="flex-1 text-left">Cetak Dapur/Bar</span>
                                 {pendingStationTickets.length > 0 && <Badge variant="destructive">{pendingStationTickets.length}</Badge>}
                                 {expandedCards.has('station_print') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
                             </button>
-                            {expandedCards.has('station_print') && <div className="px-4 pb-4 pt-3 space-y-3">
+                            {expandedCards.has('station_print') && <div className="border-t px-4 py-4 space-y-3">
                             {pendingStationTickets.length === 0 ? (
                                 <div className="rounded-xl border-2 border-dashed p-8 text-center">
                                     <Printer className="mx-auto size-8 text-muted-foreground/40" />
@@ -1215,12 +1215,12 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     {/* ── PANEL: RIWAYAT CETAK ── */}
                     {activePanel === 'station_history' && (
                         <div className="rounded-xl border bg-card">
-                            <button type="button" className="flex w-full items-center gap-2 p-4 pb-0 font-semibold" onClick={() => toggleCard('station_history')}>
+                            <button type="button" className="flex w-full items-center gap-2 px-4 py-3 font-semibold" onClick={() => toggleCard('station_history')}>
                                 <ReceiptText className="size-4" />
                                 <span className="flex-1 text-left">Riwayat Cetak</span>
                                 {expandedCards.has('station_history') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
                             </button>
-                            {expandedCards.has('station_history') && <div className="px-4 pb-4 pt-3 space-y-3">
+                            {expandedCards.has('station_history') && <div className="border-t px-4 py-4 space-y-3">
                             {stationTicketHistory.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">Belum ada riwayat cetak.</p>
                             ) : (
