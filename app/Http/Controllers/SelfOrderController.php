@@ -7,6 +7,7 @@ use App\Models\MenuCategory;
 use App\Models\SelfOrder;
 use App\Models\TableQrcode;
 use App\Models\XenditPayment;
+use App\Services\OrderRoutingService;
 use App\Services\PaymentService;
 use App\Services\SelfOrderService;
 use Illuminate\Http\Client\RequestException;
@@ -81,6 +82,43 @@ class SelfOrderController extends Controller
                     ->first()
                 : null,
         ]);
+    }
+
+    public function simulatePayment(
+        string $qrToken,
+        SelfOrder $selfOrder,
+        XenditPayment $payment,
+        PaymentService $paymentService,
+        OrderRoutingService $routingService,
+    ): RedirectResponse {
+        $qrCode = $this->activeQrCode($qrToken);
+        abort_unless($selfOrder->table_qrcode_id === $qrCode->id, 404);
+        abort_unless($selfOrder->order_id && $payment->transaction?->order_id === $selfOrder->order_id, 404);
+
+        try {
+            $response = $paymentService->simulateQrisPayment($payment);
+
+            $payload = array_merge($response, [
+                'reference_id' => $payment->external_id,
+                'status' => $response['status'] ?? 'SUCCEEDED',
+            ]);
+
+            $paymentService->markXenditPaymentPaid($payment->external_id, $payload, $routingService);
+        } catch (RequestException $exception) {
+            Log::error('Self-order Xendit QRIS Simulation Error', [
+                'response' => $exception->response->json(),
+                'status' => $exception->response->status(),
+            ]);
+            $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API simulasi Xendit';
+
+            return back()->with('error', 'Gagal simulasi pembayaran QRIS: ' . (is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
+
+        return redirect()
+            ->route('self-order.status', ['qr_token' => $qrToken, 'selfOrder' => $selfOrder->id])
+            ->with('success', 'Simulasi pembayaran QRIS berhasil.');
     }
 
     private function activeQrCode(string $qrToken): TableQrcode

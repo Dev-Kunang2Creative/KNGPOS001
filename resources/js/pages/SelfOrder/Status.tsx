@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge';
-import { Head, Link, router } from '@inertiajs/react';
+import { Button } from '@/components/ui/button';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useEffect } from 'react';
 
@@ -23,10 +24,22 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function SelfOrderStatus({ qrToken, selfOrder, payment }: Props) {
+    const { flash } = usePage<{ flash?: { error?: string; success?: string } }>().props;
     const title = statusLabels[selfOrder.status] ?? selfOrder.status;
     const qrString = typeof payment?.xendit_raw_response?.qr_string === 'string' ? payment.xendit_raw_response.qr_string : null;
+    const isQrisPending = selfOrder.payment_preference === 'qris' && selfOrder.status === 'converted_to_order' && String(payment?.status ?? '').toLowerCase() !== 'paid';
     const shouldPoll = selfOrder.status === 'pending'
-        || (selfOrder.status === 'converted_to_order' && selfOrder.payment_preference === 'qris' && String(payment?.status ?? '').toLowerCase() !== 'paid');
+        || isQrisPending;
+
+    function simulatePayment() {
+        if (!payment) {
+            return;
+        }
+
+        router.post(`/s/${qrToken}/status/${selfOrder.id}/payments/${payment.id}/simulate`, {}, {
+            preserveScroll: true,
+        });
+    }
 
     useEffect(() => {
         if (!shouldPoll) {
@@ -61,6 +74,8 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment }: Props) 
                         <Badge variant="outline">{selfOrder.status}</Badge>
                     </div>
                     <div className="space-y-3 text-sm">
+                        {flash?.success && <p className="rounded-md border border-emerald-500/40 bg-emerald-50 p-3 text-sm text-emerald-700">{flash.success}</p>}
+                        {flash?.error && <p className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{flash.error}</p>}
                         {selfOrder.items.map((item) => (
                             <div key={item.id} className="flex justify-between border-b pb-2">
                                 <span>{item.menu_item?.name}</span>
@@ -98,6 +113,11 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment }: Props) 
                                     </div>
                                 ) : (
                                     <p className="text-xs text-muted-foreground">QRIS sedang dibuat.</p>
+                                )}
+                                {isQrisPending && (
+                                    <Button type="button" variant="outline" className="mt-3 w-full" onClick={simulatePayment}>
+                                        Simulasi Bayar QRIS
+                                    </Button>
                                 )}
                             </div>
                         )}

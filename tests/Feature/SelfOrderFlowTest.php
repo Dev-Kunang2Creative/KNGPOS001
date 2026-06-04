@@ -238,6 +238,81 @@ class SelfOrderFlowTest extends TestCase
                 ->where('transaction.id', $transaction->id));
     }
 
+    public function test_self_order_qris_payment_can_be_simulated_in_xendit_test_mode(): void
+    {
+        Http::fake([
+            'api.xendit.co/qr_codes/qr_self_order/payments/simulate' => Http::response([
+                'id' => 'qrpy_self_order',
+                'status' => 'SUCCEEDED',
+                'reference_id' => 'karcisqu-self-order',
+            ]),
+        ]);
+        SystemSettings::setEncrypted('xendit_secret_key', 'xnd_development_test');
+        SystemSettings::set('xendit_enabled', '1');
+
+        [$table, $qrCode, $menuItem, $kitchen, $bar] = $this->selfOrderFixture();
+        $order = Order::query()->create([
+            'table_id' => $table->id,
+            'kasir_id' => null,
+            'order_type' => 'self_order',
+            'status' => 'open',
+            'subtotal' => 25000,
+            'total_amount' => 25000,
+        ]);
+        $order->items()->create([
+            'menu_item_id' => $menuItem->id,
+            'quantity' => 1,
+            'unit_price' => 25000,
+            'subtotal' => 25000,
+            'status' => 'pending',
+        ]);
+        $selfOrder = SelfOrder::query()->create([
+            'table_id' => $table->id,
+            'table_qrcode_id' => $qrCode->id,
+            'order_id' => $order->id,
+            'customer_name' => 'Budi',
+            'customer_email' => 'budi@example.com',
+            'payment_preference' => 'qris',
+            'status' => 'converted_to_order',
+            'subtotal' => 25000,
+            'total_amount' => 25000,
+        ]);
+        $transaction = Transaction::query()->create([
+            'order_id' => $order->id,
+            'kasir_id' => null,
+            'payment_method' => 'qris',
+            'amount_paid' => 25000,
+            'change_amount' => 0,
+            'status' => 'pending',
+        ]);
+        $payment = XenditPayment::query()->create([
+            'transaction_id' => $transaction->id,
+            'external_id' => 'karcisqu-self-order',
+            'xendit_invoice_id' => 'qr_self_order',
+            'payment_method' => 'qris',
+            'amount' => 25000,
+            'status' => 'ACTIVE',
+        ]);
+
+        $this->post(route('self-order.payment.simulate', [$qrCode->qr_token, $selfOrder, $payment]))
+            ->assertRedirect(route('self-order.status', [$qrCode->qr_token, $selfOrder]))
+            ->assertSessionHas('success', 'Simulasi pembayaran QRIS berhasil.');
+
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('xendit_payments', ['id' => $payment->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('kitchen_orders', [
+            'order_id' => $order->id,
+            'kitchen_station_id' => $kitchen->id,
+        ]);
+        $this->assertDatabaseHas('bar_orders', [
+            'order_id' => $order->id,
+            'bar_station_id' => $bar->id,
+        ]);
+        Http::assertSent(fn ($request) => $request->url() === 'https://api.xendit.co/qr_codes/qr_self_order/payments/simulate'
+            && $request['amount'] === 25000);
+    }
+
     public function test_qr_submit_rejects_table_zone_without_station_assignment(): void
     {
         $zone = Zone::query()->create(['name' => 'Outdoor']);

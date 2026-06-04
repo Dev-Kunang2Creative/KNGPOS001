@@ -23,6 +23,7 @@ Route::get('s/{qr_token}', [SelfOrderController::class, 'show'])->name('self-ord
 Route::get('s/{qr_token}/menu', [SelfOrderController::class, 'menu'])->name('self-order.menu');
 Route::post('s/{qr_token}/orders', [SelfOrderController::class, 'checkout'])->name('self-order.checkout');
 Route::get('s/{qr_token}/status/{selfOrder}', [SelfOrderController::class, 'status'])->name('self-order.status');
+Route::post('s/{qr_token}/status/{selfOrder}/payments/{payment}/simulate', [SelfOrderController::class, 'simulatePayment'])->name('self-order.payment.simulate');
 
 Route::middleware(['auth', 'permission:dashboard.view'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
