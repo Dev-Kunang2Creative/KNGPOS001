@@ -977,19 +977,18 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                             </div>
 
                             {/* Active order detail */}
-                            {activeOrder && (
+                            {activeOrder && expandedCards.has('bills') && (
                                 <div className="rounded-xl border bg-card">
                                     {/* Header */}
-                                    <button type="button" className="flex w-full items-center gap-2 px-4 py-3" onClick={() => toggleCard('bills_detail')}>
+                                    <div className="flex w-full items-center gap-2 px-4 py-3">
                                         <div className="flex-1 text-left">
                                             <p className="font-semibold">{activeOrder.table?.name} · Rp {money(activeOrderTotal)}</p>
                                             <p className="text-xs text-muted-foreground">Order #{activeOrder.id}</p>
                                         </div>
                                         <Badge variant={activeOrder.status === 'submitted' ? 'default' : 'secondary'}>{activeOrder.status}</Badge>
-                                        {expandedCards.has('bills_detail') ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
-                                    </button>
+                                    </div>
 
-                                    {expandedCards.has('bills_detail') && <div className="border-t px-4 py-4 space-y-3">
+                                    <div className="border-t px-4 py-4 space-y-3">
                                     {/* Primary actions */}
                                     <div className="grid grid-cols-2 gap-2">
                                         <Button type="button" className="min-h-[48px]"
@@ -1040,7 +1039,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                         <Send className="size-4" />
                                         {pendingActiveItems.length > 0 ? `Kirim ${pendingActiveItems.length} Item ke Dapur/Bar` : 'Semua Item Sudah Dikirim'}
                                     </Button>
-                                    </div>}
+                                    </div>
                                 </div>
                             )}
                         </div>
