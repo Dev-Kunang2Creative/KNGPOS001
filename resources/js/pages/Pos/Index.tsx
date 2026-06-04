@@ -288,11 +288,30 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                 </div>
             )}
 
-            {/* Mobile-first: aside (cashier) comes first on mobile, menu second */}
-            <main className="flex flex-col gap-4 p-3 xl:grid xl:grid-cols-[1fr_460px] xl:p-4">
+            {/* Floating cart bar on mobile */}
+            {cart.length > 0 && (
+                <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background p-3 shadow-lg xl:hidden">
+                    <button
+                        type="button"
+                        className="flex min-h-[52px] w-full items-center justify-between rounded-xl bg-primary px-4 py-3 text-primary-foreground"
+                        onClick={() => { setActivePanel('cart'); document.getElementById('cashier-panel')?.scrollIntoView({ behavior: 'smooth' }); }}
+                    >
+                        <div className="flex items-center gap-2">
+                            <ShoppingCart className="size-5" />
+                            <span className="font-semibold">{cart.length} item ditambahkan</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold">Rp {money(cartTotal)}</span>
+                            <ChevronRight className="size-4" />
+                        </div>
+                    </button>
+                </div>
+            )}
 
-                {/* ── RIGHT: Cashier Panel (order-1 on mobile = appears first) ── */}
-                <aside className="order-1 flex flex-col gap-3 xl:order-2">
+            <main className="flex flex-col gap-4 p-3 pb-24 xl:grid xl:grid-cols-[1fr_460px] xl:p-4 xl:pb-4">
+
+                {/* ── RIGHT: Cashier Panel ── */}
+                <aside id="cashier-panel" className="order-2 flex flex-col gap-3 xl:order-2">
 
                     {/* Flash messages */}
                     {flash.error && <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{flash.error}</div>}
@@ -838,8 +857,8 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     )}
                 </aside>
 
-                {/* ── LEFT: Menu Browser (order-2 on mobile = appears below cashier panel) ── */}
-                <section ref={menuRef} className="order-2 space-y-4 xl:order-1">
+                {/* ── LEFT: Menu Browser (order-1 on mobile = appears first, no layout shift) ── */}
+                <section ref={menuRef} className="order-1 space-y-4 xl:order-1">
                     <div className="hidden xl:block">
                         <h1 className="text-2xl font-semibold">POS Kasir</h1>
                         <p className="text-sm text-muted-foreground">Pilih menu lalu atur di panel kanan.</p>
