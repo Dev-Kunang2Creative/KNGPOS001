@@ -148,7 +148,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [approvingAll, setApprovingAll] = useState(false);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [activePanel, setActivePanel] = useState<CashierPanel>(
-        activeOrder ? 'bills' : pendingSelfOrders.length > 0 ? 'self_order' : pendingStationTickets.length > 0 ? 'station_print' : 'cart',
+        activeOrder ? 'bills' : pendingSelfOrders.length > 0 ? 'self_order' : pendingStationTickets.length > 0 ? 'station_print' : 'bills',
     );
     const orderableTables = useMemo(() => tables.filter((t) => ['available', 'occupied'].includes(t.status)), [tables]);
     const selectedCategory = categories.find((c) => String(c.id) === selectedCategoryId) ?? categories[0];
@@ -530,9 +530,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                         </div>
                     </div>
 
-                    {/* ── PANEL: PESANAN BARU ── */}
+                    {/* ── PANEL: PESANAN BARU (desktop only — mobile uses drawer) ── */}
                     {activePanel === 'cart' && (
-                        <form onSubmit={submitOrder} className="space-y-4 rounded-xl border bg-card p-4">
+                        <form onSubmit={submitOrder} className="hidden space-y-4 rounded-xl border bg-card p-4 xl:block">
                             <div className="flex items-center justify-between">
                                 <h2 className="flex items-center gap-2 font-semibold">
                                     <ShoppingCart className="size-4" />
