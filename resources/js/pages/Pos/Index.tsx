@@ -808,7 +808,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     {/* ── PANEL: TAGIHAN AKTIF ── */}
                     {activePanel === 'bills' && (
                         <div className="space-y-3">
-                            {/* Open bills list */}
+                            {/* Open bills dropdown */}
                             <div className="rounded-xl border bg-card p-4 space-y-3">
                                 <div className="flex items-center justify-between">
                                     <h2 className="flex items-center gap-2 font-semibold"><ReceiptText className="size-4" />Open Bill</h2>
@@ -818,18 +818,18 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                     <p className="text-sm text-muted-foreground">Tidak ada open bill aktif.</p>
                                 ) : (
                                     <>
-                                        {paginatedOpenOrders.map((o) => (
-                                            <button key={o.id} type="button"
-                                                className={`flex min-h-[52px] w-full items-center justify-between rounded-xl border-2 px-4 py-2.5 text-sm transition-all ${activeOrder?.id === o.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'}`}
-                                                onClick={() => router.visit(`/pos?order=${o.id}`)}>
-                                                <div className="text-left">
-                                                    <p className="font-semibold">{o.table?.name ?? '-'}</p>
-                                                    <p className="text-xs text-muted-foreground">#{o.id} · {o.status}</p>
-                                                </div>
-                                                <span className="font-bold">Rp {money(o.total_amount)}</span>
-                                            </button>
-                                        ))}
-                                        <Pagination page={billsPage} total={openOrders.length} pageSize={PAGE_SIZE} onPage={setBillsPage} />
+                                        <Select value={activeOrder ? String(activeOrder.id) : ''} onValueChange={(id) => router.visit(`/pos?order=${id}`)}>
+                                            <SelectTrigger className="min-h-[44px]">
+                                                <SelectValue placeholder="Pilih open bill..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {openOrders.map((o) => (
+                                                    <SelectItem key={o.id} value={String(o.id)}>
+                                                        #{o.id} – {o.table?.name ?? '-'} – Rp {money(o.total_amount)}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                     </>
                                 )}
                             </div>
