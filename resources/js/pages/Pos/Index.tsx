@@ -11,6 +11,7 @@ import {
     Bell,
     ChefHat,
     CheckCircle2,
+    ChevronDown,
     ChevronRight,
     CreditCard,
     GlassWater,
@@ -22,6 +23,7 @@ import {
     Send,
     ShoppingCart,
     Trash2,
+    X,
     XCircle,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
@@ -144,6 +146,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
     const [selectedCategoryId, setSelectedCategoryId] = useState(categories[0] ? String(categories[0].id) : '');
     const [selfOrders, setSelfOrders] = useState<PendingSelfOrder[]>(pendingSelfOrders);
     const [approvingAll, setApprovingAll] = useState(false);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [activePanel, setActivePanel] = useState<CashierPanel>(
         activeOrder ? 'bills' : pendingSelfOrders.length > 0 ? 'self_order' : pendingStationTickets.length > 0 ? 'station_print' : 'cart',
     );
@@ -288,27 +291,172 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                 </div>
             )}
 
-            {/* Floating cart bar on mobile */}
-            {cart.length > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 z-50 border-t bg-background p-3 shadow-lg xl:hidden">
-                    <button
-                        type="button"
-                        className="flex min-h-[52px] w-full items-center justify-between rounded-xl bg-primary px-4 py-3 text-primary-foreground"
-                        onClick={() => { setActivePanel('cart'); document.getElementById('cashier-panel')?.scrollIntoView({ behavior: 'smooth' }); }}
-                    >
-                        <div className="flex items-center gap-2">
-                            <ShoppingCart className="size-5" />
-                            <span className="font-semibold">{cart.length} item ditambahkan</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold">Rp {money(cartTotal)}</span>
-                            <ChevronRight className="size-4" />
-                        </div>
-                    </button>
-                </div>
-            )}
+            {/* ── MOBILE FLOATING BAR ── */}
+            <div className={`fixed bottom-0 left-0 right-0 z-40 p-4 transition-transform duration-300 xl:hidden ${cart.length > 0 ? 'translate-y-0' : 'translate-y-full'}`}>
+                <button
+                    type="button"
+                    className="flex min-h-[56px] w-full items-center justify-between rounded-2xl bg-primary px-5 py-3 text-primary-foreground shadow-lg"
+                    onClick={() => setDrawerOpen(true)}
+                >
+                    <div className="flex items-center gap-2">
+                        <ShoppingCart className="size-5" />
+                        <span className="font-semibold">{cart.length} item</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="font-bold">Rp {money(cartTotal)}</span>
+                        <span className="rounded-lg bg-primary-foreground/20 px-3 py-1 text-sm font-semibold">Proses</span>
+                    </div>
+                </button>
+            </div>
 
-            <main className="flex flex-col gap-4 p-3 pb-24 xl:grid xl:grid-cols-[1fr_460px] xl:p-4 xl:pb-4">
+            {/* ── MOBILE CART DRAWER ── */}
+            <div className={`fixed inset-0 z-50 xl:hidden transition-opacity duration-300 ${drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                {/* Backdrop */}
+                <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} />
+                {/* Panel */}
+                <div className={`absolute bottom-0 left-0 right-0 max-h-[92vh] overflow-y-auto rounded-t-2xl bg-background transition-transform duration-300 ${drawerOpen ? 'translate-y-0' : 'translate-y-full'}`}>
+                    {/* Handle + header */}
+                    <div className="sticky top-0 z-10 bg-background px-4 pb-3 pt-3">
+                        <div className="mx-auto mb-3 h-1 w-12 rounded-full bg-muted-foreground/30" />
+                        <div className="flex items-center justify-between">
+                            <h2 className="flex items-center gap-2 font-semibold">
+                                <ShoppingCart className="size-4" /> Pesanan Baru
+                            </h2>
+                            <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full bg-muted" onClick={() => setDrawerOpen(false)}>
+                                <X className="size-4" />
+                            </button>
+                        </div>
+                    </div>
+                    {/* Form */}
+                    <form onSubmit={(e) => { submitOrder(e); setDrawerOpen(false); }} className="space-y-5 px-4 pb-10">
+                        {/* Tipe pesanan */}
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">1. Tipe Pesanan</p>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button type="button" className={`min-h-[64px] rounded-xl border-2 p-3 text-left text-sm transition-all ${cartTarget === 'close_bill' ? 'border-primary bg-primary/5' : 'border-border'}`} onClick={() => setCartTarget('close_bill')}>
+                                    <div className="flex items-center gap-2 font-semibold"><CreditCard className="size-4 text-primary" />Bayar Langsung</div>
+                                    <p className="mt-1 text-xs text-muted-foreground">Bayar sekarang di kasir</p>
+                                </button>
+                                <button type="button" className={`min-h-[64px] rounded-xl border-2 p-3 text-left text-sm transition-all ${cartTarget === 'open_bill' ? 'border-primary bg-primary/5' : 'border-border'}`} onClick={() => setCartTarget('open_bill')}>
+                                    <div className="flex items-center gap-2 font-semibold"><ReceiptText className="size-4 text-primary" />Open Bill</div>
+                                    <p className="mt-1 text-xs text-muted-foreground">Bayar nanti / tambah item lagi</p>
+                                </button>
+                            </div>
+                            {openOrders.length > 0 && (
+                                <div className="space-y-1">
+                                    <p className="text-xs text-muted-foreground">Tambah ke tagihan aktif:</p>
+                                    {openOrders.map((order) => (
+                                        <button key={order.id} type="button"
+                                            className={`flex min-h-[44px] w-full items-center justify-between rounded-xl border-2 px-3 py-2 text-sm transition-all ${cartTarget === `bill:${order.id}` ? 'border-primary bg-primary/5' : 'border-border'}`}
+                                            onClick={() => setCartTarget(`bill:${order.id}` as CartTarget)}>
+                                            <span className="font-medium">#{order.id} – {order.table?.name ?? '-'}</span>
+                                            <span className="text-xs text-muted-foreground">Rp {money(order.total_amount)}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Pilih Meja */}
+                        {!selectedCartOrder && (
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">2. Pilih Meja</p>
+                                <Select value={selectedTableId} onValueChange={setSelectedTableId}>
+                                    <SelectTrigger className="min-h-[48px]"><SelectValue placeholder="Pilih meja..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {orderableTables.map((t) => (
+                                            <SelectItem key={t.id} value={String(t.id)}>
+                                                {t.name}{t.zone && ` – ${t.zone.name}`}{t.status === 'occupied' && ' (terisi)'}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {orderableTables.length === 0 && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">Tidak ada meja tersedia.</p>}
+                            </div>
+                        )}
+                        {selectedCartOrder && (
+                            <div className="rounded-xl bg-muted/50 px-4 py-3 text-sm">
+                                <p className="font-medium">Tambah ke Tagihan #{selectedCartOrder.id}</p>
+                                <p className="text-xs text-muted-foreground">{selectedCartOrder.table?.name ?? '-'} – item langsung dicetak ke Dapur/Bar</p>
+                            </div>
+                        )}
+
+                        {/* Item pesanan */}
+                        <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">3. Item Pesanan</p>
+                            <div className="space-y-2">
+                                {cart.map((item) => (
+                                    <div key={item.menu_item_id} className="space-y-2 rounded-xl border px-3 py-3">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-medium">{item.name}</p>
+                                                <p className="text-xs text-muted-foreground">Rp {money(item.price)} / item</p>
+                                            </div>
+                                            <button type="button" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-destructive" onClick={() => removeItem(item.menu_item_id)}>
+                                                <Trash2 className="size-3" />
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-1">
+                                                <Button type="button" size="icon" variant="outline" className="h-9 w-9" onClick={() => updateQuantity(item.menu_item_id, -1)}><Minus className="size-3" /></Button>
+                                                <span className="w-9 text-center text-sm font-semibold">{item.quantity}</span>
+                                                <Button type="button" size="icon" variant="outline" className="h-9 w-9" onClick={() => updateQuantity(item.menu_item_id, 1)}><Plus className="size-3" /></Button>
+                                            </div>
+                                            <span className="text-sm font-bold">Rp {money(item.price * item.quantity)}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="flex justify-between border-t pt-3 text-base font-bold">
+                                    <span>Total</span>
+                                    <span>Rp {money(cartTotal)}</span>
+                                </div>
+                            </div>
+                            <Input value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} placeholder="Catatan order (opsional)" className="min-h-[44px]" />
+                        </div>
+
+                        {/* Metode pembayaran */}
+                        {cartTarget === 'close_bill' && (
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">4. Metode Pembayaran</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button type="button" className={`flex min-h-[48px] items-center justify-center gap-2 rounded-xl border-2 text-sm font-medium transition-all ${closeBillPaymentMethod === 'cash' ? 'border-primary bg-primary/5 text-primary' : 'border-border'}`} onClick={() => setCloseBillPaymentMethod('cash')}>
+                                        <Banknote className="size-4" /> Cash
+                                    </button>
+                                    <button type="button" className={`flex min-h-[48px] items-center justify-center gap-2 rounded-xl border-2 text-sm font-medium transition-all ${closeBillPaymentMethod === 'qris' ? 'border-primary bg-primary/5 text-primary' : 'border-border'}`} onClick={() => setCloseBillPaymentMethod('qris')}>
+                                        <QrCode className="size-4" /> QRIS
+                                    </button>
+                                </div>
+                                {closeBillPaymentMethod === 'cash' && (
+                                    <div className="space-y-2 rounded-xl bg-muted/50 p-3 text-sm">
+                                        <div className="flex justify-between">
+                                            <span className="text-muted-foreground">Total tagihan</span>
+                                            <strong>Rp {money(cartTotal)}</strong>
+                                        </div>
+                                        <Input type="number" value={closeBillAmount || ''} onChange={(e) => setCloseBillAmount(Number(e.target.value))} placeholder="Nominal uang pelanggan" className="min-h-[48px]" />
+                                        {closeBillAmount > 0 && (
+                                            <div className="flex justify-between rounded-lg bg-emerald-50 px-3 py-2">
+                                                <span className="text-emerald-700">Kembalian</span>
+                                                <strong className="text-emerald-700">Rp {money(closeBillChange)}</strong>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {closeBillPaymentMethod === 'qris' && (
+                                    <p className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700">QRIS Xendit dibuat otomatis setelah pesanan disimpan.</p>
+                                )}
+                            </div>
+                        )}
+
+                        <Button type="submit" className="min-h-[52px] w-full text-base font-semibold"
+                            disabled={(!selectedCartOrder && !selectedTableId) || cart.length === 0 || form.processing || (cartTarget === 'close_bill' && closeBillPaymentMethod === 'cash' && Number(closeBillAmount || 0) < cartTotal)}>
+                            <ShoppingCart className="size-4" />
+                            {selectedCartOrder ? 'Tambah & Cetak ke Dapur/Bar' : cartTarget === 'close_bill' ? (closeBillPaymentMethod === 'qris' ? 'Bayar via QRIS' : 'Bayar Cash & Cetak Struk') : 'Simpan Open Bill'}
+                        </Button>
+                    </form>
+                </div>
+            </div>
+
+            <main className="flex flex-col gap-4 p-4 pb-28 xl:grid xl:grid-cols-[1fr_460px] xl:pb-4">
 
                 {/* ── RIGHT: Cashier Panel ── */}
                 <aside id="cashier-panel" className="order-1 flex flex-col gap-3 xl:order-2">
@@ -346,22 +494,35 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
                     {/* Sticky tab navigation */}
                     <div className="sticky top-0 z-10 bg-background pb-1 pt-0">
-                        <div className="grid grid-cols-5 gap-1 rounded-xl bg-muted p-1">
-                            {cashierPanels.map((panel) => {
+                        {/* Mobile: 4 tabs (no Pesanan – accessible via floating bar) */}
+                        <div className="grid grid-cols-4 gap-1 rounded-xl bg-muted p-1 xl:hidden">
+                            {cashierPanels.filter((p) => p.key !== 'cart').map((panel) => {
                                 const Icon = panel.icon;
                                 return (
-                                    <button
-                                        key={panel.key}
-                                        type="button"
+                                    <button key={panel.key} type="button"
                                         className={`relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium transition-colors ${activePanel === panel.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/50 hover:text-foreground'}`}
-                                        onClick={() => setActivePanel(panel.key)}
-                                    >
+                                        onClick={() => setActivePanel(panel.key)}>
                                         <Icon className="size-4 shrink-0" />
                                         <span className="w-full truncate text-center leading-tight">{panel.label}</span>
                                         {Boolean(panel.count) && (
-                                            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
-                                                {panel.count}
-                                            </span>
+                                            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">{panel.count}</span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {/* Desktop: 5 tabs (includes Pesanan) */}
+                        <div className="hidden grid-cols-5 gap-1 rounded-xl bg-muted p-1 xl:grid">
+                            {cashierPanels.map((panel) => {
+                                const Icon = panel.icon;
+                                return (
+                                    <button key={panel.key} type="button"
+                                        className={`relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 text-[11px] font-medium transition-colors ${activePanel === panel.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:bg-background/50 hover:text-foreground'}`}
+                                        onClick={() => setActivePanel(panel.key)}>
+                                        <Icon className="size-4 shrink-0" />
+                                        <span className="w-full truncate text-center leading-tight">{panel.label}</span>
+                                        {Boolean(panel.count) && (
+                                            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">{panel.count}</span>
                                         )}
                                     </button>
                                 );
