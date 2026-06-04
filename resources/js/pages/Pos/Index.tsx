@@ -947,7 +947,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     {activePanel === 'bills' && (
                         <div className="space-y-3">
                             {/* Open bills dropdown */}
-                            <div className="rounded-xl border bg-card space-y-3">
+                            <div className="rounded-xl border bg-card">
                                 <button type="button" className="flex w-full items-center gap-2 px-4 py-3 font-semibold" onClick={() => toggleCard('bills')}>
                                     <ReceiptText className="size-4" />
                                     <span className="flex-1 text-left">Open Bill</span>
@@ -978,9 +978,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
                             {/* Active order detail */}
                             {activeOrder && (
-                                <div className="rounded-xl border bg-card space-y-3">
+                                <div className="rounded-xl border bg-card">
                                     {/* Header */}
-                                    <button type="button" className="flex w-full items-center gap-2 p-4 pb-0" onClick={() => toggleCard('bills_detail')}>
+                                    <button type="button" className="flex w-full items-center gap-2 px-4 py-3" onClick={() => toggleCard('bills_detail')}>
                                         <div className="flex-1 text-left">
                                             <p className="font-semibold">{activeOrder.table?.name} · Rp {money(activeOrderTotal)}</p>
                                             <p className="text-xs text-muted-foreground">Order #{activeOrder.id}</p>
