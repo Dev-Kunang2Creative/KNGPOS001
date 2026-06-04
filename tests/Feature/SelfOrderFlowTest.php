@@ -239,6 +239,58 @@ class SelfOrderFlowTest extends TestCase
                 ->where('transaction.id', $transaction->id));
     }
 
+    public function test_paid_qris_self_order_appears_on_pos_for_receipt_printing(): void
+    {
+        [$table, $qrCode, $menuItem] = $this->selfOrderFixture();
+        $cashier = $this->cashier();
+        Shift::query()->create(['kasir_id' => $cashier->id, 'opening_cash' => 100000, 'status' => 'open']);
+
+        $order = Order::query()->create([
+            'table_id' => $table->id,
+            'kasir_id' => null,
+            'order_type' => 'self_order',
+            'status' => 'paid',
+            'subtotal' => 25000,
+            'total_amount' => 25000,
+        ]);
+        $order->items()->create([
+            'menu_item_id' => $menuItem->id,
+            'quantity' => 1,
+            'unit_price' => 25000,
+            'subtotal' => 25000,
+            'status' => 'sent',
+        ]);
+        $selfOrder = SelfOrder::query()->create([
+            'table_id' => $table->id,
+            'table_qrcode_id' => $qrCode->id,
+            'order_id' => $order->id,
+            'customer_name' => 'Budi',
+            'customer_email' => 'budi@example.com',
+            'payment_preference' => 'qris',
+            'status' => 'converted_to_order',
+            'subtotal' => 25000,
+            'total_amount' => 25000,
+        ]);
+        $transaction = Transaction::query()->create([
+            'order_id' => $order->id,
+            'kasir_id' => null,
+            'payment_method' => 'qris',
+            'amount_paid' => 25000,
+            'change_amount' => 0,
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+
+        $this->actingAs($cashier)
+            ->get(route('pos.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/Index')
+                ->has('paidSelfOrderReceipts', 1)
+                ->where('paidSelfOrderReceipts.0.id', $selfOrder->id)
+                ->where('paidSelfOrderReceipts.0.order.transaction.id', $transaction->id));
+    }
+
     public function test_self_order_qris_payment_can_be_simulated_in_xendit_test_mode(): void
     {
         Http::fake([

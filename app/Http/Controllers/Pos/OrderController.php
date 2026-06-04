@@ -68,6 +68,20 @@ class OrderController extends Controller
                 ->latest()
                 ->limit(20)
                 ->get(),
+            'paidSelfOrderReceipts' => SelfOrder::query()
+                ->with([
+                    'table.zone:id,name,color_hex',
+                    'items.menuItem:id,name,price,print_to',
+                    'order.transaction:id,order_id,payment_method,amount_paid,status,paid_at',
+                ])
+                ->where('status', 'converted_to_order')
+                ->where('payment_preference', 'qris')
+                ->whereHas('order.transaction', fn ($query) => $query
+                    ->where('payment_method', 'qris')
+                    ->where('status', 'paid'))
+                ->latest()
+                ->limit(20)
+                ->get(),
         ]);
     }
 

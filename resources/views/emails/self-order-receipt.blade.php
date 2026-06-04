@@ -16,16 +16,33 @@
 
                     {{-- Header --}}
                     <tr>
-                        <td style="background-color:#1E3A8A; padding:28px 32px; text-align:center;">
-                            <img src="{{ asset('logokarcisqu.png') }}" alt="Karcisqu" style="height:40px; max-width:180px;">
+                        <td style="background-color:#1E3A8A; padding:24px 32px; text-align:center;">
+                            <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                                <tr>
+                                    <td style="vertical-align:middle; padding-right:10px;">
+                                        <img src="{{ asset('logokarcisqusquare.png') }}" alt="Karcisqu" style="height:36px; width:36px; display:block;">
+                                    </td>
+                                    <td style="vertical-align:middle;">
+                                        <span style="font-size:22px; font-weight:700; color:#ffffff; letter-spacing:0.02em;">karcisqu</span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    {{-- Intro banner --}}
+                    <tr>
+                        <td style="background-color:#EFF6FF; padding:14px 32px; text-align:center; border-bottom:1px solid #DBEAFE;">
+                            <p style="margin:0; font-size:13px; color:#1E40AF; font-weight:600;">INVOICE / STRUK PEMBAYARAN DIGITAL</p>
+                            <p style="margin:4px 0 0; font-size:12px; color:#3B82F6;">Simpan email ini sebagai bukti pembayaran yang sah.</p>
                         </td>
                     </tr>
 
                     {{-- Greeting --}}
                     <tr>
                         <td style="padding:28px 32px 0;">
-                            <p style="margin:0; font-size:20px; font-weight:700; color:#111827;">Terima kasih, {{ $selfOrder->customer_name }}!</p>
-                            <p style="margin:8px 0 0; font-size:14px; color:#6B7280;">Pembayaran kamu telah berhasil. Berikut detail pesananmu.</p>
+                            <p style="margin:0; font-size:20px; font-weight:700; color:#111827;">Halo, {{ $selfOrder->customer_name }}!</p>
+                            <p style="margin:8px 0 0; font-size:14px; color:#6B7280;">Pembayaran kamu telah berhasil diproses. Berikut adalah rincian pesanan dan bukti pembayaranmu.</p>
                         </td>
                     </tr>
 
@@ -112,12 +129,27 @@
                         </td>
                     </tr>
 
+                    {{-- Disclaimer --}}
+                    <tr>
+                        <td style="padding:0 32px;">
+                            <div style="background-color:#FFF7ED; border:1px solid #FED7AA; border-radius:6px; padding:12px 16px;">
+                                <p style="margin:0; font-size:12px; color:#92400E; line-height:1.6;">
+                                    <strong>Catatan:</strong> Email ini merupakan bukti pembayaran resmi yang dibuat secara otomatis oleh sistem Karcisqu.
+                                    Harap simpan email ini sebagai referensi transaksi kamu. Jika ada pertanyaan mengenai pesanan,
+                                    silakan hubungi langsung restoran terkait.
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+
                     {{-- Footer --}}
                     <tr>
-                        <td style="padding:28px 32px; margin-top:24px;">
+                        <td style="padding:24px 32px 28px;">
                             <div style="border-top:1px solid #E5E7EB; padding-top:20px; text-align:center;">
-                                <p style="margin:0; font-size:12px; color:#9CA3AF;">Email ini dikirim otomatis. Mohon jangan membalas email ini.</p>
-                                <p style="margin:6px 0 0; font-size:12px; color:#9CA3AF;">&copy; {{ date('Y') }} Karcisqu. All rights reserved.</p>
+                                <img src="{{ asset('logokarcisqusquare.png') }}" alt="Karcisqu" style="height:28px; width:28px; display:inline-block; margin-bottom:8px;">
+                                <p style="margin:0; font-size:13px; font-weight:600; color:#374151;">Karcisqu</p>
+                                <p style="margin:6px 0 0; font-size:11px; color:#9CA3AF;">Pesan otomatis &mdash; mohon <strong>jangan membalas</strong> email ini.</p>
+                                <p style="margin:4px 0 0; font-size:11px; color:#D1D5DB;">&copy; {{ date('Y') }} Karcisqu. All rights reserved.</p>
                             </div>
                         </td>
                     </tr>

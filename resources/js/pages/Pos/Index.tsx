@@ -60,9 +60,30 @@ type PendingSelfOrder = {
     table?: { id: number; name: string; zone?: { id: number; name: string } | null };
     items: PendingSelfOrderItem[];
 };
+type PaidSelfOrderReceipt = PendingSelfOrder & {
+    order_id: number;
+    order?: {
+        id: number;
+        transaction?: {
+            id: number;
+            payment_method: string;
+            amount_paid: string;
+            status: string;
+            paid_at?: string | null;
+        } | null;
+    } | null;
+};
 type BillMode = 'open_bill' | 'close_bill';
 type CartTarget = 'close_bill' | 'open_bill' | `bill:${number}`;
-type Props = { tables: Table[]; openOrders: OpenOrder[]; categories: Category[]; activeOrder: ActiveOrder; xenditPayment: XenditPayment; pendingSelfOrders: PendingSelfOrder[] };
+type Props = {
+    tables: Table[];
+    openOrders: OpenOrder[];
+    categories: Category[];
+    activeOrder: ActiveOrder;
+    xenditPayment: XenditPayment;
+    pendingSelfOrders: PendingSelfOrder[];
+    paidSelfOrderReceipts: PaidSelfOrderReceipt[];
+};
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'POS', href: '/pos' }];
 const money = (value: number | string) => Number(value || 0).toLocaleString('id-ID');
@@ -112,7 +133,7 @@ function groupOpenBillItems(items: ActiveOrderItem[]): GroupedOpenBillSection[] 
         .sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
 }
 
-export default function PosIndex({ tables, openOrders, categories, activeOrder, xenditPayment, pendingSelfOrders }: Props) {
+export default function PosIndex({ tables, openOrders, categories, activeOrder, xenditPayment, pendingSelfOrders, paidSelfOrderReceipts }: Props) {
     const { flash } = usePage<SharedData>().props;
     const [selectedTableId, setSelectedTableId] = useState('');
     const [cartTarget, setCartTarget] = useState<CartTarget>('close_bill');
@@ -158,7 +179,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
             }
 
             router.reload({
-                only: ['pendingSelfOrders', 'openOrders'],
+                only: ['pendingSelfOrders', 'paidSelfOrderReceipts', 'openOrders'],
                 preserveScroll: true,
                 preserveState: true,
             });
@@ -339,14 +360,61 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                 <CardTitle className="flex items-center gap-2 text-base">
                                     <Bell className="size-4" />
                                     Self Order QR
-                                    {selfOrders.length > 0 && <Badge variant="destructive">{selfOrders.length}</Badge>}
+                                    {(selfOrders.length + paidSelfOrderReceipts.length) > 0 && <Badge variant="destructive">{selfOrders.length + paidSelfOrderReceipts.length}</Badge>}
                                 </CardTitle>
                                 {showSelfOrders ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                             </button>
                         </CardHeader>
                         {showSelfOrders && (
                             <CardContent className="space-y-3">
-                                {selfOrders.length === 0 && <p className="text-sm text-muted-foreground">Belum ada self-order pending.</p>}
+                                {paidSelfOrderReceipts.length > 0 && (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <h3 className="text-sm font-semibold">QRIS Lunas - Cetak Struk</h3>
+                                            <Badge variant="secondary">{paidSelfOrderReceipts.length}</Badge>
+                                        </div>
+                                        {paidSelfOrderReceipts.map((selfOrder) => {
+                                            const transaction = selfOrder.order?.transaction;
+                                            const tableName = selfOrder.table_name ?? selfOrder.table?.name ?? '-';
+                                            const zoneName = selfOrder.zone_name ?? selfOrder.table?.zone?.name ?? '-';
+
+                                            return (
+                                                <div key={`paid-${selfOrder.id}`} className="rounded-md border border-emerald-500/40 bg-emerald-50 p-3 text-sm">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div>
+                                                            <p className="font-semibold text-emerald-950">
+                                                                {tableName} <span className="text-xs font-normal text-emerald-700">- {zoneName}</span>
+                                                            </p>
+                                                            <p className="text-xs text-emerald-700">
+                                                                {selfOrder.customer_name || 'Customer'} - Rp {money(selfOrder.total_amount)}
+                                                            </p>
+                                                            {transaction?.paid_at && <p className="text-xs text-emerald-700">Paid: {new Date(transaction.paid_at).toLocaleString('id-ID')}</p>}
+                                                        </div>
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            <Badge variant="default">PAID</Badge>
+                                                            <Badge variant="outline">QRIS</Badge>
+                                                        </div>
+                                                    </div>
+                                                    <div className="mt-3 flex items-center gap-2">
+                                                        <Button type="button" size="sm" variant="outline" disabled={!transaction} onClick={() => transaction && router.visit(`/pos/transactions/${transaction.id}/receipt`)}>
+                                                            <ReceiptText />
+                                                            Cetak Struk
+                                                        </Button>
+                                                        <span className="text-xs text-emerald-700">Order #{selfOrder.order_id}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                {selfOrders.length === 0 && paidSelfOrderReceipts.length === 0 && <p className="text-sm text-muted-foreground">Belum ada self-order pending atau QRIS lunas.</p>}
+                                {selfOrders.length > 0 && (
+                                    <div className="flex items-center justify-between gap-3 border-t pt-3">
+                                        <h3 className="text-sm font-semibold">Menunggu Kasir</h3>
+                                        <Badge variant="secondary">{selfOrders.length}</Badge>
+                                    </div>
+                                )}
                                 {selfOrders.map((selfOrder) => {
                                     const tableName = selfOrder.table_name ?? selfOrder.table?.name ?? '-';
                                     const zoneName = selfOrder.zone_name ?? selfOrder.table?.zone?.name ?? '-';
