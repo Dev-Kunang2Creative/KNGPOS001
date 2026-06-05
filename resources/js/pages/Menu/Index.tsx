@@ -21,7 +21,7 @@ import {
     Trash2,
     X,
 } from 'lucide-react';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useMemo, useRef, useState } from 'react';
 
 type Category = { id: number; name: string; description?: string | null; sort_order: number; is_active: boolean; active_items_count: number };
 type Item = { id: number; category_id: number; name: string; description?: string | null; price: string; print_to: string; image_url?: string | null; is_available: boolean; sort_order: number; category?: Category };
@@ -87,6 +87,7 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
     const [editItem, setEditItem] = useState<Item | null>(null);
     const [search, setSearch] = useState('');
     const [filterCat, setFilterCat] = useState('all');
+    const formRef = useRef<HTMLDivElement>(null);
 
     const filtered = items.filter((item) => {
         const matchSearch = item.name.toLowerCase().includes(search.toLowerCase());
@@ -94,15 +95,20 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
         return matchSearch && matchCat;
     });
 
+    function startEdit(item: Item) {
+        setEditItem(item);
+        window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+
     return (
-        <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+        <div className="grid gap-4 xl:grid-cols-[400px_1fr] xl:gap-6">
             {/* Form */}
-            <div className="rounded-xl border bg-card">
-                <div className="border-b px-5 py-4">
+            <div ref={formRef} className="rounded-xl border bg-card">
+                <div className="border-b px-4 py-3 sm:px-5 sm:py-4">
                     <h2 className="font-semibold">{editItem ? 'Edit Item' : 'Tambah Item Baru'}</h2>
                     <p className="mt-0.5 text-xs text-muted-foreground">{editItem ? `Mengedit: ${editItem.name}` : 'Isi detail menu item baru'}</p>
                 </div>
-                <div className="p-5">
+                <div className="p-4 sm:p-5">
                     <ItemForm categories={categories} editItem={editItem} onCancelEdit={() => setEditItem(null)} />
                 </div>
             </div>
@@ -146,22 +152,24 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
                             const PtIcon = pt.icon;
                             return (
                                 <div key={item.id} className={`group relative overflow-hidden rounded-xl border bg-card transition-all hover:shadow-sm ${!item.is_available ? 'opacity-60' : ''}`}>
-                                    {/* Status dot */}
-                                    <span className={`absolute right-3 top-3 size-2 rounded-full ${item.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-
-                                    <div className="aspect-[4/3] bg-muted">
-                                        {item.image_url ? (
-                                            <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
-                                        ) : (
-                                            <div className="flex h-full items-center justify-center text-muted-foreground">
-                                                <Package className="size-9" />
-                                            </div>
-                                        )}
+                                    <div className="absolute left-3 top-3 z-10 sm:left-auto sm:right-3">
+                                        <span className={`block size-2 rounded-full ${item.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                                     </div>
 
-                                    <div className="p-4">
-                                        <p className="pr-4 font-semibold leading-tight">{item.name}</p>
-                                        <p className="mt-0.5 text-xs text-muted-foreground">{item.category?.name ?? '-'}</p>
+                                    <div className="grid grid-cols-[104px_1fr] sm:block">
+                                        <div className="aspect-square bg-muted sm:aspect-[4/3]">
+                                            {item.image_url ? (
+                                                <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
+                                            ) : (
+                                                <div className="flex h-full items-center justify-center text-muted-foreground">
+                                                    <Package className="size-9" />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="min-w-0 p-3 sm:p-4">
+                                            <p className="pr-4 font-semibold leading-tight">{item.name}</p>
+                                            <p className="mt-0.5 text-xs text-muted-foreground">{item.category?.name ?? '-'}</p>
 
                                         <p className="mt-2 text-lg font-bold text-primary">Rp {money(item.price)}</p>
 
@@ -174,13 +182,13 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
                                             )}
                                         </div>
 
-                                        <div className="mt-3 flex gap-1.5">
+                                        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:flex">
                                             <Button
                                                 type="button"
                                                 size="sm"
                                                 variant="outline"
-                                                className="flex-1 h-8 text-xs"
-                                                onClick={() => setEditItem(item)}
+                                                className="h-9 flex-1 text-xs"
+                                                onClick={() => startEdit(item)}
                                             >
                                                 <Edit2 className="size-3" /> Edit
                                             </Button>
@@ -188,7 +196,7 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
                                                 type="button"
                                                 size="sm"
                                                 variant={item.is_available ? 'outline' : 'default'}
-                                                className="flex-1 h-8 text-xs"
+                                                className="h-9 flex-1 text-xs"
                                                 onClick={() => router.patch(`/menu/items/${item.id}/availability`, { is_available: !item.is_available }, { preserveScroll: true })}
                                             >
                                                 {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
@@ -197,7 +205,7 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
                                                 type="button"
                                                 size="sm"
                                                 variant="ghost"
-                                                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                                                className="col-span-2 h-9 shrink-0 text-muted-foreground hover:text-destructive sm:col-span-1 sm:w-9"
                                                 onClick={() => {
                                                     if (confirm(`Hapus "${item.name}"?`)) {
                                                         router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
@@ -206,6 +214,7 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
                                             >
                                                 <Trash2 className="size-3.5" />
                                             </Button>
+                                        </div>
                                         </div>
                                     </div>
                                 </div>
@@ -262,12 +271,12 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
     function submit(e: FormEvent) {
         e.preventDefault();
         const opts = { preserveScroll: true, forceFormData: true };
+        form.transform((data) => ({ ...data, category_id: Number(data.category_id) }));
+
         if (editItem) {
-            form.transform((data) => ({ ...data, category_id: Number(data.category_id) }))
-                .post(`/menu/items/${editItem.id}?_method=PUT`, { ...opts, onSuccess: onCancelEdit });
+            form.post(`/menu/items/${editItem.id}?_method=PUT`, { ...opts, onSuccess: onCancelEdit });
         } else {
-            form.transform((data) => ({ ...data, category_id: Number(data.category_id) }))
-                .post('/menu/items', { ...opts, onSuccess: () => form.reset() });
+            form.post('/menu/items', { ...opts, onSuccess: () => form.reset() });
         }
     }
 
@@ -283,7 +292,7 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
             <div className="space-y-1.5">
                 <Label>Kategori <span className="text-destructive">*</span></Label>
                 <Select value={form.data.category_id} onValueChange={(v) => form.setData('category_id', v)}>
-                    <SelectTrigger><SelectValue placeholder="Pilih kategori..." /></SelectTrigger>
+                    <SelectTrigger className="min-h-[44px]"><SelectValue placeholder="Pilih kategori..." /></SelectTrigger>
                     <SelectContent>
                         {categories.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
                     </SelectContent>
@@ -293,31 +302,46 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
 
             <div className="space-y-1.5">
                 <Label>Nama Menu <span className="text-destructive">*</span></Label>
-                <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="cth: Nasi Goreng Spesial" />
+                <Input className="min-h-[44px]" value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="cth: Nasi Goreng Spesial" />
                 {form.errors.name && <p className="text-xs text-destructive">{form.errors.name}</p>}
             </div>
 
             <div className="space-y-1.5">
                 <Label>Deskripsi</Label>
-                <Input value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} placeholder="Deskripsi singkat (opsional)" />
+                <Input className="min-h-[44px]" value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} placeholder="Deskripsi singkat (opsional)" />
             </div>
 
-            <div className="space-y-1.5">
-                <Label>Harga (Rp) <span className="text-destructive">*</span></Label>
-                <Input
-                    type="number"
-                    min={0}
-                    value={form.data.price || ''}
-                    onChange={(e) => form.setData('price', Number(e.target.value))}
-                    placeholder="0"
-                />
-                {form.errors.price && <p className="text-xs text-destructive">{form.errors.price}</p>}
+            <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                    <Label>Harga (Rp) <span className="text-destructive">*</span></Label>
+                    <Input
+                        className="min-h-[44px]"
+                        type="number"
+                        min={0}
+                        value={form.data.price || ''}
+                        onChange={(e) => form.setData('price', Number(e.target.value))}
+                        placeholder="0"
+                    />
+                    {form.errors.price && <p className="text-xs text-destructive">{form.errors.price}</p>}
+                </div>
+
+                <div className="space-y-1.5">
+                    <Label>Urutan</Label>
+                    <Input
+                        className="min-h-[44px]"
+                        type="number"
+                        min={0}
+                        value={form.data.sort_order}
+                        onChange={(e) => form.setData('sort_order', Number(e.target.value))}
+                        placeholder="0"
+                    />
+                </div>
             </div>
 
             <div className="space-y-1.5">
                 <Label>Dicetak ke</Label>
                 <Select value={form.data.print_to} onValueChange={(v) => form.setData('print_to', v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="min-h-[44px]"><SelectValue /></SelectTrigger>
                     <SelectContent>
                         {printOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                     </SelectContent>
@@ -327,9 +351,9 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
             <div className="space-y-1.5">
                 <Label>Gambar</Label>
                 {imagePreview && (
-                    <img src={imagePreview} alt={form.data.name || 'Preview menu'} className="aspect-[4/3] w-full rounded-lg border object-cover" />
+                    <img src={imagePreview} alt={form.data.name || 'Preview menu'} className="aspect-[16/10] w-full rounded-lg border object-cover sm:aspect-[4/3]" />
                 )}
-                <Input type="file" accept="image/*" onChange={(e) => form.setData('image', e.target.files?.[0] ?? null)} />
+                <Input className="min-h-[44px] file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-sm" type="file" accept="image/*" onChange={(e) => form.setData('image', e.target.files?.[0] ?? null)} />
                 {form.errors.image && <p className="text-xs text-destructive">{form.errors.image}</p>}
             </div>
 
@@ -342,13 +366,14 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
                 <Label htmlFor="is_available" className="cursor-pointer font-normal">Item tersedia / aktif</Label>
             </div>
 
-            <div className="flex gap-2 pt-1">
-                <Button type="submit" disabled={form.processing} className="flex-1">
+            <div className="grid gap-2 pt-1 sm:flex">
+                <Button type="submit" disabled={form.processing} className="min-h-[44px] flex-1">
                     {editItem ? <><Save className="size-4" /> Simpan Perubahan</> : <><Plus className="size-4" /> Tambah Item</>}
                 </Button>
                 {editItem && (
-                    <Button type="button" variant="outline" onClick={onCancelEdit}>
+                    <Button type="button" variant="outline" className="min-h-[44px] sm:w-12" onClick={onCancelEdit}>
                         <X className="size-4" />
+                        <span className="sm:hidden">Batal Edit</span>
                     </Button>
                 )}
             </div>
@@ -510,7 +535,8 @@ function PromotionsTab({ categories, items, promotions }: { categories: Category
             category_id: data.category_id || null,
             menu_item_id: data.menu_item_id || null,
             min_order_amount: data.min_order_amount || null,
-        })).post('/menu/promotions', { preserveScroll: true, onSuccess: () => form.reset() });
+        }));
+        form.post('/menu/promotions', { preserveScroll: true, onSuccess: () => form.reset() });
     }
 
     return (
