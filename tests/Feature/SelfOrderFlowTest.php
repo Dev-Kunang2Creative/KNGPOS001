@@ -10,7 +10,6 @@ use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\SelfOrder;
 use App\Models\Shift;
-use App\Models\SystemSettings;
 use App\Models\Table;
 use App\Models\TableQrcode;
 use App\Models\Transaction;
@@ -120,8 +119,10 @@ class SelfOrderFlowTest extends TestCase
                 'qr_string' => '000201010212-self-order',
             ]),
         ]);
-        SystemSettings::set('xendit_secret_key', 'xnd_development_test');
-        SystemSettings::set('xendit_enabled', '1');
+        config([
+            'services.xendit.secret_key' => 'xnd_development_test',
+            'services.xendit.enabled' => true,
+        ]);
         config(['services.xendit.webhook_token' => 'verify-token']);
 
         [$table, $qrCode, $menuItem, $kitchen, $bar] = $this->selfOrderFixture();
@@ -388,8 +389,10 @@ class SelfOrderFlowTest extends TestCase
                 'reference_id' => 'karcisqu-self-order',
             ]),
         ]);
-        SystemSettings::set('xendit_secret_key', 'xnd_development_test');
-        SystemSettings::set('xendit_enabled', '1');
+        config([
+            'services.xendit.secret_key' => 'xnd_development_test',
+            'services.xendit.enabled' => true,
+        ]);
 
         [$table, $qrCode, $menuItem, $kitchen, $bar] = $this->selfOrderFixture();
         $order = Order::query()->create([

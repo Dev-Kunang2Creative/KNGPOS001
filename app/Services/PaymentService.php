@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Jobs\SendSelfOrderReceiptEmail;
 use App\Models\Order;
-use App\Models\SystemSettings;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\XenditPayment;
@@ -57,10 +56,9 @@ class PaymentService
      */
     public function createQrisPayment(Order $order, ?User $cashier = null, ?string $notes = null): array
     {
-        $secretKey = SystemSettings::get('xendit_secret_key');
-        $enabled = filter_var(SystemSettings::get('xendit_enabled', false), FILTER_VALIDATE_BOOLEAN);
+        $secretKey = config('services.xendit.secret_key');
 
-        if (! $secretKey || ! $enabled) {
+        if (! $secretKey || ! config('services.xendit.enabled')) {
             throw new RuntimeException('Xendit belum dikonfigurasi.');
         }
 
@@ -171,10 +169,9 @@ class PaymentService
      */
     public function simulateQrisPayment(XenditPayment $payment): array
     {
-        $secretKey = SystemSettings::get('xendit_secret_key');
-        $enabled = filter_var(SystemSettings::get('xendit_enabled', false), FILTER_VALIDATE_BOOLEAN);
+        $secretKey = config('services.xendit.secret_key');
 
-        if (! $secretKey || ! $enabled) {
+        if (! $secretKey || ! config('services.xendit.enabled')) {
             throw new RuntimeException('Xendit belum dikonfigurasi.');
         }
 
