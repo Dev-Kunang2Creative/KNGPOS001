@@ -450,6 +450,90 @@ class PaymentFlowTest extends TestCase
                 ->has('barOrders', 0));
     }
 
+    public function test_open_bill_submit_splits_kitchen_and_bar_tickets(): void
+    {
+        foreach (['pos.create', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.create', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $zone = Zone::query()->create(['name' => 'Indoor']);
+        $table = Table::query()->create(['name' => 'T1', 'zone_id' => $zone->id, 'status' => 'open_bill']);
+        $kitchen = KitchenStation::query()->create(['name' => 'Kitchen 1']);
+        $bar = BarStation::query()->create(['name' => 'Bar 1']);
+        ZoneStationAssignment::query()->create([
+            'zone_id' => $zone->id,
+            'kitchen_station_id' => $kitchen->id,
+            'bar_station_id' => $bar->id,
+        ]);
+        $category = MenuCategory::query()->create(['name' => 'Main']);
+        $food = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Nasi',
+            'price' => 25000,
+            'print_to' => 'kitchen',
+        ]);
+        $drink = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Es Teh',
+            'price' => 8000,
+            'print_to' => 'bar',
+        ]);
+        $order = Order::query()->create([
+            'table_id' => $table->id,
+            'kasir_id' => $cashier->id,
+            'status' => 'open',
+            'subtotal' => 33000,
+            'total_amount' => 33000,
+        ]);
+        $order->items()->create([
+            'menu_item_id' => $food->id,
+            'quantity' => 1,
+            'unit_price' => 25000,
+            'subtotal' => 25000,
+            'status' => 'pending',
+        ]);
+        $order->items()->create([
+            'menu_item_id' => $drink->id,
+            'quantity' => 1,
+            'unit_price' => 8000,
+            'subtotal' => 8000,
+            'status' => 'pending',
+        ]);
+
+        $response = $this->actingAs($cashier)
+            ->post("/pos/orders/{$order->id}/submit");
+
+        $kitchenOrder = KitchenOrder::query()->where('order_id', $order->id)->firstOrFail();
+        $barOrder = BarOrder::query()->where('order_id', $order->id)->firstOrFail();
+        $location = $response->headers->get('Location');
+
+        $response->assertRedirect();
+        $this->assertStringContainsString('kitchen_order='.$kitchenOrder->id, $location);
+        $this->assertStringNotContainsString('bar_order='.$barOrder->id, $location);
+        $this->assertStringContainsString('next_station_ticket=', $location);
+        $this->assertStringContainsString(urlencode('bar_order='.$barOrder->id), $location);
+
+        $this->actingAs($cashier)
+            ->get(route('pos.orders.station-ticket', [
+                'order' => $order->id,
+                'kitchen_order' => $kitchenOrder->id,
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/StationTicket')
+                ->has('kitchenOrders', 1)
+                ->has('barOrders', 0));
+    }
+
     public function test_xendit_callback_validates_token_logs_and_is_idempotent(): void
     {
         config(['services.xendit.webhook_token' => 'verify-token']);

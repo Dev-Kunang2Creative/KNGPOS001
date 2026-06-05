@@ -6,6 +6,8 @@ use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -44,6 +46,33 @@ class MenuManagementTest extends TestCase
             'name' => 'Nasi Goreng',
             'print_to' => 'kitchen',
         ]);
+    }
+
+    public function test_manager_can_upload_menu_item_image(): void
+    {
+        Storage::fake('public');
+
+        $category = MenuCategory::query()->create(['name' => 'Makanan', 'sort_order' => 1, 'is_active' => true]);
+        $image = UploadedFile::fake()->image('nasi-goreng.jpg', 800, 600);
+
+        $this->actingAs($this->manager())
+            ->post('/menu/items', [
+                'category_id' => $category->id,
+                'name' => 'Nasi Goreng',
+                'description' => 'Pedas',
+                'price' => 35000,
+                'print_to' => 'kitchen',
+                'is_available' => true,
+                'sort_order' => 1,
+                'image' => $image,
+            ])
+            ->assertRedirect();
+
+        $item = MenuItem::query()->where('name', 'Nasi Goreng')->firstOrFail();
+
+        $this->assertNotNull($item->image_path);
+        Storage::disk('public')->assertExists($item->image_path);
+        $this->assertStringContainsString('/storage/', $item->image_url);
     }
 
     public function test_category_with_active_items_cannot_be_deleted(): void

@@ -1,10 +1,10 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Head, useForm, usePage } from '@inertiajs/react';
-import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import { Minus, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-type MenuItem = { id: number; category_id: number; name: string; description?: string | null; price: string; print_to: string };
+type MenuItem = { id: number; category_id: number; name: string; description?: string | null; price: string; print_to: string; image_url?: string | null };
 type Category = { id: number; name: string; description?: string | null; active_items: MenuItem[] };
 type Table = { id: number; name: string; zone?: { name: string; color_hex: string } };
 type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string };
@@ -62,10 +62,21 @@ export default function SelfOrderShow({ qrToken, table, categories }: Props) {
                                 <h2 className="mb-2 text-base font-semibold">{category.name}</h2>
                                 <div className="grid gap-2 sm:grid-cols-2">
                                     {category.active_items.map((item) => (
-                                        <button key={item.id} type="button" onClick={() => addItem(item)} className="rounded-md border p-3 text-left hover:bg-muted/50">
-                                            <span className="block text-sm font-medium">{item.name}</span>
-                                            {item.description && <span className="block text-xs text-muted-foreground">{item.description}</span>}
-                                            <span className="mt-2 block text-sm">Rp {Number(item.price).toLocaleString('id-ID')}</span>
+                                        <button key={item.id} type="button" onClick={() => addItem(item)} className="overflow-hidden rounded-md border text-left hover:bg-muted/50">
+                                            <div className="aspect-[4/3] bg-muted">
+                                                {item.image_url ? (
+                                                    <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
+                                                ) : (
+                                                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                                                        <Package className="size-8" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="p-3">
+                                                <span className="block text-sm font-medium">{item.name}</span>
+                                                {item.description && <span className="block text-xs text-muted-foreground">{item.description}</span>}
+                                                <span className="mt-2 block text-sm">Rp {Number(item.price).toLocaleString('id-ID')}</span>
+                                            </div>
                                         </button>
                                     ))}
                                 </div>

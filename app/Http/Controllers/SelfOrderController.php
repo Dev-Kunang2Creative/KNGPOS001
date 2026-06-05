@@ -136,7 +136,7 @@ class SelfOrderController extends Controller
             ->with(['activeItems' => fn ($query) => $query
                 ->where('is_available', true)
                 ->orderBy('sort_order')
-                ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to'])])
+                ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path'])])
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->get(['id', 'name', 'description']);

@@ -11,6 +11,7 @@ use App\Models\MenuItem;
 use App\Models\MenuPromotion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -95,17 +96,7 @@ class MenuController extends Controller
 
     private function categoryData(MenuCategoryRequest $request, ?MenuCategory $category = null): array
     {
-        $data = $request->validated();
-
-        if ($request->hasFile('image')) {
-            $data['image_path'] = $request->file('image')->store('menu', 'public');
-        } elseif ($category) {
-            $data['image_path'] = $category->image_path;
-        }
-
-        unset($data['image']);
-
-        return $data;
+        return $request->validated();
     }
 
     private function itemData(MenuItemRequest $request, ?MenuItem $item = null): array
@@ -113,6 +104,10 @@ class MenuController extends Controller
         $data = $request->validated();
 
         if ($request->hasFile('image')) {
+            if ($item?->image_path) {
+                Storage::disk('public')->delete($item->image_path);
+            }
+
             $data['image_path'] = $request->file('image')->store('menu', 'public');
         } elseif ($item) {
             $data['image_path'] = $item->image_path;

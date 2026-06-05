@@ -21,10 +21,10 @@ import {
     Trash2,
     X,
 } from 'lucide-react';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 
 type Category = { id: number; name: string; description?: string | null; sort_order: number; is_active: boolean; active_items_count: number };
-type Item = { id: number; category_id: number; name: string; description?: string | null; price: string; print_to: string; is_available: boolean; sort_order: number; category?: Category };
+type Item = { id: number; category_id: number; name: string; description?: string | null; price: string; print_to: string; image_url?: string | null; is_available: boolean; sort_order: number; category?: Category };
 type Promotion = { id: number; name: string; type: string; value: string; applies_to: string; is_active: boolean; valid_from: string; valid_until: string };
 type Props = { categories: Category[]; items: Item[]; promotions: Promotion[] };
 
@@ -145,56 +145,68 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
                             const pt = printTargetLabels[item.print_to] ?? printTargetLabels.kasir;
                             const PtIcon = pt.icon;
                             return (
-                                <div key={item.id} className={`group relative rounded-xl border bg-card p-4 transition-all hover:shadow-sm ${!item.is_available ? 'opacity-60' : ''}`}>
+                                <div key={item.id} className={`group relative overflow-hidden rounded-xl border bg-card transition-all hover:shadow-sm ${!item.is_available ? 'opacity-60' : ''}`}>
                                     {/* Status dot */}
                                     <span className={`absolute right-3 top-3 size-2 rounded-full ${item.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`} />
 
-                                    <p className="pr-4 font-semibold leading-tight">{item.name}</p>
-                                    <p className="mt-0.5 text-xs text-muted-foreground">{item.category?.name ?? '-'}</p>
-
-                                    <p className="mt-2 text-lg font-bold text-primary">Rp {money(item.price)}</p>
-
-                                    <div className="mt-2 flex items-center gap-1.5">
-                                        <span className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${pt.color}`}>
-                                            <PtIcon className="size-3" /> {pt.label}
-                                        </span>
-                                        {!item.is_available && (
-                                            <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">Habis</span>
+                                    <div className="aspect-[4/3] bg-muted">
+                                        {item.image_url ? (
+                                            <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
+                                        ) : (
+                                            <div className="flex h-full items-center justify-center text-muted-foreground">
+                                                <Package className="size-9" />
+                                            </div>
                                         )}
                                     </div>
 
-                                    <div className="mt-3 flex gap-1.5">
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="outline"
-                                            className="flex-1 h-8 text-xs"
-                                            onClick={() => setEditItem(item)}
-                                        >
-                                            <Edit2 className="size-3" /> Edit
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant={item.is_available ? 'outline' : 'default'}
-                                            className="flex-1 h-8 text-xs"
-                                            onClick={() => router.patch(`/menu/items/${item.id}/availability`, { is_available: !item.is_available }, { preserveScroll: true })}
-                                        >
-                                            {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
-                                        </Button>
-                                        <Button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                                            onClick={() => {
-                                                if (confirm(`Hapus "${item.name}"?`)) {
-                                                    router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
-                                                }
-                                            }}
-                                        >
-                                            <Trash2 className="size-3.5" />
-                                        </Button>
+                                    <div className="p-4">
+                                        <p className="pr-4 font-semibold leading-tight">{item.name}</p>
+                                        <p className="mt-0.5 text-xs text-muted-foreground">{item.category?.name ?? '-'}</p>
+
+                                        <p className="mt-2 text-lg font-bold text-primary">Rp {money(item.price)}</p>
+
+                                        <div className="mt-2 flex items-center gap-1.5">
+                                            <span className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${pt.color}`}>
+                                                <PtIcon className="size-3" /> {pt.label}
+                                            </span>
+                                            {!item.is_available && (
+                                                <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">Habis</span>
+                                            )}
+                                        </div>
+
+                                        <div className="mt-3 flex gap-1.5">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="flex-1 h-8 text-xs"
+                                                onClick={() => setEditItem(item)}
+                                            >
+                                                <Edit2 className="size-3" /> Edit
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant={item.is_available ? 'outline' : 'default'}
+                                                className="flex-1 h-8 text-xs"
+                                                onClick={() => router.patch(`/menu/items/${item.id}/availability`, { is_available: !item.is_available }, { preserveScroll: true })}
+                                            >
+                                                {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                                                onClick={() => {
+                                                    if (confirm(`Hapus "${item.name}"?`)) {
+                                                        router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
+                                                    }
+                                                }}
+                                            >
+                                                <Trash2 className="size-3.5" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -219,6 +231,13 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
         sort_order: editItem?.sort_order ?? 0,
         image: null as File | null,
     });
+    const imagePreview = useMemo(() => {
+        if (form.data.image) {
+            return URL.createObjectURL(form.data.image);
+        }
+
+        return editItem?.image_url ?? null;
+    }, [form.data.image, editItem?.image_url]);
 
     // Sync form when editItem changes
     const [lastEditId, setLastEditId] = useState<number | null>(null);
@@ -307,7 +326,11 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
 
             <div className="space-y-1.5">
                 <Label>Gambar</Label>
+                {imagePreview && (
+                    <img src={imagePreview} alt={form.data.name || 'Preview menu'} className="aspect-[4/3] w-full rounded-lg border object-cover" />
+                )}
                 <Input type="file" accept="image/*" onChange={(e) => form.setData('image', e.target.files?.[0] ?? null)} />
+                {form.errors.image && <p className="text-xs text-destructive">{form.errors.image}</p>}
             </div>
 
             <div className="flex items-center gap-2">
@@ -404,13 +427,12 @@ function CategoryForm({ editCat, onCancelEdit }: { editCat: Category | null; onC
         description: editCat?.description ?? '',
         sort_order: editCat?.sort_order ?? 0,
         is_active: editCat?.is_active ?? true,
-        image: null as File | null,
     });
 
     const [lastEditId, setLastEditId] = useState<number | null>(null);
     if (editCat && editCat.id !== lastEditId) {
         setLastEditId(editCat.id);
-        form.setData({ name: editCat.name, description: editCat.description ?? '', sort_order: editCat.sort_order, is_active: editCat.is_active, image: null });
+        form.setData({ name: editCat.name, description: editCat.description ?? '', sort_order: editCat.sort_order, is_active: editCat.is_active });
     }
     if (!editCat && lastEditId !== null) {
         setLastEditId(null);
@@ -419,7 +441,7 @@ function CategoryForm({ editCat, onCancelEdit }: { editCat: Category | null; onC
 
     function submit(e: FormEvent) {
         e.preventDefault();
-        const opts = { preserveScroll: true, forceFormData: true };
+        const opts = { preserveScroll: true };
         if (editCat) {
             form.post(`/menu/categories/${editCat.id}?_method=PUT`, { ...opts, onSuccess: onCancelEdit });
         } else {
@@ -444,11 +466,6 @@ function CategoryForm({ editCat, onCancelEdit }: { editCat: Category | null; onC
                 <Label>Urutan Tampil</Label>
                 <Input type="number" min={0} value={form.data.sort_order} onChange={(e) => form.setData('sort_order', Number(e.target.value))} placeholder="0" />
                 <p className="text-xs text-muted-foreground">Angka lebih kecil tampil lebih dulu</p>
-            </div>
-
-            <div className="space-y-1.5">
-                <Label>Gambar</Label>
-                <Input type="file" accept="image/*" onChange={(e) => form.setData('image', e.target.files?.[0] ?? null)} />
             </div>
 
             <div className="flex items-center gap-2">

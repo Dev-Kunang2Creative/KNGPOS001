@@ -57,7 +57,7 @@ class OrderController extends Controller
                 ->with(['activeItems' => fn ($query) => $query
                     ->where('is_available', true)
                     ->orderBy('sort_order')
-                    ->select(['id', 'category_id', 'name', 'price', 'print_to'])])
+                    ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path'])])
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->get(['id', 'name']),
@@ -374,25 +374,9 @@ class OrderController extends Controller
      */
     private function redirectToStationTicket(Order $order, array $result, ?int $receiptId = null): RedirectResponse
     {
-        $routeParams = ['order' => $order->id];
-
-        if ($result['kitchen_order']) {
-            $routeParams['kitchen_order'] = $result['kitchen_order']->id;
-        }
-
-        if ($result['bar_order']) {
-            $routeParams['bar_order'] = $result['bar_order']->id;
-        }
-
-        if ($result['payment'] ?? null) {
-            $routeParams['payment'] = $result['payment']->id;
-        }
-
-        if ($receiptId) {
-            $routeParams['receipt'] = $receiptId;
-        }
-
         if (! $result['kitchen_order'] && ! $result['bar_order']) {
+            $routeParams = ['order' => $order->id];
+
             if ($receiptId) {
                 return redirect()
                     ->route('pos.transactions.receipt', $receiptId)
@@ -404,9 +388,59 @@ class OrderController extends Controller
                 ->with('success', 'Order berhasil disubmit. Tidak ada item baru untuk Kitchen/Bar.');
         }
 
+        $stationUrls = $this->stationTicketUrlsFromRouting($order, $result, $receiptId);
+
         return redirect()
-            ->route('pos.orders.station-ticket', $routeParams)
-            ->with('success', 'Order berhasil dikirim ke station. Struk kitchen/bar siap dicetak.');
+            ->to($stationUrls[0])
+            ->with('success', 'Order berhasil dikirim ke station. Struk Kitchen/Bar siap dicetak terpisah.');
+    }
+
+    /**
+     * @param  array{kitchen_order: mixed, bar_order: mixed}  $result
+     * @return list<string>
+     */
+    private function stationTicketUrlsFromRouting(Order $order, array $result, ?int $receiptId = null): array
+    {
+        $urls = [];
+        $baseParams = ['order' => $order->id];
+
+        if ($result['payment'] ?? null) {
+            $baseParams['payment'] = $result['payment']->id;
+        }
+
+        if ($receiptId) {
+            $baseParams['receipt'] = $receiptId;
+        }
+
+        if ($result['kitchen_order']) {
+            $urls[] = route('pos.orders.station-ticket', array_merge($baseParams, [
+                'kitchen_order' => $result['kitchen_order']->id,
+            ]));
+        }
+
+        if ($result['bar_order']) {
+            $urls[] = route('pos.orders.station-ticket', array_merge($baseParams, [
+                'bar_order' => $result['bar_order']->id,
+            ]));
+        }
+
+        if (count($urls) < 2) {
+            return $urls;
+        }
+
+        return collect($urls)
+            ->map(function (string $url, int $index) use ($urls): string {
+                $nextUrl = $urls[$index + 1] ?? null;
+
+                if (! $nextUrl) {
+                    return $url;
+                }
+
+                $separator = str_contains($url, '?') ? '&' : '?';
+
+                return $url.$separator.'next_station_ticket='.urlencode($nextUrl);
+            })
+            ->all();
     }
 
     public function addItems(AddOrderItemsRequest $request, Order $order): RedirectResponse

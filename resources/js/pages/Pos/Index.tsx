@@ -36,7 +36,7 @@ type Table = {
     status: string;
     zone?: { id: number; name: string; color_hex: string; assignment?: unknown | null };
 };
-type MenuItem = { id: number; category_id: number; name: string; price: string; print_to: string };
+type MenuItem = { id: number; category_id: number; name: string; price: string; print_to: string; image_url?: string | null };
 type Category = { id: number; name: string; active_items: MenuItem[] };
 type ActiveOrderItem = { id: number; quantity: number; unit_price?: string; subtotal: string; status: string; notes?: string | null; menu_item?: MenuItem };
 type ActiveOrder = {
@@ -1311,14 +1311,25 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                             key={item.id}
                                             type="button"
                                             onClick={() => addItem(item)}
-                                            className={`relative min-h-[80px] rounded-xl border border-border p-3 text-left transition-all active:scale-95 ${cartItem ? 'bg-primary/5 ring-2 ring-primary/60' : 'hover:ring-1 hover:ring-primary/30'}`}
+                                            className={`relative overflow-hidden rounded-xl border border-border text-left transition-all active:scale-95 ${cartItem ? 'bg-primary/5 ring-2 ring-primary/60' : 'hover:ring-1 hover:ring-primary/30'}`}
                                         >
-                                            <span className="block text-sm font-semibold leading-tight">{item.name}</span>
-                                            <span className="mt-1.5 block text-sm font-bold text-primary">Rp {money(item.price)}</span>
-                                            <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                                                <Printer className="size-3" />
-                                                {printTargetLabels[item.print_to] ?? item.print_to}
-                                            </span>
+                                            <div className="aspect-[4/3] bg-muted">
+                                                {item.image_url ? (
+                                                    <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
+                                                ) : (
+                                                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                                                        <Package className="size-8" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="p-3">
+                                                <span className="block text-sm font-semibold leading-tight">{item.name}</span>
+                                                <span className="mt-1.5 block text-sm font-bold text-primary">Rp {money(item.price)}</span>
+                                                <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                                                    <Printer className="size-3" />
+                                                    {printTargetLabels[item.print_to] ?? item.print_to}
+                                                </span>
+                                            </div>
                                         </button>
                                     );
                                 })}
