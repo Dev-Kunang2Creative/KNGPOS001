@@ -9,17 +9,26 @@ use App\Models\CashierShiftSummary;
 use App\Models\Shift;
 use App\Models\Transaction;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ShiftController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $user = $request->user();
+        $canViewAllShifts = in_array($user->role, ['super_admin', 'manager'], true)
+            || $user->can('reports.view');
+
         return Inertia::render('Shifts/Index', [
             'activeShift' => $this->activeShift()?->load('summary'),
             'shifts' => Shift::query()
-                ->where('kasir_id', auth()->id())
+                ->with([
+                    'cashier:id,name,email',
+                    'summary',
+                ])
+                ->when(! $canViewAllShifts, fn ($query) => $query->where('kasir_id', $user->id))
                 ->latest('opened_at')
                 ->limit(30)
                 ->get(),

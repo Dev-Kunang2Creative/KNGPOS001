@@ -42,6 +42,7 @@ class StaffSeeder extends Seeder
         $roles = [
             'super_admin' => $permissions,
             'manager' => [
+                'shift.view',
                 'dashboard.view', 'reports.view', 'reports.export', 'zones.manage',
                 'menu.view', 'menu.manage', 'users.view', 'users.manage',
                 'settings.view', 'settings.manage', 'audit.view',
