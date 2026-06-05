@@ -61,8 +61,12 @@ class OrderController extends Controller
                 ->orderBy('sort_order')
                 ->get(['id', 'name']),
             'activeOrder' => $activeOrder,
-            'xenditPayment' => request('payment')
-                ? XenditPayment::query()->find(request('payment'))
+            'xenditPayment' => $activeOrder
+                ? XenditPayment::query()
+                    ->whereHas('transaction', fn ($q) => $q->where('order_id', $activeOrder->id))
+                    ->where('status', '!=', 'paid')
+                    ->latest()
+                    ->first()
                 : null,
             'pendingSelfOrders' => SelfOrder::query()
                 ->with(['table.zone:id,name,color_hex', 'items.menuItem:id,name,price,print_to'])
@@ -333,7 +337,7 @@ class OrderController extends Controller
             }
 
             return redirect()
-                ->route('pos.index', ['order' => $order->id])
+                ->route('pos.index', $routeParams)
                 ->with('success', 'Order berhasil disubmit. Tidak ada item baru untuk Kitchen/Bar.');
         }
 

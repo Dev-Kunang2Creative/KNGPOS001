@@ -260,6 +260,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
             return;
         }
         const billMode: BillMode = cartTarget === 'close_bill' ? 'close_bill' : 'open_bill';
+        const paymentMethod = closeBillPaymentMethod;
         form.transform(() => ({
             table_id: Number(selectedTableId),
             notes: form.data.notes,
@@ -282,6 +283,10 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                     setSelfOrders((cur) => cur.filter((o) => o.id !== selfOrderForCheckout.id));
                 }
                 form.reset();
+                if (billMode === 'close_bill' && paymentMethod === 'qris') {
+                    setDrawerMode('pay_bill');
+                    setDrawerOpen(true);
+                }
             },
         });
     }
@@ -509,9 +514,9 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
                                     <QrCode className="size-4" /> QRIS
                                 </div>
                                 <Button type="button" className="min-h-[48px] w-full" variant="outline"
-                                    disabled={!canPay}
-                                    onClick={() => { router.post(`/pos/orders/${activeOrder.id}/xendit`, {}, { preserveScroll: true }); closeDrawer(); }}>
-                                    Generate QRIS
+                                    disabled={!canPay || (xenditPayment !== null && !isXenditPaid)}
+                                    onClick={() => { router.post(`/pos/orders/${activeOrder.id}/xendit`, {}, { preserveScroll: true }); }}>
+                                    {xenditPayment && !isXenditPaid ? 'QRIS Sudah Dibuat' : 'Generate QRIS'}
                                 </Button>
                                 {xenditPayment && (
                                     <div className="space-y-2 rounded-xl border p-3">
@@ -543,7 +548,7 @@ export default function PosIndex({ tables, openOrders, categories, activeOrder, 
 
                     {/* ── NEW ORDER MODE ── */}
                     {drawerMode === 'new_order' && (
-                    <form onSubmit={(e) => { submitOrder(e); closeDrawer(); }} className="space-y-5 px-4 pb-10">
+                    <form onSubmit={(e) => { submitOrder(e); if (!(cartTarget === 'close_bill' && closeBillPaymentMethod === 'qris')) { closeDrawer(); } }} className="space-y-5 px-4 pb-10">
                         {/* Tipe pesanan */}
                         <div className="space-y-2">
                             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">1. Tipe Pesanan</p>

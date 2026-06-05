@@ -608,6 +608,90 @@ class PaymentFlowTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_pos_index_auto_loads_pending_xendit_payment_for_active_order(): void
+    {
+        foreach (['pos.view', 'pos.checkout', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.view', 'pos.checkout', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $order = $this->orderWithItemTotal($cashier, 20000);
+
+        $transaction = Transaction::query()->create([
+            'order_id' => $order->id,
+            'kasir_id' => $cashier->id,
+            'payment_method' => 'qris',
+            'amount_paid' => 20000,
+            'change_amount' => 0,
+            'status' => 'pending',
+        ]);
+        $payment = XenditPayment::query()->create([
+            'transaction_id' => $transaction->id,
+            'external_id' => 'karcisqu-auto-test',
+            'payment_method' => 'qris',
+            'amount' => 20000,
+            'status' => 'ACTIVE',
+            'xendit_raw_response' => ['qr_string' => '000201...'],
+        ]);
+
+        $this->actingAs($cashier)
+            ->get(route('pos.index', ['order' => $order->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/Index')
+                ->where('xenditPayment.id', $payment->id)
+                ->where('xenditPayment.status', 'ACTIVE'));
+    }
+
+    public function test_pos_index_does_not_load_paid_xendit_payment_for_active_order(): void
+    {
+        foreach (['pos.view', 'pos.checkout', 'shift.view'] as $permission) {
+            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
+        }
+
+        $cashier = User::factory()->create(['role' => 'kasir']);
+        $cashier->givePermissionTo(['pos.view', 'pos.checkout', 'shift.view']);
+        Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 100000,
+            'status' => 'open',
+            'opened_at' => now(),
+        ]);
+
+        $order = $this->orderWithItemTotal($cashier, 20000);
+
+        $transaction = Transaction::query()->create([
+            'order_id' => $order->id,
+            'kasir_id' => $cashier->id,
+            'payment_method' => 'qris',
+            'amount_paid' => 20000,
+            'change_amount' => 0,
+            'status' => 'paid',
+        ]);
+        XenditPayment::query()->create([
+            'transaction_id' => $transaction->id,
+            'external_id' => 'karcisqu-paid-test',
+            'payment_method' => 'qris',
+            'amount' => 20000,
+            'status' => 'paid',
+        ]);
+
+        $this->actingAs($cashier)
+            ->get(route('pos.index', ['order' => $order->id]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/Index')
+                ->where('xenditPayment', null));
+    }
+
     private function orderWithItemTotal(User $cashier, int $total): Order
     {
         Permission::query()->firstOrCreate(['name' => 'pos.checkout', 'guard_name' => 'web']);
