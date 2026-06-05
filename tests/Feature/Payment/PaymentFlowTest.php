@@ -439,7 +439,7 @@ class PaymentFlowTest extends TestCase
 
     public function test_xendit_callback_validates_token_logs_and_is_idempotent(): void
     {
-        SystemSettings::set('xendit_webhook_token', 'verify-token');
+        config(['services.xendit.webhook_token' => 'verify-token']);
         $cashier = User::factory()->create(['role' => 'kasir']);
         $order = $this->orderWithItemTotal($cashier, 20000);
         $transaction = Transaction::query()->create([

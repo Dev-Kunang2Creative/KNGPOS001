@@ -122,7 +122,7 @@ class SelfOrderFlowTest extends TestCase
         ]);
         SystemSettings::set('xendit_secret_key', 'xnd_development_test');
         SystemSettings::set('xendit_enabled', '1');
-        SystemSettings::set('xendit_webhook_token', 'verify-token');
+        config(['services.xendit.webhook_token' => 'verify-token']);
 
         [$table, $qrCode, $menuItem, $kitchen, $bar] = $this->selfOrderFixture();
 
