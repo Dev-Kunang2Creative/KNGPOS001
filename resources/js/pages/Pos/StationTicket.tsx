@@ -1,8 +1,8 @@
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
-import { Head, Link, usePage } from '@inertiajs/react';
-import { ArrowLeft, Printer, QrCode, ReceiptText } from 'lucide-react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { ArrowLeft, CreditCard, Printer, QrCode, ReceiptText } from 'lucide-react';
 import { useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -109,10 +109,10 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
     const { restaurant } = usePage<SharedData>().props;
 
     useEffect(() => {
+        if (receiptId) return;
         const timer = window.setTimeout(() => window.print(), 450);
-
         return () => window.clearTimeout(timer);
-    }, []);
+    }, [receiptId]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -145,9 +145,9 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
                             Kembali POS
                         </Link>
                     </Button>
-                    <Button type="button" onClick={() => window.print()}>
+                    <Button type="button" variant="outline" onClick={() => window.print()}>
                         <Printer className="size-4" />
-                        Cetak Tiket
+                        Cetak Tiket Kitchen/Bar
                     </Button>
                     {receiptId && (
                         <Button asChild>
@@ -157,26 +157,30 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
                             </Link>
                         </Button>
                     )}
-                    {xenditPayment && (
-                        <Button variant="outline" asChild>
-                            <Link href={`/pos?order=${order.id}&payment=${xenditPayment.id}`}>
-                                <QrCode className="size-4" />
-                                QRIS
-                            </Link>
-                        </Button>
-                    )}
                 </div>
 
-                {xenditPayment && typeof xenditPayment.xendit_raw_response?.qr_string === 'string' && xenditPayment.status.toLowerCase() !== 'paid' && (
-                    <div className="no-print w-full max-w-sm rounded-xl border bg-white p-5 shadow-sm">
-                        <div className="mb-3 flex items-center gap-2 font-semibold">
+                {xenditPayment && xenditPayment.status.toLowerCase() !== 'paid' && (
+                    <div className="no-print w-full max-w-sm space-y-4 rounded-xl border bg-white p-5 shadow-sm">
+                        <div className="flex items-center gap-2 font-semibold">
                             <QrCode className="size-5 text-primary" />
                             <span>QRIS – Menunggu Pembayaran</span>
                         </div>
-                        <div className="flex justify-center rounded-lg bg-white p-3">
-                            <QRCodeSVG value={xenditPayment.xendit_raw_response.qr_string} size={220} />
-                        </div>
-                        <p className="mt-3 text-center text-xs text-muted-foreground">Tampilkan kode QR ini ke pelanggan untuk dibayar via QRIS.</p>
+                        {typeof xenditPayment.xendit_raw_response?.qr_string === 'string' ? (
+                            <div className="flex justify-center rounded-lg bg-white p-3">
+                                <QRCodeSVG value={xenditPayment.xendit_raw_response.qr_string} size={220} />
+                            </div>
+                        ) : (
+                            <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-700">QR string belum tersedia.</p>
+                        )}
+                        <p className="text-center text-xs text-muted-foreground">Tampilkan kode QR ini ke pelanggan untuk dibayar via QRIS.</p>
+                        <Button
+                            type="button"
+                            className="w-full"
+                            onClick={() => router.post(`/pos/orders/${order.id}/xendit/${xenditPayment.id}/simulate`, { back_to_station: true })}
+                        >
+                            <CreditCard className="size-4" />
+                            Simulasi Pembayaran
+                        </Button>
                     </div>
                 )}
 
