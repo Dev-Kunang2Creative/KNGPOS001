@@ -1,4 +1,16 @@
 {
+  "permissions": {
+    "allow": [
+      "mcp__laravel-boost__last-error",
+      "mcp__laravel-boost__browser-logs",
+      "mcp__laravel-boost__read-log-entries",
+      "mcp__laravel-boost__database-query",
+      "Bash(npx tsc *)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "laravel-boost"
+  ],
   "mcpServers": {
     "laravel-boost": {
       "type": "stdio",
@@ -8,8 +20,5 @@
         "boost:mcp"
       ]
     }
-  },
-  "enabledMcpjsonServers": [
-    "laravel-boost"
-  ]
+  }
 }

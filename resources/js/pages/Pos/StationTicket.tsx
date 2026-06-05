@@ -4,6 +4,7 @@ import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { ArrowLeft, Printer, QrCode, ReceiptText } from 'lucide-react';
 import { useEffect } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 
 type TicketItem = {
     id: number;
@@ -34,7 +35,7 @@ type Props = {
     };
     kitchenOrders: StationBatch[];
     barOrders: StationBatch[];
-    xenditPayment?: { id: number; status: string } | null;
+    xenditPayment?: { id: number; status: string; xendit_raw_response?: { qr_string?: string } | null } | null;
     receiptId?: number | null;
 };
 
@@ -165,6 +166,19 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
                         </Button>
                     )}
                 </div>
+
+                {xenditPayment && typeof xenditPayment.xendit_raw_response?.qr_string === 'string' && xenditPayment.status.toLowerCase() !== 'paid' && (
+                    <div className="no-print w-full max-w-sm rounded-xl border bg-white p-5 shadow-sm">
+                        <div className="mb-3 flex items-center gap-2 font-semibold">
+                            <QrCode className="size-5 text-primary" />
+                            <span>QRIS – Menunggu Pembayaran</span>
+                        </div>
+                        <div className="flex justify-center rounded-lg bg-white p-3">
+                            <QRCodeSVG value={xenditPayment.xendit_raw_response.qr_string} size={220} />
+                        </div>
+                        <p className="mt-3 text-center text-xs text-muted-foreground">Tampilkan kode QR ini ke pelanggan untuk dibayar via QRIS.</p>
+                    </div>
+                )}
 
                 <div id="station-ticket-print-area" className="w-full max-w-sm rounded-md border bg-white shadow-sm">
                     <div className="border-b border-dashed border-black p-4 text-center font-mono text-sm text-black">
