@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
-import { type BreadcrumbItem } from '@/types';
-import { Head, router, useForm } from '@inertiajs/react';
+import { type BreadcrumbItem, type SharedData } from '@/types';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     ChefHat,
     Edit2,
@@ -41,6 +41,8 @@ const money = (v: number | string) => Number(v || 0).toLocaleString('id-ID');
 
 export default function MenuIndex({ categories, items, promotions }: Props) {
     const [tab, setTab] = useState<'items' | 'categories' | 'promotions'>('items');
+    const { auth } = usePage<SharedData>().props;
+    const canManageMenu = auth.permissions?.includes('menu.manage') ?? false;
 
     const tabs = [
         { key: 'items' as const,      label: 'Menu Item',  icon: Package,  count: items.length },
@@ -73,9 +75,9 @@ export default function MenuIndex({ categories, items, promotions }: Props) {
                     ))}
                 </div>
 
-                {tab === 'items'      && <ItemsTab categories={categories} items={items} />}
-                {tab === 'categories' && <CategoriesTab categories={categories} />}
-                {tab === 'promotions' && <PromotionsTab categories={categories} items={items} promotions={promotions} />}
+                {tab === 'items'      && <ItemsTab categories={categories} items={items} canManage={canManageMenu} />}
+                {tab === 'categories' && <CategoriesTab categories={categories} canManage={canManageMenu} />}
+                {tab === 'promotions' && <PromotionsTab categories={categories} items={items} promotions={promotions} canManage={canManageMenu} />}
             </main>
         </AppLayout>
     );
@@ -83,7 +85,7 @@ export default function MenuIndex({ categories, items, promotions }: Props) {
 
 /* ─────────────────────────── ITEMS TAB ─────────────────────────── */
 
-function ItemsTab({ categories, items }: { categories: Category[]; items: Item[] }) {
+function ItemsTab({ categories, items, canManage }: { categories: Category[]; items: Item[]; canManage: boolean }) {
     const [editItem, setEditItem] = useState<Item | null>(null);
     const [search, setSearch] = useState('');
     const [filterCat, setFilterCat] = useState('all');
@@ -101,17 +103,19 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
     }
 
     return (
-        <div className="grid gap-4 xl:grid-cols-[400px_1fr] xl:gap-6">
+        <div className={`grid gap-4 xl:gap-6 ${canManage ? 'xl:grid-cols-[400px_1fr]' : ''}`}>
             {/* Form */}
-            <div ref={formRef} className="rounded-xl border bg-card">
-                <div className="border-b px-4 py-3 sm:px-5 sm:py-4">
-                    <h2 className="font-semibold">{editItem ? 'Edit Item' : 'Tambah Item Baru'}</h2>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{editItem ? `Mengedit: ${editItem.name}` : 'Isi detail menu item baru'}</p>
+            {canManage && (
+                <div ref={formRef} className="rounded-xl border bg-card">
+                    <div className="border-b px-4 py-3 sm:px-5 sm:py-4">
+                        <h2 className="font-semibold">{editItem ? 'Edit Item' : 'Tambah Item Baru'}</h2>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{editItem ? `Mengedit: ${editItem.name}` : 'Isi detail menu item baru'}</p>
+                    </div>
+                    <div className="p-4 sm:p-5">
+                        <ItemForm categories={categories} editItem={editItem} onCancelEdit={() => setEditItem(null)} />
+                    </div>
                 </div>
-                <div className="p-4 sm:p-5">
-                    <ItemForm categories={categories} editItem={editItem} onCancelEdit={() => setEditItem(null)} />
-                </div>
-            </div>
+            )}
 
             {/* List */}
             <div className="flex flex-col gap-4">
@@ -182,39 +186,41 @@ function ItemsTab({ categories, items }: { categories: Category[]; items: Item[]
                                             )}
                                         </div>
 
-                                        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:flex">
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="outline"
-                                                className="h-9 flex-1 text-xs"
-                                                onClick={() => startEdit(item)}
-                                            >
-                                                <Edit2 className="size-3" /> Edit
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant={item.is_available ? 'outline' : 'default'}
-                                                className="h-9 flex-1 text-xs"
-                                                onClick={() => router.patch(`/menu/items/${item.id}/availability`, { is_available: !item.is_available }, { preserveScroll: true })}
-                                            >
-                                                {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                variant="ghost"
-                                                className="col-span-2 h-9 shrink-0 text-muted-foreground hover:text-destructive sm:col-span-1 sm:w-9"
-                                                onClick={() => {
-                                                    if (confirm(`Hapus "${item.name}"?`)) {
-                                                        router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
-                                                    }
-                                                }}
-                                            >
-                                                <Trash2 className="size-3.5" />
-                                            </Button>
-                                        </div>
+                                        {canManage && (
+                                            <div className="mt-3 grid grid-cols-2 gap-1.5 sm:flex">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-9 flex-1 text-xs"
+                                                    onClick={() => startEdit(item)}
+                                                >
+                                                    <Edit2 className="size-3" /> Edit
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant={item.is_available ? 'outline' : 'default'}
+                                                    className="h-9 flex-1 text-xs"
+                                                    onClick={() => router.patch(`/menu/items/${item.id}/availability`, { is_available: !item.is_available }, { preserveScroll: true })}
+                                                >
+                                                    {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="col-span-2 h-9 shrink-0 text-muted-foreground hover:text-destructive sm:col-span-1 sm:w-9"
+                                                    onClick={() => {
+                                                        if (confirm(`Hapus "${item.name}"?`)) {
+                                                            router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
+                                                        }
+                                                    }}
+                                                >
+                                                    <Trash2 className="size-3.5" />
+                                                </Button>
+                                            </div>
+                                        )}
                                         </div>
                                     </div>
                                 </div>
@@ -271,10 +277,14 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
     function submit(e: FormEvent) {
         e.preventDefault();
         const opts = { preserveScroll: true, forceFormData: true };
-        form.transform((data) => ({ ...data, category_id: Number(data.category_id) }));
+        form.transform((data) => ({
+            ...data,
+            category_id: Number(data.category_id),
+            ...(editItem ? { _method: 'PUT' } : {}),
+        }));
 
         if (editItem) {
-            form.post(`/menu/items/${editItem.id}?_method=PUT`, { ...opts, onSuccess: onCancelEdit });
+            form.post(`/menu/items/${editItem.id}`, { ...opts, onSuccess: onCancelEdit });
         } else {
             form.post('/menu/items', { ...opts, onSuccess: () => form.reset() });
         }
@@ -383,21 +393,23 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
 
 /* ─────────────────────────── CATEGORIES TAB ─────────────────────────── */
 
-function CategoriesTab({ categories }: { categories: Category[] }) {
+function CategoriesTab({ categories, canManage }: { categories: Category[]; canManage: boolean }) {
     const [editCat, setEditCat] = useState<Category | null>(null);
 
     return (
-        <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+        <div className={`grid gap-6 ${canManage ? 'xl:grid-cols-[380px_1fr]' : ''}`}>
             {/* Form */}
-            <div className="rounded-xl border bg-card">
-                <div className="border-b px-5 py-4">
-                    <h2 className="font-semibold">{editCat ? 'Edit Kategori' : 'Tambah Kategori Baru'}</h2>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{editCat ? `Mengedit: ${editCat.name}` : 'Buat kategori untuk mengelompokkan menu'}</p>
+            {canManage && (
+                <div className="rounded-xl border bg-card">
+                    <div className="border-b px-5 py-4">
+                        <h2 className="font-semibold">{editCat ? 'Edit Kategori' : 'Tambah Kategori Baru'}</h2>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{editCat ? `Mengedit: ${editCat.name}` : 'Buat kategori untuk mengelompokkan menu'}</p>
+                    </div>
+                    <div className="p-5">
+                        <CategoryForm editCat={editCat} onCancelEdit={() => setEditCat(null)} />
+                    </div>
                 </div>
-                <div className="p-5">
-                    <CategoryForm editCat={editCat} onCancelEdit={() => setEditCat(null)} />
-                </div>
-            </div>
+            )}
 
             {/* List */}
             <div className="space-y-3">
@@ -420,24 +432,26 @@ function CategoriesTab({ categories }: { categories: Category[] }) {
                                 <p className="text-sm text-muted-foreground">{cat.active_items_count} item aktif · urutan {cat.sort_order}</p>
                                 {cat.description && <p className="mt-0.5 truncate text-xs text-muted-foreground">{cat.description}</p>}
                             </div>
-                            <div className="flex shrink-0 gap-1.5">
-                                <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setEditCat(cat)}>
-                                    <Edit2 className="size-3.5" /> Edit
-                                </Button>
-                                <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                    onClick={() => {
-                                        if (confirm(`Hapus kategori "${cat.name}"? Item di dalamnya perlu dipindah dulu.`)) {
-                                            router.delete(`/menu/categories/${cat.id}`, { preserveScroll: true });
-                                        }
-                                    }}
-                                >
-                                    <Trash2 className="size-3.5" />
-                                </Button>
-                            </div>
+                            {canManage && (
+                                <div className="flex shrink-0 gap-1.5">
+                                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setEditCat(cat)}>
+                                        <Edit2 className="size-3.5" /> Edit
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        onClick={() => {
+                                            if (confirm(`Hapus kategori "${cat.name}"? Item di dalamnya perlu dipindah dulu.`)) {
+                                                router.delete(`/menu/categories/${cat.id}`, { preserveScroll: true });
+                                            }
+                                        }}
+                                    >
+                                        <Trash2 className="size-3.5" />
+                                    </Button>
+                                </div>
+                            )}
                         </div>
                     ))
                 )}
@@ -514,7 +528,7 @@ function CategoryForm({ editCat, onCancelEdit }: { editCat: Category | null; onC
 
 /* ─────────────────────────── PROMOTIONS TAB ─────────────────────────── */
 
-function PromotionsTab({ categories, items, promotions }: { categories: Category[]; items: Item[]; promotions: Promotion[] }) {
+function PromotionsTab({ categories, items, promotions, canManage }: { categories: Category[]; items: Item[]; promotions: Promotion[]; canManage: boolean }) {
     const form = useForm({
         name: '',
         type: 'percentage',
@@ -540,14 +554,15 @@ function PromotionsTab({ categories, items, promotions }: { categories: Category
     }
 
     return (
-        <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
+        <div className={`grid gap-6 ${canManage ? 'xl:grid-cols-[380px_1fr]' : ''}`}>
             {/* Form */}
-            <div className="rounded-xl border bg-card">
-                <div className="border-b px-5 py-4">
-                    <h2 className="font-semibold">Tambah Promo</h2>
-                    <p className="mt-0.5 text-xs text-muted-foreground">Buat diskon atau promo baru</p>
-                </div>
-                <form onSubmit={submit} className="space-y-4 p-5">
+            {canManage && (
+                <div className="rounded-xl border bg-card">
+                    <div className="border-b px-5 py-4">
+                        <h2 className="font-semibold">Tambah Promo</h2>
+                        <p className="mt-0.5 text-xs text-muted-foreground">Buat diskon atau promo baru</p>
+                    </div>
+                    <form onSubmit={submit} className="space-y-4 p-5">
                     <div className="space-y-1.5">
                         <Label>Nama Promo <span className="text-destructive">*</span></Label>
                         <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="cth: Diskon Hari Jadi 10%" />
@@ -622,8 +637,9 @@ function PromotionsTab({ categories, items, promotions }: { categories: Category
                     <Button type="submit" disabled={form.processing} className="w-full">
                         <Plus className="size-4" /> Tambah Promo
                     </Button>
-                </form>
-            </div>
+                    </form>
+                </div>
+            )}
 
             {/* List */}
             <div className="space-y-3">
@@ -664,19 +680,21 @@ function PromotionsTab({ categories, items, promotions }: { categories: Category
                                             </p>
                                         )}
                                     </div>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                                        onClick={() => {
-                                            if (confirm(`Hapus promo "${promo.name}"?`)) {
-                                                router.delete(`/menu/promotions/${promo.id}`, { preserveScroll: true });
-                                            }
-                                        }}
-                                    >
-                                        <Trash2 className="size-3.5" />
-                                    </Button>
+                                    {canManage && (
+                                        <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="ghost"
+                                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                                            onClick={() => {
+                                                if (confirm(`Hapus promo "${promo.name}"?`)) {
+                                                    router.delete(`/menu/promotions/${promo.id}`, { preserveScroll: true });
+                                                }
+                                            }}
+                                        >
+                                            <Trash2 className="size-3.5" />
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         );

@@ -75,6 +75,41 @@ class MenuManagementTest extends TestCase
         $this->assertStringContainsString('/storage/', $item->image_url);
     }
 
+    public function test_manager_can_update_menu_item_with_method_spoofed_form_data(): void
+    {
+        $category = MenuCategory::query()->create(['name' => 'Makanan', 'sort_order' => 1, 'is_active' => true]);
+        $item = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Nasi Goreng',
+            'price' => 35000,
+            'print_to' => 'kitchen',
+            'is_available' => true,
+            'sort_order' => 1,
+        ]);
+
+        $this->actingAs($this->manager())
+            ->post("/menu/items/{$item->id}", [
+                '_method' => 'PUT',
+                'category_id' => $category->id,
+                'name' => 'Nasi Goreng Spesial',
+                'description' => 'Pedas sedang',
+                'price' => 38000,
+                'print_to' => 'kitchen_bar',
+                'is_available' => true,
+                'sort_order' => 2,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('menu_items', [
+            'id' => $item->id,
+            'name' => 'Nasi Goreng Spesial',
+            'price' => 38000,
+            'print_to' => 'kitchen_bar',
+            'sort_order' => 2,
+        ]);
+    }
+
     public function test_category_with_active_items_cannot_be_deleted(): void
     {
         $category = MenuCategory::query()->create(['name' => 'Makanan', 'sort_order' => 1, 'is_active' => true]);
