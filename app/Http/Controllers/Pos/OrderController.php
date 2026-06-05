@@ -38,6 +38,7 @@ class OrderController extends Controller
             ? Order::query()
                 ->with(['table.zone', 'items.menuItem:id,name,price,print_to'])
                 ->where('kasir_id', auth()->id())
+                ->whereIn('status', ['open', 'submitted'])
                 ->find(request('order'))
             : null;
 

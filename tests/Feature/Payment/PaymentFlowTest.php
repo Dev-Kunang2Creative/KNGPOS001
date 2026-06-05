@@ -688,6 +688,7 @@ class PaymentFlowTest extends TestCase
         ]);
 
         $order = $this->orderWithItemTotal($cashier, 20000);
+        $order->update(['status' => 'paid']);
 
         $transaction = Transaction::query()->create([
             'order_id' => $order->id,
@@ -710,6 +711,7 @@ class PaymentFlowTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->component('Pos/Index')
+                ->where('activeOrder', null)
                 ->where('xenditPayment', null));
     }
 
