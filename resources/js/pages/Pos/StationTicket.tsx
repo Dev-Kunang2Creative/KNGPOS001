@@ -107,12 +107,13 @@ function TicketBlock({ title, batch, order }: { title: string; batch: StationBat
 
 export default function StationTicket({ order, kitchenOrders, barOrders, xenditPayment, receiptId }: Props) {
     const { restaurant } = usePage<SharedData>().props;
+    const isWaitingForPayment = xenditPayment && xenditPayment.status.toLowerCase() !== 'paid';
 
     useEffect(() => {
-        if (receiptId) return;
+        if (isWaitingForPayment) return;
         const timer = window.setTimeout(() => window.print(), 450);
         return () => window.clearTimeout(timer);
-    }, [receiptId]);
+    }, [isWaitingForPayment]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -159,7 +160,7 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
                     )}
                 </div>
 
-                {xenditPayment && xenditPayment.status.toLowerCase() !== 'paid' && (
+                {isWaitingForPayment && (
                     <div className="no-print w-full max-w-sm space-y-4 rounded-xl border bg-white p-5 shadow-sm">
                         <div className="flex items-center gap-2 font-semibold">
                             <QrCode className="size-5 text-primary" />

@@ -36,7 +36,7 @@ type ReceiptTransaction = {
 
 type Props = {
     transaction: ReceiptTransaction;
-    stationTicketUrl?: string | null;
+    stationTicketUrls?: { type: string; label: string; url: string }[];
 };
 
 type ReceiptLine = ReceiptItem & {
@@ -50,7 +50,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const money = (value?: string | number | null) => Number(value ?? 0).toLocaleString('id-ID');
 
-export default function Receipt({ transaction, stationTicketUrl }: Props) {
+export default function Receipt({ transaction, stationTicketUrls = [] }: Props) {
     const { restaurant } = usePage<SharedData>().props;
     const order = transaction.order;
     const groupedItems = useMemo<ReceiptLine[]>(() => {
@@ -113,14 +113,16 @@ export default function Receipt({ transaction, stationTicketUrl }: Props) {
                         Cetak Struk
                     </Button>
                 </div>
-                {stationTicketUrl && (
-                    <div className="no-print w-full max-w-sm">
-                        <Button type="button" className="w-full" variant="outline" asChild>
-                            <Link href={stationTicketUrl}>
-                                <Printer className="size-4" />
-                                Lanjut Cetak Kitchen/Bar
-                            </Link>
-                        </Button>
+                {stationTicketUrls.length > 0 && (
+                    <div className="no-print grid w-full max-w-sm gap-2">
+                        {stationTicketUrls.map((ticket) => (
+                            <Button key={`${ticket.type}-${ticket.url}`} type="button" className="w-full" variant="outline" asChild>
+                                <Link href={ticket.url}>
+                                    <Printer className="size-4" />
+                                    {ticket.label}
+                                </Link>
+                            </Button>
+                        ))}
                     </div>
                 )}
 

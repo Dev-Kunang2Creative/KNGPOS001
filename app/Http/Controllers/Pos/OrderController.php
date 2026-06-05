@@ -115,7 +115,7 @@ class OrderController extends Controller
 
         return Inertia::render('Pos/Receipt', [
             'transaction' => $transaction,
-            'stationTicketUrl' => $this->stationTicketUrlForOrder($transaction->order),
+            'stationTicketUrls' => $this->stationTicketUrlsForOrder($transaction->order),
         ]);
     }
 
@@ -208,10 +208,13 @@ class OrderController extends Controller
             ->all();
     }
 
-    private function stationTicketUrlForOrder(?Order $order): ?string
+    /**
+     * @return list<array{type: string, label: string, url: string}>
+     */
+    private function stationTicketUrlsForOrder(?Order $order): array
     {
         if (! $order) {
-            return null;
+            return [];
         }
 
         $kitchenOrder = $order->kitchenOrders()
@@ -224,27 +227,44 @@ class OrderController extends Controller
             ->latest('sent_at')
             ->first(['id']);
 
-        if (! $kitchenOrder && ! $barOrder) {
-            return null;
-        }
-
-        $routeParams = ['order' => $order->id];
+        $transactionId = $order->transaction?->id;
+        $urls = [];
 
         if ($kitchenOrder) {
-            $routeParams['kitchen_order'] = $kitchenOrder->id;
+            $routeParams = [
+                'order' => $order->id,
+                'kitchen_order' => $kitchenOrder->id,
+            ];
+
+            if ($transactionId) {
+                $routeParams['receipt'] = $transactionId;
+            }
+
+            $urls[] = [
+                'type' => 'kitchen',
+                'label' => 'Cetak Kitchen',
+                'url' => route('pos.orders.station-ticket', $routeParams),
+            ];
         }
 
         if ($barOrder) {
-            $routeParams['bar_order'] = $barOrder->id;
+            $routeParams = [
+                'order' => $order->id,
+                'bar_order' => $barOrder->id,
+            ];
+
+            if ($transactionId) {
+                $routeParams['receipt'] = $transactionId;
+            }
+
+            $urls[] = [
+                'type' => 'bar',
+                'label' => 'Cetak Bar',
+                'url' => route('pos.orders.station-ticket', $routeParams),
+            ];
         }
 
-        $transactionId = $order->transaction?->id;
-
-        if ($transactionId) {
-            $routeParams['receipt'] = $transactionId;
-        }
-
-        return route('pos.orders.station-ticket', $routeParams);
+        return $urls;
     }
 
     public function store(StoreOrderRequest $request): RedirectResponse

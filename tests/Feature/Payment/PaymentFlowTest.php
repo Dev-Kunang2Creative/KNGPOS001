@@ -110,14 +110,21 @@ class PaymentFlowTest extends TestCase
             'price' => 25000,
             'print_to' => 'kitchen',
         ]);
+        $barItem = MenuItem::query()->create([
+            'category_id' => $category->id,
+            'name' => 'Es Teh',
+            'price' => 5000,
+            'print_to' => 'bar',
+        ]);
 
         $response = $this->actingAs($cashier)
             ->post('/pos/orders/close-bill', [
                 'table_id' => $table->id,
                 'bill_mode' => 'close_bill',
-                'amount_paid' => 30000,
+                'amount_paid' => 35000,
                 'items' => [
                     ['menu_item_id' => $menuItem->id, 'quantity' => 1],
+                    ['menu_item_id' => $barItem->id, 'quantity' => 1],
                 ],
             ]);
 
@@ -131,10 +138,15 @@ class PaymentFlowTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Pos/Receipt')
                 ->where('transaction.id', $transaction->id)
-                ->where('stationTicketUrl', fn (?string $url) => $url !== null && str_contains($url, 'station-ticket')));
+                ->has('stationTicketUrls', 2)
+                ->where('stationTicketUrls.0.type', 'kitchen')
+                ->where('stationTicketUrls.1.type', 'bar')
+                ->where('stationTicketUrls.0.url', fn (string $url) => str_contains($url, 'kitchen_order=') && ! str_contains($url, 'bar_order='))
+                ->where('stationTicketUrls.1.url', fn (string $url) => str_contains($url, 'bar_order=') && ! str_contains($url, 'kitchen_order=')));
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid', 'change_amount' => 5000]);
         $this->assertDatabaseHas('kitchen_orders', ['order_id' => $order->id, 'kitchen_station_id' => $kitchen->id]);
+        $this->assertDatabaseHas('bar_orders', ['order_id' => $order->id, 'bar_station_id' => $bar->id]);
         $this->assertDatabaseHas('tables', ['id' => $table->id, 'status' => 'occupied']);
     }
 
