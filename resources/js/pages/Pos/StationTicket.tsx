@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ArrowLeft, CreditCard, Printer, QrCode, ReceiptText } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 
 type TicketItem = {
@@ -108,12 +108,45 @@ function TicketBlock({ title, batch, order }: { title: string; batch: StationBat
 export default function StationTicket({ order, kitchenOrders, barOrders, xenditPayment, receiptId }: Props) {
     const { restaurant } = usePage<SharedData>().props;
     const isWaitingForPayment = xenditPayment && xenditPayment.status.toLowerCase() !== 'paid';
+    const hasAdvancedPrintQueue = useRef(false);
+    const printQueue = useMemo(() => {
+        if (typeof window === 'undefined') {
+            return { nextStationTicketUrl: null, returnUrl: null };
+        }
+
+        const params = new URLSearchParams(window.location.search);
+
+        return {
+            nextStationTicketUrl: params.get('next_station_ticket'),
+            returnUrl: params.get('return_url'),
+        };
+    }, []);
 
     useEffect(() => {
         if (isWaitingForPayment) return;
+        function advancePrintQueue() {
+            if (hasAdvancedPrintQueue.current) {
+                return;
+            }
+
+            hasAdvancedPrintQueue.current = true;
+            const nextUrl = printQueue.nextStationTicketUrl ?? printQueue.returnUrl;
+
+            if (nextUrl) {
+                window.setTimeout(() => {
+                    window.location.href = nextUrl;
+                }, 500);
+            }
+        }
+
+        window.addEventListener('afterprint', advancePrintQueue);
         const timer = window.setTimeout(() => window.print(), 450);
-        return () => window.clearTimeout(timer);
-    }, [isWaitingForPayment]);
+
+        return () => {
+            window.clearTimeout(timer);
+            window.removeEventListener('afterprint', advancePrintQueue);
+        };
+    }, [isWaitingForPayment, printQueue]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>

@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { ArrowLeft, Printer } from 'lucide-react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 type ReceiptItem = {
     id: number;
@@ -53,6 +53,7 @@ const money = (value?: string | number | null) => Number(value ?? 0).toLocaleStr
 export default function Receipt({ transaction, stationTicketUrls = [] }: Props) {
     const { restaurant } = usePage<SharedData>().props;
     const order = transaction.order;
+    const hasAdvancedPrintQueue = useRef(false);
     const groupedItems = useMemo<ReceiptLine[]>(() => {
         const groups = new Map<string, ReceiptLine>();
 
@@ -73,11 +74,40 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
         return Array.from(groups.values());
     }, [order.items]);
 
+    function stationTicketQueueUrl(index: number): string {
+        const ticket = stationTicketUrls[index];
+        const url = new URL(ticket.url, window.location.origin);
+        const nextIndex = index + 1;
+
+        if (stationTicketUrls[nextIndex]) {
+            url.searchParams.set('next_station_ticket', stationTicketQueueUrl(nextIndex));
+        } else {
+            url.searchParams.set('return_url', `/pos?order=${order.id}`);
+        }
+
+        return `${url.pathname}${url.search}`;
+    }
+
     useEffect(() => {
+        function advanceToStationTicket() {
+            if (hasAdvancedPrintQueue.current || stationTicketUrls.length === 0) {
+                return;
+            }
+
+            hasAdvancedPrintQueue.current = true;
+            window.setTimeout(() => {
+                window.location.href = stationTicketQueueUrl(0);
+            }, 500);
+        }
+
+        window.addEventListener('afterprint', advanceToStationTicket);
         const timer = window.setTimeout(() => window.print(), 450);
 
-        return () => window.clearTimeout(timer);
-    }, []);
+        return () => {
+            window.clearTimeout(timer);
+            window.removeEventListener('afterprint', advanceToStationTicket);
+        };
+    }, [stationTicketUrls]);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
