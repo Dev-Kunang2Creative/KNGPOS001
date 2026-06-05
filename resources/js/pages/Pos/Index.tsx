@@ -17,6 +17,7 @@ import {
     CreditCard,
     GlassWater,
     Minus,
+    Package,
     Plus,
     Printer,
     QrCode,
