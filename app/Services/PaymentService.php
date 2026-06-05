@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\SendSelfOrderReceiptEmail;
 use App\Models\Order;
+use App\Models\SystemSettings;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\XenditPayment;
@@ -56,9 +57,10 @@ class PaymentService
      */
     public function createQrisPayment(Order $order, ?User $cashier = null, ?string $notes = null): array
     {
-        $secretKey = config('services.xendit.secret_key');
+        $secretKey = SystemSettings::get('xendit_secret_key');
+        $enabled = filter_var(SystemSettings::get('xendit_enabled', false), FILTER_VALIDATE_BOOLEAN);
 
-        if (! $secretKey || ! config('services.xendit.enabled')) {
+        if (! $secretKey || ! $enabled) {
             throw new RuntimeException('Xendit belum dikonfigurasi.');
         }
 
@@ -150,10 +152,10 @@ class PaymentService
                     'status' => 'converted_to_order',
                     'approved_at' => now(),
                 ]);
+            }
 
-                if ($routingService && $order->items()->where('status', 'pending')->exists()) {
-                    $routingService->routeOrder($order->fresh(['table', 'items.menuItem']));
-                }
+            if ($routingService && $order->items()->where('status', 'pending')->exists()) {
+                $routingService->routeOrder($order->fresh(['table', 'items.menuItem']));
             }
 
             DB::afterCommit(fn () => SendSelfOrderReceiptEmail::dispatch($order->id));
@@ -169,9 +171,10 @@ class PaymentService
      */
     public function simulateQrisPayment(XenditPayment $payment): array
     {
-        $secretKey = config('services.xendit.secret_key');
+        $secretKey = SystemSettings::get('xendit_secret_key');
+        $enabled = filter_var(SystemSettings::get('xendit_enabled', false), FILTER_VALIDATE_BOOLEAN);
 
-        if (! $secretKey || ! config('services.xendit.enabled')) {
+        if (! $secretKey || ! $enabled) {
             throw new RuntimeException('Xendit belum dikonfigurasi.');
         }
 

@@ -36,6 +36,7 @@ type ReceiptTransaction = {
 
 type Props = {
     transaction: ReceiptTransaction;
+    stationTicketUrl?: string | null;
 };
 
 type ReceiptLine = ReceiptItem & {
@@ -49,7 +50,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const money = (value?: string | number | null) => Number(value ?? 0).toLocaleString('id-ID');
 
-export default function Receipt({ transaction }: Props) {
+export default function Receipt({ transaction, stationTicketUrl }: Props) {
     const { restaurant } = usePage<SharedData>().props;
     const order = transaction.order;
     const groupedItems = useMemo<ReceiptLine[]>(() => {
@@ -112,6 +113,16 @@ export default function Receipt({ transaction }: Props) {
                         Cetak Struk
                     </Button>
                 </div>
+                {stationTicketUrl && (
+                    <div className="no-print w-full max-w-sm">
+                        <Button type="button" className="w-full" variant="outline" asChild>
+                            <Link href={stationTicketUrl}>
+                                <Printer className="size-4" />
+                                Lanjut Cetak Kitchen/Bar
+                            </Link>
+                        </Button>
+                    </div>
+                )}
 
                 <section id="receipt-print-area" className="w-full max-w-sm rounded-md border bg-white p-5 font-mono text-sm text-black shadow-sm">
                     <div className="text-center">

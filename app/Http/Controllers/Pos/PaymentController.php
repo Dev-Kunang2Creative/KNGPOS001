@@ -7,6 +7,7 @@ use App\Http\Requests\Pos\CashPaymentRequest;
 use App\Http\Requests\Pos\XenditPaymentRequest;
 use App\Models\Order;
 use App\Models\XenditPayment;
+use App\Services\OrderRoutingService;
 use App\Services\PaymentService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -87,8 +88,12 @@ class PaymentController extends Controller
         ]);
     }
 
-    public function simulateXendit(Order $order, XenditPayment $payment, PaymentService $paymentService): RedirectResponse
-    {
+    public function simulateXendit(
+        Order $order,
+        XenditPayment $payment,
+        PaymentService $paymentService,
+        OrderRoutingService $routingService,
+    ): RedirectResponse {
         abort_unless($order->kasir_id === request()->user()->id && $payment->transaction?->order_id === $order->id, 403);
 
         $backToStation = request()->boolean('back_to_station');
@@ -101,7 +106,7 @@ class PaymentController extends Controller
                 'status' => $response['status'] ?? 'SUCCEEDED',
             ]);
 
-            $paidPayment = $paymentService->markXenditPaymentPaid($payment->external_id, $payload);
+            $paidPayment = $paymentService->markXenditPaymentPaid($payment->external_id, $payload, $routingService);
         } catch (RequestException $exception) {
             Log::error('Xendit QRIS Simulation Error', [
                 'response' => $exception->response->json(),

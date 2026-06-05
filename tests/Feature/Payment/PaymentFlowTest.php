@@ -10,6 +10,7 @@ use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\Shift;
+use App\Models\SystemSettings;
 use App\Models\Table;
 use App\Models\Transaction;
 use App\Models\User;
@@ -17,6 +18,7 @@ use App\Models\XenditPayment;
 use App\Models\Zone;
 use App\Models\ZoneStationAssignment;
 use App\Services\PaymentService;
+use App\Services\OrderRoutingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Spatie\Permission\Models\Permission;
@@ -123,10 +125,14 @@ class PaymentFlowTest extends TestCase
         $order = Order::query()->firstOrFail();
         $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
 
-        // Now redirects to station ticket first, then receipt
-        $response->assertRedirect();
-        $this->assertStringContainsString('station-ticket', $response->headers->get('Location'));
-        $this->assertStringContainsString('receipt='.$transaction->id, $response->headers->get('Location'));
+        $response->assertRedirect(route('pos.transactions.receipt', $transaction));
+        $this->actingAs($cashier)
+            ->get(route('pos.transactions.receipt', $transaction))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/Receipt')
+                ->where('transaction.id', $transaction->id)
+                ->where('stationTicketUrl', fn (?string $url) => $url !== null && str_contains($url, 'station-ticket')));
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid', 'change_amount' => 5000]);
         $this->assertDatabaseHas('kitchen_orders', ['order_id' => $order->id, 'kitchen_station_id' => $kitchen->id]);
@@ -146,10 +152,8 @@ class PaymentFlowTest extends TestCase
                 'qr_string' => '000201010212-close-bill',
             ]),
         ]);
-        config([
-            'services.xendit.secret_key' => 'xnd_development_test',
-            'services.xendit.enabled' => true,
-        ]);
+        SystemSettings::set('xendit_secret_key', 'xnd_development_test');
+        SystemSettings::set('xendit_enabled', '1');
 
         $cashier = User::factory()->create(['role' => 'kasir']);
         $cashier->givePermissionTo(['pos.create', 'pos.checkout', 'shift.view']);
@@ -191,10 +195,7 @@ class PaymentFlowTest extends TestCase
         $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
         $payment = XenditPayment::query()->where('transaction_id', $transaction->id)->firstOrFail();
 
-        // Now redirects to station ticket with QRIS payment param
-        $response->assertRedirect();
-        $this->assertStringContainsString('station-ticket', $response->headers->get('Location'));
-        $this->assertStringContainsString('payment='.$payment->id, $response->headers->get('Location'));
+        $response->assertRedirect(route('pos.xendit.show', $payment));
         $this->actingAs($cashier)
             ->get(route('pos.xendit.show', $payment))
             ->assertOk()
@@ -203,9 +204,17 @@ class PaymentFlowTest extends TestCase
                 ->where('payment.id', $payment->id)
                 ->where('transaction.id', $transaction->id)
                 ->where('order.id', $order->id));
-        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'submitted']);
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'open']);
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'payment_method' => 'qris', 'status' => 'pending']);
         $this->assertDatabaseHas('xendit_payments', ['id' => $payment->id, 'xendit_invoice_id' => 'qr_close_bill']);
+        $this->assertDatabaseMissing('kitchen_orders', ['order_id' => $order->id, 'kitchen_station_id' => $kitchen->id]);
+        app(PaymentService::class)->markXenditPaymentPaid($payment->external_id, [
+            'reference_id' => $payment->external_id,
+            'status' => 'SUCCEEDED',
+        ], app(OrderRoutingService::class));
+
+        $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid']);
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
         $this->assertDatabaseHas('kitchen_orders', ['order_id' => $order->id, 'kitchen_station_id' => $kitchen->id]);
         Http::assertSent(fn ($request) => $request->url() === 'https://api.xendit.co/qr_codes'
             && $request['amount'] === 25000
@@ -257,8 +266,7 @@ class PaymentFlowTest extends TestCase
         $order = Order::query()->firstOrFail();
         $transaction = Transaction::query()->where('order_id', $order->id)->firstOrFail();
 
-        $response->assertRedirect();
-        $this->assertStringContainsString('station-ticket', $response->headers->get('Location'));
+        $response->assertRedirect(route('pos.transactions.receipt', $transaction));
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
         $this->assertDatabaseHas('tables', ['id' => $table->id, 'status' => 'occupied']);
     }
@@ -431,7 +439,7 @@ class PaymentFlowTest extends TestCase
 
     public function test_xendit_callback_validates_token_logs_and_is_idempotent(): void
     {
-        config(['services.xendit.webhook_token' => 'verify-token']);
+        SystemSettings::set('xendit_webhook_token', 'verify-token');
         $cashier = User::factory()->create(['role' => 'kasir']);
         $order = $this->orderWithItemTotal($cashier, 20000);
         $transaction = Transaction::query()->create([
@@ -474,10 +482,8 @@ class PaymentFlowTest extends TestCase
                 'qr_string' => '000201010212...',
             ]),
         ]);
-        config([
-            'services.xendit.secret_key' => 'xnd_development_test',
-            'services.xendit.enabled' => true,
-        ]);
+        SystemSettings::set('xendit_secret_key', 'xnd_development_test');
+        SystemSettings::set('xendit_enabled', '1');
         $cashier = User::factory()->create(['role' => 'kasir']);
         $order = $this->orderWithItemTotal($cashier, 15000);
 
@@ -507,10 +513,8 @@ class PaymentFlowTest extends TestCase
             ]),
         ]);
 
-        config([
-            'services.xendit.secret_key' => 'xnd_development_test',
-            'services.xendit.enabled' => true,
-        ]);
+        SystemSettings::set('xendit_secret_key', 'xnd_development_test');
+        SystemSettings::set('xendit_enabled', '1');
 
         $cashier = User::factory()->create(['role' => 'kasir']);
         $cashier->givePermissionTo(['pos.checkout', 'shift.view']);
@@ -565,10 +569,8 @@ class PaymentFlowTest extends TestCase
 
         Http::fake();
 
-        config([
-            'services.xendit.secret_key' => 'xnd_production_test',
-            'services.xendit.enabled' => true,
-        ]);
+        SystemSettings::set('xendit_secret_key', 'xnd_production_test');
+        SystemSettings::set('xendit_enabled', '1');
 
         $cashier = User::factory()->create(['role' => 'kasir']);
         $cashier->givePermissionTo(['pos.checkout', 'shift.view']);

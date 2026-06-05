@@ -115,6 +115,7 @@ class OrderController extends Controller
 
         return Inertia::render('Pos/Receipt', [
             'transaction' => $transaction,
+            'stationTicketUrl' => $this->stationTicketUrlForOrder($transaction->order),
         ]);
     }
 
@@ -207,6 +208,45 @@ class OrderController extends Controller
             ->all();
     }
 
+    private function stationTicketUrlForOrder(?Order $order): ?string
+    {
+        if (! $order) {
+            return null;
+        }
+
+        $kitchenOrder = $order->kitchenOrders()
+            ->whereNull('printed_at')
+            ->latest('sent_at')
+            ->first(['id']);
+
+        $barOrder = $order->barOrders()
+            ->whereNull('printed_at')
+            ->latest('sent_at')
+            ->first(['id']);
+
+        if (! $kitchenOrder && ! $barOrder) {
+            return null;
+        }
+
+        $routeParams = ['order' => $order->id];
+
+        if ($kitchenOrder) {
+            $routeParams['kitchen_order'] = $kitchenOrder->id;
+        }
+
+        if ($barOrder) {
+            $routeParams['bar_order'] = $barOrder->id;
+        }
+
+        $transactionId = $order->transaction?->id;
+
+        if ($transactionId) {
+            $routeParams['receipt'] = $transactionId;
+        }
+
+        return route('pos.orders.station-ticket', $routeParams);
+    }
+
     public function store(StoreOrderRequest $request): RedirectResponse
     {
         try {
@@ -230,7 +270,7 @@ class OrderController extends Controller
         try {
             $validated = $request->validated();
             $order = $this->createOrder($request, $validated);
-            $routingResult = $routingService->routeOrder($order);
+            $routingService->ensureZoneAssigned($order);
             $paymentMethod = $validated['payment_method'] ?? 'cash';
 
             if ($paymentMethod === 'qris') {
@@ -238,10 +278,9 @@ class OrderController extends Controller
 
                 $this->linkSelfOrderIfProvided($validated['self_order_id'] ?? null, $order->id);
 
-                return $this->redirectToStationTicket(
-                    $order->fresh(),
-                    array_merge($routingResult, ['payment' => $result['payment']]),
-                );
+                return redirect()
+                    ->route('pos.xendit.show', $result['payment'])
+                    ->with('success', 'QRIS Xendit berhasil dibuat. Selesaikan pembayaran sebelum cetak struk dan Kitchen/Bar.');
             }
 
             $transaction = $paymentService->createCashPayment(
@@ -250,6 +289,7 @@ class OrderController extends Controller
                 amountPaid: (float) ($validated['amount_paid'] ?? 0),
                 notes: $validated['notes'] ?? null,
             );
+            $routingService->routeOrder($order->fresh(['table', 'items.menuItem']));
 
             $this->linkSelfOrderIfProvided($validated['self_order_id'] ?? null, $order->id);
         } catch (RequestException $exception) {
@@ -264,7 +304,9 @@ class OrderController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
-        return $this->redirectToStationTicket($order->fresh(), $routingResult, $transaction->id);
+        return redirect()
+            ->route('pos.transactions.receipt', $transaction)
+            ->with('success', 'Pembayaran berhasil. Cetak struk customer terlebih dahulu.');
     }
 
     public function submit(SubmitOrderRequest $request, Order $order, OrderRoutingService $routingService): RedirectResponse

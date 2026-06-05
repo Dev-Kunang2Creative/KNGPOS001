@@ -11,6 +11,21 @@ use Illuminate\Support\Facades\DB;
 
 class OrderRoutingService
 {
+    public function ensureZoneAssigned(Order $order): ZoneStationAssignment
+    {
+        $order->loadMissing('table');
+
+        $assignment = ZoneStationAssignment::query()
+            ->where('zone_id', $order->table->zone_id)
+            ->first();
+
+        if (! $assignment) {
+            throw new ZoneStationAssignmentMissingException;
+        }
+
+        return $assignment;
+    }
+
     /**
      * @return array{kitchen_order: KitchenOrder|null, bar_order: BarOrder|null}
      */
@@ -18,14 +33,7 @@ class OrderRoutingService
     {
         return DB::transaction(function () use ($order): array {
             $order->loadMissing('table', 'items.menuItem');
-
-            $assignment = ZoneStationAssignment::query()
-                ->where('zone_id', $order->table->zone_id)
-                ->first();
-
-            if (! $assignment) {
-                throw new ZoneStationAssignmentMissingException;
-            }
+            $assignment = $this->ensureZoneAssigned($order);
 
             $pendingItems = $order->items->where('status', 'pending');
             $kitchenItems = $pendingItems->filter(fn ($item) => in_array($item->menuItem->print_to, ['kitchen', 'kitchen_bar'], true));
