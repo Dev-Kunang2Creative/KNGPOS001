@@ -31,15 +31,15 @@ Route::post('s/{qr_token}/status/{selfOrder}/payments/{payment}/simulate', [Self
 Route::middleware(['auth'])->group(function () {
     Route::get('restaurants/select', [RestaurantController::class, 'select'])->name('restaurants.select');
     Route::post('restaurants/{restaurant}/switch', [RestaurantController::class, 'switchTo'])->name('restaurants.switch');
+    Route::get('restaurants/create', [RestaurantController::class, 'create'])->name('restaurants.create');
+    Route::post('restaurants', [RestaurantController::class, 'store'])->name('restaurants.store');
     Route::delete('restaurants/{restaurant}', [RestaurantController::class, 'destroy'])->name('restaurants.destroy');
 });
 
 // ─── All Restaurant-Scoped Routes ────────────────────────────
 Route::middleware(['auth', 'restaurant'])->group(function () {
 
-    // Restaurant CRUD
-    Route::get('restaurants/create', [RestaurantController::class, 'create'])->name('restaurants.create');
-    Route::post('restaurants', [RestaurantController::class, 'store'])->name('restaurants.store');
+    // Restaurant Settings
     Route::get('restaurant/edit', [RestaurantController::class, 'edit'])->name('restaurants.edit');
     Route::put('restaurant', [RestaurantController::class, 'update'])->name('restaurants.update');
 
