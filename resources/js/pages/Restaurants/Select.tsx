@@ -1,11 +1,14 @@
-import { Head, router } from '@inertiajs/react';
-import { Building2, ChevronRight, Plus } from 'lucide-react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { type SharedData } from '@/types';
+import { Building2, ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 
 interface Restaurant {
     id: number;
     name: string;
     slug: string;
     logo_path: string | null;
+    owner_id: number | null;
 }
 
 interface Props {
@@ -13,12 +16,39 @@ interface Props {
 }
 
 export default function Select({ restaurants }: Props) {
+    const { auth, flash } = usePage<SharedData>().props;
+    const isSuperAdmin = (auth as any).isSuperAdmin ?? false;
+    const [deleting, setDeleting] = useState<number | null>(null);
+
     const handleSelect = (restaurantId: number) => {
         router.post(route('restaurants.switch', { restaurant: restaurantId }));
     };
 
     const handleCreate = () => {
         router.visit(route('restaurants.create'));
+    };
+
+    const handleEdit = (restaurantId: number, e: React.MouseEvent) => {
+        e.stopPropagation();
+        // Switch to the restaurant first, then redirect to edit
+        router.post(route('restaurants.switch', { restaurant: restaurantId }), {}, {
+            onSuccess: () => router.visit(route('restaurants.edit')),
+        });
+    };
+
+    const handleDelete = (restaurant: Restaurant, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm(`Hapus restoran "${restaurant.name}"? Tindakan ini akan menonaktifkan restoran.`)) {
+            return;
+        }
+        setDeleting(restaurant.id);
+        router.delete(route('restaurants.destroy', { restaurant: restaurant.id }), {
+            onFinish: () => setDeleting(null),
+        });
+    };
+
+    const canManage = (restaurant: Restaurant): boolean => {
+        return isSuperAdmin || restaurant.owner_id === (auth.user as any)?.id;
     };
 
     return (
@@ -37,27 +67,65 @@ export default function Select({ restaurants }: Props) {
                         </p>
                     </div>
 
+                    {/* Flash Messages */}
+                    {flash?.success && (
+                        <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400">
+                            {flash.success}
+                        </div>
+                    )}
+                    {flash?.error && (
+                        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                            {flash.error}
+                        </div>
+                    )}
+
                     {/* Restaurant List */}
                     <div className="space-y-3">
                         {restaurants.map((restaurant) => (
-                            <button
+                            <div
                                 key={restaurant.id}
-                                onClick={() => handleSelect(restaurant.id)}
-                                className="group flex w-full items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-4 text-left backdrop-blur-sm transition-all duration-200 hover:border-indigo-500/50 hover:bg-white/10 hover:shadow-lg hover:shadow-indigo-500/10"
+                                className="group relative flex w-full items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-4 text-left backdrop-blur-sm transition-all duration-200 hover:border-indigo-500/50 hover:bg-white/10 hover:shadow-lg hover:shadow-indigo-500/10"
                             >
-                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-lg font-bold text-indigo-400">
-                                    {restaurant.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-semibold text-white">
-                                        {restaurant.name}
-                                    </p>
-                                    <p className="truncate text-xs text-gray-500">
-                                        {restaurant.slug}
-                                    </p>
-                                </div>
-                                <ChevronRight className="h-5 w-5 shrink-0 text-gray-600 transition-transform group-hover:translate-x-1 group-hover:text-indigo-400" />
-                            </button>
+                                {/* Clickable area to select */}
+                                <button
+                                    onClick={() => handleSelect(restaurant.id)}
+                                    className="flex min-w-0 flex-1 items-center gap-4"
+                                >
+                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 text-lg font-bold text-indigo-400">
+                                        {restaurant.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold text-white">
+                                            {restaurant.name}
+                                        </p>
+                                        <p className="truncate text-xs text-gray-500">
+                                            {restaurant.slug}
+                                        </p>
+                                    </div>
+                                    <ChevronRight className="h-5 w-5 shrink-0 text-gray-600 transition-transform group-hover:translate-x-1 group-hover:text-indigo-400" />
+                                </button>
+
+                                {/* Action buttons */}
+                                {canManage(restaurant) && (
+                                    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                                        <button
+                                            onClick={(e) => handleEdit(restaurant.id, e)}
+                                            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-white/10 hover:text-indigo-400"
+                                            title="Edit"
+                                        >
+                                            <Pencil className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => handleDelete(restaurant, e)}
+                                            disabled={deleting === restaurant.id}
+                                            className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+                                            title="Hapus"
+                                        >
+                                            <Trash2 className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         ))}
 
                         {/* Create New Restaurant Button */}

@@ -33,6 +33,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('restaurants/{restaurant}/switch', [RestaurantController::class, 'switchTo'])->name('restaurants.switch');
     Route::get('restaurants/create', [RestaurantController::class, 'create'])->name('restaurants.create');
     Route::post('restaurants', [RestaurantController::class, 'store'])->name('restaurants.store');
+    Route::delete('restaurants/{restaurant}', [RestaurantController::class, 'destroy'])->name('restaurants.destroy');
 });
 
 // ─── All Restaurant-Scoped Routes ────────────────────────────

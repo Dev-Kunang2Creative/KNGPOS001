@@ -190,6 +190,32 @@ class RestaurantController extends Controller
     }
 
     /**
+     * Delete (deactivate) a restaurant.
+     * Only super_admin or the restaurant owner can do this.
+     */
+    public function destroy(Request $request, int $restaurant): RedirectResponse
+    {
+        $user = $request->user();
+        $resto = Restaurant::withoutGlobalScopes()->findOrFail($restaurant);
+
+        // Only super_admin or owner
+        if (! $user->isSuperAdmin() && $resto->owner_id !== $user->id) {
+            abort(403, 'Anda tidak memiliki izin untuk menghapus restoran ini.');
+        }
+
+        // Soft delete: set status to inactive
+        $resto->update(['status' => 'inactive']);
+
+        // If the deleted restaurant was the active one, clear session
+        if (session('active_restaurant_id') == $restaurant) {
+            session()->forget('active_restaurant_id');
+        }
+
+        return redirect()->route('restaurants.select')
+            ->with('success', "Restoran \"{$resto->name}\" berhasil dihapus.");
+    }
+
+    /**
      * Perform the actual switch and redirect.
      */
     private function performSwitch(int $restaurantId): RedirectResponse

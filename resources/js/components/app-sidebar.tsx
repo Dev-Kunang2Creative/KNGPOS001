@@ -46,6 +46,7 @@ export function AppSidebar() {
         { title: 'Audit Logs', url: '/audit-logs', icon: ScrollText, permission: 'audit.view' },
         { title: 'Tables', url: '/settings/tables', icon: Table2, permission: 'settings.view' },
         { title: 'Shifts', url: '/shifts', icon: Timer, permission: 'shift.view' },
+        { title: 'Restoran', url: '/restaurant/edit', icon: Building2, permission: 'settings.view' },
         { title: 'Settings', url: '/settings/system', icon: Settings, permission: 'settings.view' },
     ];
 
