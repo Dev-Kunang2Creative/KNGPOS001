@@ -4,9 +4,12 @@ namespace Database\Seeders;
 
 use App\Models\BarStation;
 use App\Models\KitchenStation;
+use App\Models\Restaurant;
+use App\Models\RestaurantUser;
 use App\Models\User;
 use App\Models\WaiterZoneAssignment;
 use App\Models\Zone;
+use App\Services\RestaurantContext;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Permission;
@@ -59,6 +62,12 @@ class StaffSeeder extends Seeder
                 ->syncPermissions($rolePermissions);
         }
 
+        // Get the default restaurant
+        $restaurant = Restaurant::withoutGlobalScopes()->where('slug', 'karcisqu-pos')->first();
+        if ($restaurant) {
+            app(RestaurantContext::class)->set($restaurant->id);
+        }
+
         $kitchen1 = KitchenStation::query()->where('name', 'Kitchen 1')->first();
         $kitchen2 = KitchenStation::query()->where('name', 'Kitchen 2')->first();
         $bar1 = BarStation::query()->where('name', 'Bar 1')->first();
@@ -81,12 +90,11 @@ class StaffSeeder extends Seeder
         foreach ($staff as $person) {
             [$name, $email, $role, $kitchenStationId, $barStationId] = array_pad($person, 5, null);
 
-            $user = User::query()->updateOrCreate(
+            $user = User::withoutGlobalScopes()->updateOrCreate(
                 ['email' => $email],
                 [
                     'name' => $name,
                     'password' => Hash::make('password'),
-                    'role' => $role,
                     'kitchen_station_id' => $kitchenStationId,
                     'bar_station_id' => $barStationId,
                     'is_active' => true,
@@ -96,6 +104,19 @@ class StaffSeeder extends Seeder
             );
 
             $user->syncRoles([$role]);
+
+            // Assign to default restaurant (except super_admin)
+            if ($restaurant && $role !== 'super_admin') {
+                RestaurantUser::query()->updateOrCreate(
+                    ['restaurant_id' => $restaurant->id, 'user_id' => $user->id],
+                    ['role' => $role, 'is_primary' => true],
+                );
+            }
+
+            // Set owner for the restaurant
+            if ($role === 'manager' && $restaurant && ! $restaurant->owner_id) {
+                $restaurant->update(['owner_id' => $user->id]);
+            }
         }
 
         $waiterZones = [
@@ -105,7 +126,7 @@ class StaffSeeder extends Seeder
         ];
 
         foreach ($waiterZones as $email => $zoneName) {
-            $user = User::query()->where('email', $email)->first();
+            $user = User::withoutGlobalScopes()->where('email', $email)->first();
             $zone = Zone::query()->where('name', $zoneName)->first();
 
             if ($user && $zone) {

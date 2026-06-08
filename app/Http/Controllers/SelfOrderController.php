@@ -9,6 +9,7 @@ use App\Models\TableQrcode;
 use App\Models\XenditPayment;
 use App\Services\OrderRoutingService;
 use App\Services\PaymentService;
+use App\Services\RestaurantContext;
 use App\Services\SelfOrderService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -22,6 +23,7 @@ class SelfOrderController extends Controller
     public function show(string $qrToken): Response
     {
         $qrCode = $this->activeQrCode($qrToken);
+        $this->setRestaurantFromQr($qrCode);
 
         return Inertia::render('SelfOrder/Show', [
             'qrToken' => $qrToken,
@@ -32,7 +34,8 @@ class SelfOrderController extends Controller
 
     public function menu(string $qrToken): array
     {
-        $this->activeQrCode($qrToken);
+        $qrCode = $this->activeQrCode($qrToken);
+        $this->setRestaurantFromQr($qrCode);
 
         return ['categories' => $this->menuCategories()];
     }
@@ -40,6 +43,8 @@ class SelfOrderController extends Controller
     public function checkout(CheckoutRequest $request, string $qrToken, SelfOrderService $selfOrderService, PaymentService $paymentService): RedirectResponse
     {
         $qrCode = $this->activeQrCode($qrToken);
+        $this->setRestaurantFromQr($qrCode);
+
         $validated = $request->validated();
 
         try {
@@ -70,6 +75,8 @@ class SelfOrderController extends Controller
     public function status(string $qrToken, SelfOrder $selfOrder): Response
     {
         $qrCode = $this->activeQrCode($qrToken);
+        $this->setRestaurantFromQr($qrCode);
+
         abort_unless($selfOrder->table_qrcode_id === $qrCode->id, 404);
 
         return Inertia::render('SelfOrder/Status', [
@@ -92,6 +99,8 @@ class SelfOrderController extends Controller
         OrderRoutingService $routingService,
     ): RedirectResponse {
         $qrCode = $this->activeQrCode($qrToken);
+        $this->setRestaurantFromQr($qrCode);
+
         abort_unless($selfOrder->table_qrcode_id === $qrCode->id, 404);
         abort_unless($selfOrder->order_id && $payment->transaction?->order_id === $selfOrder->order_id, 404);
 
@@ -121,9 +130,22 @@ class SelfOrderController extends Controller
             ->with('success', 'Simulasi pembayaran QRIS berhasil.');
     }
 
+    /**
+     * Set the restaurant context from the QR code's restaurant_id.
+     * Self-order routes don't go through CheckRestaurantAccess middleware,
+     * so we must set the context manually from the QR code.
+     */
+    private function setRestaurantFromQr(TableQrcode $qrCode): void
+    {
+        if ($qrCode->restaurant_id) {
+            app(RestaurantContext::class)->set($qrCode->restaurant_id);
+        }
+    }
+
     private function activeQrCode(string $qrToken): TableQrcode
     {
         return TableQrcode::query()
+            ->withoutGlobalScope('restaurant')
             ->with('table')
             ->where('qr_token', $qrToken)
             ->where('is_active', true)
@@ -136,9 +158,9 @@ class SelfOrderController extends Controller
             ->with(['activeItems' => fn ($query) => $query
                 ->where('is_available', true)
                 ->orderBy('sort_order')
-                ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path'])])
+                ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id'])])
             ->where('is_active', true)
             ->orderBy('sort_order')
-            ->get(['id', 'name', 'description']);
+            ->get(['id', 'name', 'description', 'restaurant_id']);
     }
 }

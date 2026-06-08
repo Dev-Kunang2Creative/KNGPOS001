@@ -18,7 +18,8 @@ class ShiftController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $canViewAllShifts = in_array($user->role, ['super_admin', 'manager'], true)
+        $activeRole = $user->roleInRestaurant(session('active_restaurant_id'));
+        $canViewAllShifts = in_array($activeRole, ['super_admin', 'manager'], true)
             || $user->can('reports.view');
 
         return Inertia::render('Shifts/Index', [

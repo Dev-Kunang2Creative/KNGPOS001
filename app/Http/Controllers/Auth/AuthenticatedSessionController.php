@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\RestaurantUser;
+use App\Models\Shift;
+use App\Services\RestaurantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
-use App\Models\Shift;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,7 +38,38 @@ class AuthenticatedSessionController extends Controller
 
         $request->user()->forceFill(['last_login_at' => now()])->save();
 
-        return redirect()->intended($this->redirectPathForRole($request->user()->role));
+        $user = $request->user();
+
+        // Super admin → go to restaurant selection or dashboard
+        if ($user->isSuperAdmin()) {
+            return redirect()->intended(route('restaurants.select', absolute: false));
+        }
+
+        // Get user's restaurants
+        $restaurantUsers = RestaurantUser::query()
+            ->where('user_id', $user->id)
+            ->get();
+
+        if ($restaurantUsers->isEmpty()) {
+            // User has no restaurant assignments → show error
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')
+                ->with('status', 'Akun Anda belum ditugaskan ke restoran manapun.');
+        }
+
+        if ($restaurantUsers->count() === 1) {
+            // Auto-select the only restaurant
+            $ru = $restaurantUsers->first();
+            app(RestaurantContext::class)->persist($ru->restaurant_id);
+
+            return redirect()->intended($this->redirectPathForRole($ru->role));
+        }
+
+        // Multiple restaurants → go to restaurant selector
+        return redirect()->intended(route('restaurants.select', absolute: false));
     }
 
     /**
@@ -44,6 +77,8 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        app(RestaurantContext::class)->clear();
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
@@ -56,7 +91,10 @@ class AuthenticatedSessionController extends Controller
     {
         return match ($role) {
             'super_admin', 'manager' => route('dashboard', absolute: false),
-            'kasir' => Shift::query()->where('kasir_id', auth()->id())->where('status', 'open')->exists()
+            'kasir' => Shift::query()
+                ->where('kasir_id', auth()->id())
+                ->where('status', 'open')
+                ->exists()
                 ? route('pos.index', absolute: false)
                 : route('shifts.index', absolute: false),
             'waiter' => route('waiter.orders.index', absolute: false),

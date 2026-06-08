@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\BarStation;
 use App\Models\KitchenStation;
 use App\Models\Printer;
+use App\Models\Restaurant;
 use App\Models\SystemSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,17 +18,22 @@ class SystemSettingsController extends Controller
 {
     public function index(): Response
     {
+        $restaurantId = session('active_restaurant_id');
+        $restaurant = Restaurant::withoutGlobalScopes()->find($restaurantId);
+
         return Inertia::render('Settings/System', [
             'settings' => [
-                'restaurant_name' => SystemSettings::get('restaurant_name'),
-                'restaurant_address' => SystemSettings::get('restaurant_address'),
-                'restaurant_phone' => SystemSettings::get('restaurant_phone'),
-                'receipt_header' => SystemSettings::get('receipt_header'),
-                'receipt_footer' => SystemSettings::get('receipt_footer'),
-                'tax_percentage' => SystemSettings::get('tax_percentage', '0'),
-                'tax_is_active' => SystemSettings::get('tax_is_active', '0'),
-                'service_charge_percentage' => SystemSettings::get('service_charge_percentage', '0'),
-                'service_charge_is_active' => SystemSettings::get('service_charge_is_active', '0'),
+                // Restaurant-level settings now come from the restaurant model
+                'restaurant_name' => $restaurant?->name,
+                'restaurant_address' => $restaurant?->address,
+                'restaurant_phone' => $restaurant?->phone,
+                'receipt_header' => $restaurant?->receipt_header,
+                'receipt_footer' => $restaurant?->receipt_footer,
+                'tax_percentage' => $restaurant?->tax_percentage ?? '0',
+                'tax_is_active' => $restaurant?->tax_is_active ? '1' : '0',
+                'service_charge_percentage' => $restaurant?->service_charge_percentage ?? '0',
+                'service_charge_is_active' => $restaurant?->service_charge_is_active ? '1' : '0',
+                // Global settings (Xendit) - still from config
                 'xendit_enabled' => config('services.xendit.enabled') ? '1' : '0',
                 'xendit_active_methods' => json_encode(config('services.xendit.active_methods', ['qris'])),
                 'has_xendit_secret_key' => filled(config('services.xendit.secret_key')),
@@ -53,15 +59,36 @@ class SystemSettingsController extends Controller
             'service_charge_is_active' => ['required', 'boolean'],
         ]);
 
-        $oldValue = collect($validated)->keys()->mapWithKeys(fn ($key) => [$key => str_contains($key, 'key') || str_contains($key, 'token') ? '[redacted]' : SystemSettings::get($key)])->all();
+        $restaurantId = session('active_restaurant_id');
+        $restaurant = Restaurant::withoutGlobalScopes()->findOrFail($restaurantId);
 
-        foreach ($validated as $key => $value) {
-            SystemSettings::set($key, is_array($value) ? json_encode($value) : (string) $value);
-        }
+        $oldValue = [
+            'name' => $restaurant->name,
+            'address' => $restaurant->address,
+            'phone' => $restaurant->phone,
+            'receipt_header' => $restaurant->receipt_header,
+            'receipt_footer' => $restaurant->receipt_footer,
+            'tax_percentage' => $restaurant->tax_percentage,
+            'tax_is_active' => $restaurant->tax_is_active,
+            'service_charge_percentage' => $restaurant->service_charge_percentage,
+            'service_charge_is_active' => $restaurant->service_charge_is_active,
+        ];
 
-        $this->audit($request, 'settings.system.updated', SystemSettings::class, null, $oldValue, ['keys' => array_keys($validated)]);
+        $restaurant->update([
+            'name' => $validated['restaurant_name'] ?? $restaurant->name,
+            'address' => $validated['restaurant_address'],
+            'phone' => $validated['restaurant_phone'],
+            'receipt_header' => $validated['receipt_header'],
+            'receipt_footer' => $validated['receipt_footer'],
+            'tax_percentage' => $validated['tax_percentage'] ?? 0,
+            'tax_is_active' => $validated['tax_is_active'],
+            'service_charge_percentage' => $validated['service_charge_percentage'] ?? 0,
+            'service_charge_is_active' => $validated['service_charge_is_active'],
+        ]);
 
-        return back()->with('success', 'System settings berhasil diperbarui.');
+        $this->audit($request, 'settings.system.updated', Restaurant::class, $restaurant->id, $oldValue, $validated);
+
+        return back()->with('success', 'Pengaturan restoran berhasil diperbarui.');
     }
 
     public function storePrinter(Request $request): RedirectResponse
@@ -96,7 +123,7 @@ class SystemSettingsController extends Controller
     {
         AuditLog::query()->create([
             'user_id' => $request->user()->id,
-            'role' => $request->user()->role,
+            'role' => $request->user()->roleInRestaurant(session('active_restaurant_id')),
             'action' => $action,
             'resource_type' => $resourceType,
             'resource_id' => $resourceId,

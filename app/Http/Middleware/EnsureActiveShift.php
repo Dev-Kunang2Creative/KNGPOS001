@@ -13,7 +13,14 @@ class EnsureActiveShift
     {
         $user = $request->user();
 
-        if (! $user || $user->role !== 'kasir') {
+        if (! $user) {
+            return $next($request);
+        }
+
+        // Only enforce shift check for kasir role
+        $activeRole = $user->roleInRestaurant(session('active_restaurant_id'));
+
+        if ($activeRole !== 'kasir') {
             return $next($request);
         }
 

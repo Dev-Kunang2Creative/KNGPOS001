@@ -13,6 +13,7 @@ use App\Models\BarOrder;
 use App\Models\BarStation;
 use App\Models\KitchenOrder;
 use App\Models\KitchenStation;
+use App\Models\RestaurantUser;
 use App\Models\User;
 use App\Models\WaiterZoneAssignment;
 use App\Models\Zone;
@@ -42,7 +43,9 @@ class ZoneStationController extends Controller
                 ->orderBy('name')
                 ->get(),
             'waiters' => User::query()
-                ->where('role', 'waiter')
+                ->whereHas('restaurantUsers', fn ($q) => $q
+                    ->where('restaurant_id', session('active_restaurant_id'))
+                    ->where('role', 'waiter'))
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->get(['id', 'name', 'email']),
@@ -96,7 +99,9 @@ class ZoneStationController extends Controller
     public function assignWaiter(WaiterZoneAssignmentRequest $request, Zone $zone): RedirectResponse
     {
         $waiter = User::query()
-            ->where('role', 'waiter')
+            ->whereHas('restaurantUsers', fn ($q) => $q
+                ->where('restaurant_id', session('active_restaurant_id'))
+                ->where('role', 'waiter'))
             ->findOrFail($request->validated('user_id'));
 
         WaiterZoneAssignment::query()->updateOrCreate(
@@ -171,7 +176,7 @@ class ZoneStationController extends Controller
     {
         AuditLog::query()->create([
             'user_id' => $request->user()->id,
-            'role' => $request->user()->role,
+            'role' => $request->user()->roleInRestaurant(session('active_restaurant_id')),
             'action' => $action,
             'resource_type' => $resourceType,
             'resource_id' => $resourceId,

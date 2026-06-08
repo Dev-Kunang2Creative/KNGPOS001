@@ -1,7 +1,8 @@
 <?php
 
-use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\CheckRestaurantAccess;
 use App\Http\Middleware\EnsureActiveShift;
+use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active.shift' => EnsureActiveShift::class,
             'permission' => PermissionMiddleware::class,
             'role' => RoleMiddleware::class,
+            'restaurant' => CheckRestaurantAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BarStation;
 use App\Models\KitchenStation;
 use App\Models\Order;
+use App\Models\RestaurantUser;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -87,7 +88,12 @@ class ReportService
                 'cashier_id' => $cashierId,
                 'shift_id' => $shiftId,
             ],
-            'cashiers' => User::query()->where('role', 'kasir')->orderBy('name')->get(['id', 'name']),
+            'cashiers' => User::query()
+                ->whereHas('restaurantUsers', fn ($q) => $q
+                    ->where('restaurant_id', session('active_restaurant_id'))
+                    ->where('role', 'kasir'))
+                ->orderBy('name')
+                ->get(['id', 'name']),
         ];
     }
 }

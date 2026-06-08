@@ -238,7 +238,7 @@ class SelfOrderService
     {
         AuditLog::query()->create([
             'user_id' => $user->id,
-            'role' => $user->role,
+            'role' => $user->roleInRestaurant(session('active_restaurant_id')),
             'action' => $action,
             'resource_type' => SelfOrder::class,
             'resource_id' => $resourceId,
