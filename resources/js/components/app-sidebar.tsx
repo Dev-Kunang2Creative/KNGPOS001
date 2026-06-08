@@ -131,40 +131,50 @@ function RestaurantSwitcherInline({
                 <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:hidden">
                     {current.name}
                 </span>
-                {restaurants.length > 1 && (
-                    <ChevronDown
-                        className={`h-3.5 w-3.5 shrink-0 text-sidebar-foreground/50 transition-transform group-data-[collapsible=icon]:hidden ${isOpen ? 'rotate-180' : ''}`}
-                    />
-                )}
+                <ChevronDown
+                    className={`h-3.5 w-3.5 shrink-0 text-sidebar-foreground/50 transition-transform group-data-[collapsible=icon]:hidden ${isOpen ? 'rotate-180' : ''}`}
+                />
             </button>
 
-            {isOpen && restaurants.length > 1 && (
+            {isOpen && (
                 <div className="absolute left-2 right-2 top-full z-50 mt-1 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar shadow-lg">
-                    <div className="max-h-48 overflow-y-auto p-1">
-                        {restaurants.map((r) => (
-                            <button
-                                key={r.id}
-                                onClick={() => handleSwitch(r.id)}
-                                className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                                    r.id === current.id
-                                        ? 'bg-sidebar-primary/10 font-medium text-sidebar-primary'
-                                        : 'text-sidebar-foreground hover:bg-sidebar-accent'
-                                }`}
-                            >
-                                <span className="min-w-0 flex-1 truncate">{r.name}</span>
-                                {r.id === current.id && <Check className="h-3.5 w-3.5 shrink-0" />}
-                            </button>
-                        ))}
-                    </div>
+                    {restaurants.length > 1 && (
+                        <div className="max-h-48 overflow-y-auto p-1">
+                            {restaurants.map((r) => (
+                                <button
+                                    key={r.id}
+                                    onClick={() => handleSwitch(r.id)}
+                                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                                        r.id === current.id
+                                            ? 'bg-sidebar-primary/10 font-medium text-sidebar-primary'
+                                            : 'text-sidebar-foreground hover:bg-sidebar-accent'
+                                    }`}
+                                >
+                                    <span className="min-w-0 flex-1 truncate">{r.name}</span>
+                                    {r.id === current.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                     <div className="border-t border-sidebar-border p-1">
                         <button
                             onClick={() => {
                                 setIsOpen(false);
-                                router.visit(route('restaurants.select'));
+                                router.visit('/restaurants/create');
                             }}
                             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
                         >
                             <Plus className="h-3.5 w-3.5" />
+                            Tambah Restoran Baru
+                        </button>
+                        <button
+                            onClick={() => {
+                                setIsOpen(false);
+                                router.visit('/restaurants/select');
+                            }}
+                            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        >
+                            <Building2 className="h-3.5 w-3.5" />
                             Kelola Restoran
                         </button>
                     </div>
