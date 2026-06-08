@@ -19,12 +19,18 @@ class CheckRestaurantAccess
             return redirect()->route('login');
         }
 
+        // Allow restaurant creation routes without active restaurant context
+        $isRestaurantCreation = $request->is('restaurants/create', 'restaurants');
+
         // Super Admin bypasses restaurant check — they can access all
         if ($user->isSuperAdmin()) {
             $activeId = session('active_restaurant_id');
 
             if ($activeId) {
                 app(RestaurantContext::class)->set($activeId);
+            } elseif (! $isRestaurantCreation) {
+                // Super admin without restaurant — redirect to select/create
+                return redirect()->route('restaurants.select');
             }
 
             return $next($request);
