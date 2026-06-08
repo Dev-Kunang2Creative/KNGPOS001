@@ -155,7 +155,7 @@ export default function Create() {
                                         <input
                                             type="checkbox"
                                             checked={data.tax_is_active}
-                                            onChange={(e) => setData('tax_is_active', e.target.checked)}
+                                            onChange={(e) => setData('tax_is_active', e.target.checked as any)}
                                             className="rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500"
                                         />
                                         <span className="text-xs text-gray-400">Aktif</span>
@@ -176,7 +176,7 @@ export default function Create() {
                                         <input
                                             type="checkbox"
                                             checked={data.service_charge_is_active}
-                                            onChange={(e) => setData('service_charge_is_active', e.target.checked)}
+                                            onChange={(e) => setData('service_charge_is_active', e.target.checked as any)}
                                             className="rounded border-white/20 bg-white/5 text-indigo-500 focus:ring-indigo-500"
                                         />
                                         <span className="text-xs text-gray-400">Aktif</span>

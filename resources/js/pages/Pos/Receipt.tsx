@@ -158,8 +158,8 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
 
                 <section id="receipt-print-area" className="w-full max-w-sm rounded-md border bg-white p-5 font-mono text-sm text-black shadow-sm">
                     <div className="text-center">
-                        <h1 className="text-base font-bold uppercase">{restaurant.name}</h1>
-                        {restaurant.receipt_header && <p className="mt-1 text-xs">{restaurant.receipt_header}</p>}
+                        <h1 className="text-base font-bold uppercase">{restaurant?.name ?? 'Restaurant'}</h1>
+                        {restaurant?.receipt_header && <p className="mt-1 text-xs">{restaurant.receipt_header}</p>}
                     </div>
 
                     <div className="my-3 border-t border-dashed border-black" />
@@ -253,7 +253,7 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                     <div className="my-3 border-t border-dashed border-black" />
 
                     <div className="text-center text-xs">
-                        <p>{restaurant.receipt_footer ?? 'Terima kasih.'}</p>
+                        <p>{restaurant?.receipt_footer ?? 'Terima kasih.'}</p>
                     </div>
                 </section>
             </main>

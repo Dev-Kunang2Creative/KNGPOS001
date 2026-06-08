@@ -77,15 +77,21 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
 
     // Kitchen / Bar / Waiter
     Route::middleware(['permission:kitchen.view'])->group(function () {
-        Route::get('kitchen', fn () => Inertia::render('dashboard'))->name('kitchen.index');
+        Route::get('kitchen', [App\Http\Controllers\Kitchen\KitchenDisplayController::class, 'index'])->name('kitchen.index');
     });
 
     Route::middleware(['permission:bar.view'])->group(function () {
-        Route::get('bar', fn () => Inertia::render('dashboard'))->name('bar.index');
+        Route::get('bar', [App\Http\Controllers\Bar\BarDisplayController::class, 'index'])->name('bar.index');
     });
 
     Route::middleware(['permission:waiter.view'])->group(function () {
-        Route::get('orders', fn () => Inertia::render('dashboard'))->name('waiter.orders.index');
+        Route::get('orders', [App\Http\Controllers\Waiter\WaiterOrderController::class, 'index'])->name('waiter.orders.index');
+    });
+
+    Route::middleware(['permission:waiter.update'])->group(function () {
+        Route::post('waiter/kitchen-orders/{kitchenOrder}/deliver', [App\Http\Controllers\Waiter\WaiterOrderController::class, 'deliverKitchenOrder'])->name('waiter.kitchen-orders.deliver');
+        Route::post('waiter/bar-orders/{barOrder}/deliver', [App\Http\Controllers\Waiter\WaiterOrderController::class, 'deliverBarOrder'])->name('waiter.bar-orders.deliver');
+        Route::patch('waiter/tables/{table}/status', [App\Http\Controllers\Waiter\WaiterOrderController::class, 'toggleTableStatus'])->name('waiter.tables.status');
     });
 
     // Zone & Station Management

@@ -220,7 +220,7 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
 
                 <div id="station-ticket-print-area" className="w-full max-w-sm rounded-md border bg-white shadow-sm">
                     <div className="border-b border-dashed border-black p-4 text-center font-mono text-sm text-black">
-                        <h1 className="text-base font-bold uppercase">{restaurant.name}</h1>
+                        <h1 className="text-base font-bold uppercase">{restaurant?.name ?? 'Restaurant'}</h1>
                     </div>
                     {kitchenOrders.map((batch) => (
                         <TicketBlock key={`kitchen-${batch.id}`} title="Kitchen Ticket" batch={batch} order={order} />
