@@ -120,8 +120,18 @@ class RestaurantController extends Controller
         }
 
         $restaurant = Restaurant::withoutGlobalScopes()->create([
-            ...$validated,
+            'name' => $validated['name'],
             'slug' => $slug,
+            'phone' => $validated['phone'] ?? null,
+            'email' => $validated['email'] ?? null,
+            'address' => $validated['address'] ?? null,
+            'tax_percentage' => $validated['tax_percentage'] ?? 0,
+            'tax_is_active' => $validated['tax_is_active'] ?? false,
+            'service_charge_percentage' => $validated['service_charge_percentage'] ?? 0,
+            'service_charge_is_active' => $validated['service_charge_is_active'] ?? false,
+            'currency' => $validated['currency'] ?? 'IDR',
+            'receipt_header' => $validated['receipt_header'] ?? null,
+            'receipt_footer' => $validated['receipt_footer'] ?? null,
             'logo_path' => $logoPath,
             'status' => 'active',
             'owner_id' => $request->user()->id,
