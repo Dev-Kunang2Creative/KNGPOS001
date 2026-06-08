@@ -9,10 +9,14 @@ use Illuminate\Support\Str;
 return new class extends Migration
 {
     /**
-     * Tables that need restaurant_id added.
-     * Format: table_name => nullable (true = nullable FK, false = required FK after backfill)
+     * Only TOP-LEVEL entities that are directly queried need restaurant_id.
+     * Child records (order_items, kitchen_orders, bar_orders, etc.) inherit
+     * their restaurant scope through their parent relationship.
+     *
+     * Format: table_name => nullable
      */
     private array $tables = [
+        // Core operational tables - direct query targets
         'zones' => false,
         'kitchen_stations' => false,
         'bar_stations' => false,
@@ -21,21 +25,27 @@ return new class extends Migration
         'menu_items' => false,
         'menu_promotions' => false,
         'orders' => false,
-        'order_items' => false,
         'shifts' => false,
         'transactions' => false,
-        'kitchen_orders' => false,
-        'bar_orders' => false,
         'printers' => false,
         'self_orders' => false,
-        'xendit_payments' => false,
-        'table_qrcodes' => false,
-        'zone_station_assignments' => false,
-        'waiter_zone_assignments' => false,
         'audit_logs' => true,       // nullable — some logs may be system-level
         'system_settings' => true,  // nullable — global settings have no restaurant
-        'cashier_shift_summaries' => false,
     ];
+
+    // Child tables that DO NOT get restaurant_id:
+    // - order_items → accessed via Order (scoped)
+    // - kitchen_orders → accessed via Order or KitchenStation (both scoped)
+    // - bar_orders → accessed via Order or BarStation (both scoped)
+    // - kitchen_order_items → accessed via KitchenOrder
+    // - bar_order_items → accessed via BarOrder
+    // - self_order_items → accessed via SelfOrder (scoped)
+    // - zone_station_assignments → accessed via Zone (scoped)
+    // - waiter_zone_assignments → accessed via Zone/User
+    // - table_qrcodes → accessed via Table (scoped)
+    // - xendit_payments → accessed via Transaction (scoped)
+    // - cashier_shift_summaries → accessed via Shift (scoped)
+    // - kitchen_order_reassignments → accessed via KitchenOrder
 
     public function up(): void
     {
@@ -80,7 +90,7 @@ return new class extends Migration
         $users = DB::table('users')->get(['id', 'role']);
         foreach ($users as $user) {
             $role = $user->role ?? 'kasir';
-            // super_admin doesn't need restaurant_users entry — they access all via isSuperAdmin()
+            // super_admin doesn't need restaurant_users entry
             if ($role === 'super_admin') {
                 continue;
             }
@@ -103,7 +113,7 @@ return new class extends Migration
                 ->update(['owner_id' => $firstManager->id]);
         }
 
-        // Step 3: Add restaurant_id to all operational tables
+        // Step 3: Add restaurant_id to top-level operational tables ONLY
         foreach ($this->tables as $tableName => $nullable) {
             if (! Schema::hasTable($tableName)) {
                 continue;
@@ -123,7 +133,7 @@ return new class extends Migration
                 'restaurant_id' => $defaultRestaurantId,
             ]);
 
-            // Make NOT NULL if required, then add FK
+            // Make NOT NULL if required
             if (! $nullable) {
                 Schema::table($tableName, function (Blueprint $table) {
                     $table->unsignedBigInteger('restaurant_id')->nullable(false)->change();
@@ -141,7 +151,6 @@ return new class extends Migration
         }
 
         // Step 4: Add composite unique for system_settings (restaurant_id + key)
-        // Drop existing unique on 'key' first
         Schema::table('system_settings', function (Blueprint $table) {
             $table->dropUnique(['key']);
         });

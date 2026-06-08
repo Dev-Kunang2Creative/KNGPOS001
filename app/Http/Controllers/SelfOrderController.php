@@ -131,21 +131,21 @@ class SelfOrderController extends Controller
     }
 
     /**
-     * Set the restaurant context from the QR code's restaurant_id.
+     * Set the restaurant context from the QR code's table restaurant_id.
      * Self-order routes don't go through CheckRestaurantAccess middleware,
-     * so we must set the context manually from the QR code.
+     * so we must set the context manually from the table's restaurant.
      */
     private function setRestaurantFromQr(TableQrcode $qrCode): void
     {
-        if ($qrCode->restaurant_id) {
-            app(RestaurantContext::class)->set($qrCode->restaurant_id);
+        $restaurantId = $qrCode->table?->restaurant_id;
+        if ($restaurantId) {
+            app(RestaurantContext::class)->set($restaurantId);
         }
     }
 
     private function activeQrCode(string $qrToken): TableQrcode
     {
         return TableQrcode::query()
-            ->withoutGlobalScope('restaurant')
             ->with('table')
             ->where('qr_token', $qrToken)
             ->where('is_active', true)

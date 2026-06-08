@@ -200,7 +200,6 @@ class RestaurantStaffController extends Controller
 
         if ($restaurantRole !== 'waiter') {
             WaiterZoneAssignment::query()
-                ->withoutGlobalScope('restaurant')
                 ->where('user_id', $user->id)
                 ->delete();
 
@@ -208,7 +207,6 @@ class RestaurantStaffController extends Controller
         }
 
         WaiterZoneAssignment::query()
-            ->withoutGlobalScope('restaurant')
             ->where('user_id', $user->id)
             ->whereNotIn('zone_id', $zoneIds)
             ->delete();

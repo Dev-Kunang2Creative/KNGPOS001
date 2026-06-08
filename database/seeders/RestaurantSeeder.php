@@ -35,6 +35,7 @@ class RestaurantSeeder extends Seeder
         );
 
         // Set restaurant context so BelongsToRestaurant trait auto-assigns restaurant_id
+        // on top-level entities (zones, stations, tables, menu, etc.)
         app(RestaurantContext::class)->set($restaurant->id);
 
         $zones = collect([
@@ -49,9 +50,10 @@ class RestaurantSeeder extends Seeder
         $bars = collect(['Bar 1', 'Bar 2'])
             ->map(fn (string $name) => BarStation::query()->updateOrCreate(['name' => $name, 'restaurant_id' => $restaurant->id], ['status' => 'active']));
 
+        // ZoneStationAssignment is a child of Zone — no restaurant_id needed
         $zones->each(function (Zone $zone, int $index) use ($kitchens, $bars): void {
             ZoneStationAssignment::query()->updateOrCreate(
-                ['zone_id' => $zone->id, 'restaurant_id' => $zone->restaurant_id],
+                ['zone_id' => $zone->id],
                 [
                     'kitchen_station_id' => $kitchens[$index === 1 ? 1 : 0]->id,
                     'bar_station_id' => $bars[$index === 2 ? 1 : 0]->id,
