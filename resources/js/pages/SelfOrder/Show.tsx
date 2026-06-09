@@ -1,129 +1,150 @@
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Head, useForm, usePage } from '@inertiajs/react';
-import { Minus, Package, Plus, ShoppingCart, Trash2 } from 'lucide-react';
+import SelfOrderLayout from '@/layouts/SelfOrderLayout';
+import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
-type MenuItem = { id: number; category_id: number; name: string; description?: string | null; price: string; print_to: string; image_url?: string | null };
+import BillSelection from '@/components/self-order/BillSelection';
+import CartView from '@/components/self-order/CartView';
+import MenuDetail from '@/components/self-order/MenuDetail';
+import PaymentSelection from '@/components/self-order/PaymentSelection';
+import RestaurantMenu from '@/components/self-order/RestaurantMenu';
+import BottomNav from '@/components/self-order/BottomNav';
+
+type MenuItem = {
+    id: number;
+    category_id: number;
+    name: string;
+    description?: string | null;
+    price: string;
+    print_to: string;
+    image_url?: string | null;
+};
 type Category = { id: number; name: string; description?: string | null; active_items: MenuItem[] };
 type Table = { id: number; name: string; zone?: { name: string; color_hex: string } };
-type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string };
+type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string; image_url?: string | null };
 type Props = { qrToken: string; table: Table; categories: Category[] };
+
+type ViewState = 'bill-selection' | 'menu' | 'detail' | 'cart' | 'payment';
 
 export default function SelfOrderShow({ qrToken, table, categories }: Props) {
     const { flash } = usePage<{ flash?: { error?: string; success?: string } }>().props;
-    const form = useForm({
-        customer_name: '',
-        customer_email: '',
-        payment_preference: 'cashier' as 'cashier' | 'qris',
-        notes: '',
-        items: [] as { menu_item_id: number; quantity: number; notes?: string }[],
-    });
+
+    const [view, setView] = useState<ViewState>('bill-selection');
+    const [billType, setBillType] = useState<'open' | 'close' | null>(null);
     const [cart, setCart] = useState<CartItem[]>([]);
-    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
 
-    function addItem(menuItem: MenuItem) {
+    // Customer Info
+    const [customerName, setCustomerName] = useState('');
+    const [customerEmail, setCustomerEmail] = useState('');
+    const [orderNotes, setOrderNotes] = useState('');
+
+    const handleContinueBillSelection = (type: 'open' | 'close') => {
+        setBillType(type);
+        setView('menu');
+    };
+
+    const handleItemSelect = (item: MenuItem) => {
+        setSelectedItem(item);
+        setView('detail');
+    };
+
+    const handleAddToCart = (item: MenuItem, quantity: number, notes: string) => {
         setCart((current) => {
-            const existing = current.find((item) => item.menu_item_id === menuItem.id);
-
+            const existing = current.find((c) => c.menu_item_id === item.id);
             if (existing) {
-                return current.map((item) => item.menu_item_id === menuItem.id ? { ...item, quantity: item.quantity + 1 } : item);
+                return current.map((c) => (c.menu_item_id === item.id ? { ...c, quantity: c.quantity + quantity, notes: notes || c.notes } : c));
             }
-
-            return [...current, { menu_item_id: menuItem.id, name: menuItem.name, price: Number(menuItem.price), quantity: 1, notes: '' }];
+            return [...current, { menu_item_id: item.id, name: item.name, price: Number(item.price), quantity, notes, image_url: item.image_url }];
         });
-    }
+        setSelectedItem(null);
+        setView('menu');
+    };
 
-    function changeQuantity(menuItemId: number, delta: number) {
-        setCart((current) => current.map((item) => item.menu_item_id === menuItemId ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item));
-    }
+    const handleUpdateQuantity = (menuItemId: number, delta: number) => {
+        setCart((current) =>
+            current.map((item) => (item.menu_item_id === menuItemId ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item)),
+        );
+    };
 
-    function checkout() {
-        form.transform((data) => ({
-            ...data,
-            items: cart.map((item) => ({ menu_item_id: item.menu_item_id, quantity: item.quantity, notes: item.notes || undefined })),
-        }));
-        form.post(`/s/${qrToken}/orders`, { preserveScroll: true });
-    }
+    const handleRemoveItem = (menuItemId: number) => {
+        setCart((current) => current.filter((item) => item.menu_item_id !== menuItemId));
+    };
+
+    const handleUpdateCustomer = (name: string, email: string, notes: string) => {
+        setCustomerName(name);
+        setCustomerEmail(email);
+        setOrderNotes(notes);
+    };
+
+    const handlePay = (paymentMethod: 'qris' | 'cashier') => {
+        router.post(
+            `/s/${qrToken}/orders`,
+            {
+                customer_name: customerName,
+                customer_email: customerEmail,
+                payment_preference: paymentMethod,
+                notes: orderNotes,
+                items: cart.map((item) => ({ menu_item_id: item.menu_item_id, quantity: item.quantity, notes: item.notes || undefined })),
+            },
+            {
+                preserveScroll: true,
+                preserveState: true,
+            },
+        );
+    };
 
     return (
-        <>
-            <Head title={`Self Order ${table.name}`} />
-            <main className="min-h-screen bg-background">
-                <div className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[1fr_360px]">
-                    <section className="space-y-4">
-                        <div className="border-b pb-4">
-                            <p className="text-sm text-muted-foreground">{table.zone?.name}</p>
-                            <h1 className="text-2xl font-semibold">{table.name}</h1>
-                        </div>
-                        {flash?.error && <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{flash.error}</div>}
-                        {categories.map((category) => (
-                            <div key={category.id}>
-                                <h2 className="mb-2 text-base font-semibold">{category.name}</h2>
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                    {category.active_items.map((item) => (
-                                        <button key={item.id} type="button" onClick={() => addItem(item)} className="overflow-hidden rounded-md border text-left hover:bg-muted/50">
-                                            <div className="aspect-[4/3] bg-muted">
-                                                {item.image_url ? (
-                                                    <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
-                                                ) : (
-                                                    <div className="flex h-full items-center justify-center text-muted-foreground">
-                                                        <Package className="size-8" />
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="p-3">
-                                                <span className="block text-sm font-medium">{item.name}</span>
-                                                {item.description && <span className="block text-xs text-muted-foreground">{item.description}</span>}
-                                                <span className="mt-2 block text-sm">Rp {Number(item.price).toLocaleString('id-ID')}</span>
-                                            </div>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </section>
-                    <aside className="h-fit rounded-md border p-4">
-                        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold"><ShoppingCart className="size-4" />Cart</h2>
-                        <div className="space-y-3">
-                            {cart.map((item) => (
-                                <div key={item.menu_item_id} className="rounded-md border p-3">
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium">{item.name}</span>
-                                        <Button type="button" size="icon" variant="ghost" onClick={() => setCart((current) => current.filter((cartItem) => cartItem.menu_item_id !== item.menu_item_id))}><Trash2 /></Button>
-                                    </div>
-                                    <div className="mt-2 flex items-center gap-2">
-                                        <Button type="button" size="icon" variant="outline" onClick={() => changeQuantity(item.menu_item_id, -1)}><Minus /></Button>
-                                        <span className="w-8 text-center text-sm">{item.quantity}</span>
-                                        <Button type="button" size="icon" variant="outline" onClick={() => changeQuantity(item.menu_item_id, 1)}><Plus /></Button>
-                                        <span className="ml-auto text-sm">Rp {(item.price * item.quantity).toLocaleString('id-ID')}</span>
-                                    </div>
-                                </div>
-                            ))}
-                            <Input value={form.data.customer_name} onChange={(event) => form.setData('customer_name', event.target.value)} placeholder="Nama customer" />
-                            {form.errors.customer_name && <p className="text-xs text-destructive">{form.errors.customer_name}</p>}
-                            <Input type="email" value={form.data.customer_email} onChange={(event) => form.setData('customer_email', event.target.value)} placeholder="Email untuk struk" />
-                            {form.errors.customer_email && <p className="text-xs text-destructive">{form.errors.customer_email}</p>}
-                            <div className="grid grid-cols-2 gap-2">
-                                <Button type="button" variant={form.data.payment_preference === 'cashier' ? 'default' : 'outline'} onClick={() => form.setData('payment_preference', 'cashier')}>
-                                    Bayar di Kasir
-                                </Button>
-                                <Button type="button" variant={form.data.payment_preference === 'qris' ? 'default' : 'outline'} onClick={() => form.setData('payment_preference', 'qris')}>
-                                    QRIS
-                                </Button>
-                            </div>
-                            <Input value={form.data.notes} onChange={(event) => form.setData('notes', event.target.value)} placeholder="Catatan pesanan" />
-                            <div className="flex items-center justify-between border-t pt-3 text-sm font-semibold">
-                                <span>Total</span>
-                                <span>Rp {total.toLocaleString('id-ID')}</span>
-                            </div>
-                            <Button type="button" className="w-full" disabled={cart.length === 0 || form.processing} onClick={checkout}>
-                                {form.data.payment_preference === 'qris' ? 'Buat QRIS & Bayar' : 'Kirim ke Kasir'}
-                            </Button>
-                        </div>
-                    </aside>
+        <SelfOrderLayout title={`Self Order - ${table.name}`}>
+            {flash?.error && (
+                <div className="border-error/40 bg-error-container text-on-error-container fixed top-20 left-0 right-0 mx-auto z-[100] w-[90%] max-w-[calc(28rem-2rem)] rounded-md border p-3 text-sm shadow-md">
+                    {flash.error}
                 </div>
-            </main>
-        </>
+            )}
+
+            {view === 'bill-selection' && <BillSelection onContinue={handleContinueBillSelection} />}
+
+            {view === 'menu' && (
+                <RestaurantMenu
+                    table={table}
+                    categories={categories}
+                    onItemSelect={handleItemSelect}
+                    onViewCart={() => setView('cart')}
+                    cartItemCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
+                />
+            )}
+
+            {view === 'detail' && selectedItem && <MenuDetail item={selectedItem} onBack={() => setView('menu')} onAddToCart={handleAddToCart} />}
+
+            {view === 'cart' && (
+                <CartView
+                    table={table}
+                    cart={cart}
+                    customerName={customerName}
+                    customerEmail={customerEmail}
+                    orderNotes={orderNotes}
+                    onUpdateCustomer={handleUpdateCustomer}
+                    onUpdateQuantity={handleUpdateQuantity}
+                    onRemoveItem={handleRemoveItem}
+                    onBack={() => setView('menu')}
+                    onContinue={() => setView('payment')}
+                />
+            )}
+
+            {view === 'payment' && billType && (
+                <PaymentSelection table={table} cart={cart} billType={billType} onBack={() => setView('cart')} onPay={handlePay} />
+            )}
+
+            {(view === 'menu' || view === 'cart') && (
+                <BottomNav
+                    activeTab={view === 'menu' ? 'menu' : 'cart'}
+                    cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
+                    onMenuClick={() => setView('menu')}
+                    onCartClick={() => setView('cart')}
+                    onStatusClick={() => {
+                        alert('Silahkan selesaikan pesanan Anda terlebih dahulu untuk melihat status.');
+                    }}
+                />
+            )}
+        </SelfOrderLayout>
     );
 }
