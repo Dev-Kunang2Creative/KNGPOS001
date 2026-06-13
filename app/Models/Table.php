@@ -30,6 +30,11 @@ class Table extends Model
         return $this->belongsTo(Zone::class);
     }
 
+    public function tableType(): BelongsTo
+    {
+        return $this->belongsTo(TableType::class);
+    }
+
     public function activeQrCode(): HasOne
     {
         return $this->hasOne(TableQrcode::class)->where('is_active', true);

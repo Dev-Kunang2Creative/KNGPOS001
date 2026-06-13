@@ -157,9 +157,10 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                 )}
 
                 <section id="receipt-print-area" className="w-full max-w-sm rounded-md border bg-white p-5 font-mono text-sm text-black shadow-sm">
-                    <div className="text-center">
+                    <div className="flex flex-col items-center text-center">
+                        {restaurant?.logo_url && <img src={restaurant.logo_url} alt="Logo" className="mb-2 h-14 w-14 object-contain" />}
                         <h1 className="text-base font-bold uppercase">{restaurant?.name ?? 'Restaurant'}</h1>
-                        {restaurant?.receipt_header && <p className="mt-1 text-xs">{restaurant.receipt_header}</p>}
+                        {restaurant?.receipt_header && <p className="mt-1 text-xs whitespace-pre-line">{restaurant.receipt_header}</p>}
                     </div>
 
                     <div className="my-3 border-t border-dashed border-black" />
@@ -190,7 +191,10 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                     {order.notes && (
                         <>
                             <div className="my-3 border-t border-dashed border-black" />
-                            <div className="text-xs"><span className="font-semibold">Catatan: </span>{order.notes}</div>
+                            <div className="text-xs">
+                                <span className="font-semibold">Catatan: </span>
+                                {order.notes}
+                            </div>
                         </>
                     )}
 
@@ -253,7 +257,7 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                     <div className="my-3 border-t border-dashed border-black" />
 
                     <div className="text-center text-xs">
-                        <p>{restaurant?.receipt_footer ?? 'Terima kasih.'}</p>
+                        <p className="whitespace-pre-line">{restaurant?.receipt_footer ?? 'Terima kasih.'}</p>
                     </div>
                 </section>
             </main>

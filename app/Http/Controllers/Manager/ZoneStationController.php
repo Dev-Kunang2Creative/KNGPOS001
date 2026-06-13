@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Manager\SaveTableLayoutRequest;
 use App\Http\Requests\Manager\StoreStationRequest;
 use App\Http\Requests\Manager\StoreZoneRequest;
+use App\Http\Requests\Manager\TableTypeRequest;
 use App\Http\Requests\Manager\UpdateZoneRequest;
 use App\Http\Requests\Manager\WaiterZoneAssignmentRequest;
 use App\Http\Requests\Manager\ZoneAssignmentRequest;
@@ -15,6 +16,7 @@ use App\Models\BarStation;
 use App\Models\KitchenOrder;
 use App\Models\KitchenStation;
 use App\Models\Table;
+use App\Models\TableType;
 use App\Models\User;
 use App\Models\WaiterZoneAssignment;
 use App\Models\Zone;
@@ -53,11 +55,33 @@ class ZoneStationController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'email']),
             'allZonesAssigned' => ! Zone::query()->whereDoesntHave('assignment')->exists(),
+            'tableTypes' => TableType::query()->orderBy('sort_order')->orderBy('name')->get(),
             'tables' => Table::query()
                 ->with(['zone:id,name,color_hex', 'zone.assignment', 'activeQrCode'])
                 ->orderBy('name')
                 ->get(),
         ]);
+    }
+
+    public function storeTableType(TableTypeRequest $request): RedirectResponse
+    {
+        TableType::query()->create($request->validated());
+
+        return back()->with('success', 'Tipe meja berhasil dibuat.');
+    }
+
+    public function updateTableType(TableTypeRequest $request, TableType $tableType): RedirectResponse
+    {
+        $tableType->update($request->validated());
+
+        return back()->with('success', 'Tipe meja berhasil diperbarui.');
+    }
+
+    public function destroyTableType(TableType $tableType): RedirectResponse
+    {
+        $tableType->delete();
+
+        return back()->with('success', 'Tipe meja berhasil dihapus.');
     }
 
     /**

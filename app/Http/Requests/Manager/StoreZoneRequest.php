@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Manager;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreZoneRequest extends FormRequest
 {
@@ -14,7 +15,12 @@ class StoreZoneRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255', 'unique:zones,name'],
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('zones', 'name')->where('restaurant_id', session('active_restaurant_id')),
+            ],
             'description' => ['nullable', 'string'],
             'color_hex' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'sort_order' => ['required', 'integer', 'min:0'],

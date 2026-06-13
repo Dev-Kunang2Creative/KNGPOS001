@@ -18,6 +18,7 @@ class TableRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'capacity' => ['required', 'integer', 'min:1'],
             'zone_id' => ['required', 'exists:zones,id'],
+            'table_type_id' => ['nullable', 'integer', 'exists:table_types,id'],
             'position_x' => ['required', 'integer', 'min:0', 'max:5000'],
             'position_y' => ['required', 'integer', 'min:0', 'max:5000'],
             'shape' => ['required', Rule::in(['square', 'round'])],

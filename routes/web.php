@@ -101,6 +101,9 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     Route::middleware(['permission:zones.manage'])->group(function () {
         Route::get('zones', [ZoneStationController::class, 'index'])->name('zones.index');
         Route::patch('zones/layout', [ZoneStationController::class, 'saveLayout'])->name('zones.layout.save');
+        Route::post('table-types', [ZoneStationController::class, 'storeTableType'])->name('table-types.store');
+        Route::put('table-types/{tableType}', [ZoneStationController::class, 'updateTableType'])->name('table-types.update');
+        Route::delete('table-types/{tableType}', [ZoneStationController::class, 'destroyTableType'])->name('table-types.destroy');
         Route::get('zones/create', [ZoneStationController::class, 'create'])->name('zones.create');
         Route::get('zones/{zone}/edit', [ZoneStationController::class, 'edit'])->name('zones.edit');
         Route::post('zones', [ZoneStationController::class, 'storeZone'])->name('zones.store');

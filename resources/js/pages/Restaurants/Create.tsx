@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
@@ -60,11 +61,13 @@ export default function Create() {
                     <h1 className="mb-3 text-xl font-semibold">Buat Restoran Baru</h1>
 
                     {allErrors.length > 0 && (
-                        <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                        <div className="border-destructive/30 bg-destructive/10 text-destructive mb-2 rounded-md border p-3 text-sm">
                             <p className="mb-1 font-medium">Terjadi kesalahan:</p>
                             <ul className="list-inside list-disc space-y-0.5 text-xs">
                                 {allErrors.map(([key, msg]) => (
-                                    <li key={key}>{key}: {msg}</li>
+                                    <li key={key}>
+                                        {key}: {msg}
+                                    </li>
                                 ))}
                             </ul>
                         </div>
@@ -81,20 +84,14 @@ export default function Create() {
                                 {logoPreview ? (
                                     <img src={logoPreview} alt="Logo" className="h-full w-full object-cover" />
                                 ) : (
-                                    <Upload className="h-5 w-5 text-muted-foreground" />
+                                    <Upload className="text-muted-foreground h-5 w-5" />
                                 )}
                             </button>
                             <div className="text-sm">
                                 <p className="font-medium">Logo Restoran</p>
-                                <p className="text-xs text-muted-foreground">PNG, JPG, max 2MB</p>
+                                <p className="text-muted-foreground text-xs">PNG, JPG, max 2MB</p>
                             </div>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={handleLogoChange}
-                            />
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
                         </div>
 
                         <div>
@@ -104,39 +101,36 @@ export default function Create() {
                                 placeholder="Nama restoran *"
                                 required
                             />
-                            {form.errors.name && <p className="mt-1 text-xs text-destructive">{form.errors.name}</p>}
+                            {form.errors.name && <p className="text-destructive mt-1 text-xs">{form.errors.name}</p>}
                         </div>
 
-                        <Input
-                            value={form.data.phone}
-                            onChange={(e) => form.setData('phone', e.target.value)}
-                            placeholder="Telepon"
-                        />
+                        <Input value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} placeholder="Telepon" />
 
-                        <Input
-                            type="email"
-                            value={form.data.email}
-                            onChange={(e) => form.setData('email', e.target.value)}
-                            placeholder="Email"
-                        />
+                        <Input type="email" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} placeholder="Email" />
 
-                        <Input
-                            value={form.data.address}
-                            onChange={(e) => form.setData('address', e.target.value)}
-                            placeholder="Alamat"
-                        />
+                        <Input value={form.data.address} onChange={(e) => form.setData('address', e.target.value)} placeholder="Alamat" />
 
-                        <Input
-                            value={form.data.receipt_header}
-                            onChange={(e) => form.setData('receipt_header', e.target.value)}
-                            placeholder="Header struk"
-                        />
-
-                        <Input
-                            value={form.data.receipt_footer}
-                            onChange={(e) => form.setData('receipt_footer', e.target.value)}
-                            placeholder="Footer struk"
-                        />
+                        <div className="bg-muted/20 rounded-md border p-3">
+                            <p className="mb-2 text-sm font-medium">Struk</p>
+                            <p className="text-muted-foreground mb-2 text-xs">
+                                Logo & nama restoran tampil otomatis di atas struk. Header & footer bisa beberapa baris (alamat, telepon, password
+                                WiFi, dll).
+                            </p>
+                            <div className="grid gap-2">
+                                <Textarea
+                                    value={form.data.receipt_header}
+                                    onChange={(e) => form.setData('receipt_header', e.target.value)}
+                                    placeholder={'Header struk\nContoh:\nJl. Merdeka No. 1\nTelp 0274-123456'}
+                                    rows={3}
+                                />
+                                <Textarea
+                                    value={form.data.receipt_footer}
+                                    onChange={(e) => form.setData('receipt_footer', e.target.value)}
+                                    placeholder={'Footer struk\nContoh:\nTerima kasih atas kunjungan Anda\nWiFi: namajaringan / pass123'}
+                                    rows={3}
+                                />
+                            </div>
+                        </div>
 
                         <Input
                             type="number"
@@ -146,10 +140,7 @@ export default function Create() {
                             placeholder="Tax %"
                         />
                         <label className="flex items-center gap-2 text-sm">
-                            <Checkbox
-                                checked={form.data.tax_is_active}
-                                onCheckedChange={(v) => form.setData('tax_is_active', Boolean(v))}
-                            />
+                            <Checkbox checked={form.data.tax_is_active} onCheckedChange={(v) => form.setData('tax_is_active', Boolean(v))} />
                             Tax aktif
                         </label>
 
@@ -175,8 +166,8 @@ export default function Create() {
                 </form>
 
                 <section className="space-y-4">
-                    <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
-                        <p className="mb-2 font-medium text-foreground">Informasi</p>
+                    <div className="bg-muted/30 text-muted-foreground rounded-md border p-4 text-sm">
+                        <p className="text-foreground mb-2 font-medium">Informasi</p>
                         <ul className="list-inside list-disc space-y-1">
                             <li>Restoran baru akan langsung aktif setelah dibuat</li>
                             <li>Anda otomatis menjadi manager restoran ini</li>

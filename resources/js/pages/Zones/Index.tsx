@@ -15,7 +15,22 @@ import { type BreadcrumbItem } from '@/types';
 import { DndContext, PointerSensor, useDraggable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { restrictToParentElement } from '@dnd-kit/modifiers';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { Check, CircleDot, Download, Eye, Loader2, Plus, QrCode, Settings2, Square, Trash2, UtensilsCrossed, ZoomIn, ZoomOut } from 'lucide-react';
+import {
+    Check,
+    CircleDot,
+    Download,
+    Eye,
+    Loader2,
+    Palette,
+    Plus,
+    QrCode,
+    Settings2,
+    Square,
+    Trash2,
+    UtensilsCrossed,
+    ZoomIn,
+    ZoomOut,
+} from 'lucide-react';
 import { QRCodeCanvas } from 'qrcode.react';
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -36,11 +51,13 @@ type Zone = {
 };
 type TableQr = { qr_token: string };
 type TableShape = 'square' | 'round';
+type TableType = { id: number; name: string; color_hex: string; sort_order: number };
 type Table = {
     id: number;
     name: string;
     capacity: number;
     zone_id: number;
+    table_type_id?: number | null;
     position_x: number;
     position_y: number;
     width: number;
@@ -57,9 +74,12 @@ type Props = {
     kitchenStations: Station[];
     barStations: Station[];
     waiters: Waiter[];
+    tableTypes: TableType[];
     tables: Table[];
     allZonesAssigned: boolean;
 };
+
+const NO_TYPE_COLOR = '#94a3b8';
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Zona & Meja', href: '/zones' }];
 
@@ -117,7 +137,7 @@ export default function ZonesIndex(props: Props) {
 }
 
 // ─── Floor editor ────────────────────────────────────────────
-function FloorEditor({ zones, tables, kitchenStations, barStations, waiters }: Props) {
+function FloorEditor({ zones, tables, kitchenStations, barStations, waiters, tableTypes }: Props) {
     const [localTables, setLocalTables] = useState<Table[]>(tables);
     const [activeZoneId, setActiveZoneId] = useState<number | null>(zones[0]?.id ?? null);
     const [zoom, setZoom] = useState(1);
@@ -127,6 +147,9 @@ function FloorEditor({ zones, tables, kitchenStations, barStations, waiters }: P
     const [tableDialog, setTableDialog] = useState<{ mode: 'create' | 'edit'; table?: Table } | null>(null);
     const [zoneSheetOpen, setZoneSheetOpen] = useState(false);
     const [stationDialogOpen, setStationDialogOpen] = useState(false);
+    const [typeDialogOpen, setTypeDialogOpen] = useState(false);
+
+    const typeColor = useCallback((id?: number | null) => tableTypes.find((t) => t.id === id)?.color_hex ?? NO_TYPE_COLOR, [tableTypes]);
 
     const dirtyRef = useRef<Set<number>>(new Set());
     const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -279,7 +302,6 @@ function FloorEditor({ zones, tables, kitchenStations, barStations, waiters }: P
                         onClick={() => setActiveZoneId(zone.id)}
                         className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${activeZoneId === zone.id ? 'border-primary bg-primary/5 text-primary' : 'hover:bg-muted'}`}
                     >
-                        <span className="size-3 rounded-full border" style={{ backgroundColor: zone.color_hex }} />
                         {zone.name}
                         <span className="text-muted-foreground text-xs">({zone.tables_count})</span>
                     </button>
@@ -300,6 +322,9 @@ function FloorEditor({ zones, tables, kitchenStations, barStations, waiters }: P
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => setStationDialogOpen(true)}>
                         <UtensilsCrossed className="mr-1 h-4 w-4" /> Station
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setTypeDialogOpen(true)}>
+                        <Palette className="mr-1 h-4 w-4" /> Tipe Meja
                     </Button>
                 </div>
                 <div className="flex items-center gap-3">
@@ -348,7 +373,7 @@ function FloorEditor({ zones, tables, kitchenStations, barStations, waiters }: P
                                             <DraggableTable
                                                 key={table.id}
                                                 table={table}
-                                                color={activeZone.color_hex}
+                                                color={typeColor(table.table_type_id)}
                                                 editMode={editMode}
                                                 zoom={zoom}
                                                 onOpen={() => setTableDialog({ mode: 'edit', table })}
@@ -372,12 +397,29 @@ function FloorEditor({ zones, tables, kitchenStations, barStations, waiters }: P
                 </CardContent>
             </Card>
 
+            {/* Legend — table types */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+                <span className="text-muted-foreground font-medium">Legenda tipe meja:</span>
+                {tableTypes.map((t) => (
+                    <span key={t.id} className="inline-flex items-center gap-1.5">
+                        <span className="size-3 rounded-sm border" style={{ backgroundColor: t.color_hex }} />
+                        {t.name}
+                    </span>
+                ))}
+                <span className="inline-flex items-center gap-1.5">
+                    <span className="size-3 rounded-sm border" style={{ backgroundColor: NO_TYPE_COLOR }} />
+                    Tanpa tipe
+                </span>
+                {tableTypes.length === 0 && <span className="text-muted-foreground">Belum ada tipe meja — klik "Tipe Meja" untuk menambah.</span>}
+            </div>
+
             {tableDialog && activeZone && (
                 <TableDialog
                     key={tableDialog.table?.id ?? 'create'}
                     mode={tableDialog.mode}
                     table={tableDialog.table}
                     zones={zones}
+                    tableTypes={tableTypes}
                     defaultZoneId={activeZone.id}
                     onMutate={mutate}
                     onClose={() => setTableDialog(null)}
@@ -401,6 +443,8 @@ function FloorEditor({ zones, tables, kitchenStations, barStations, waiters }: P
                 barStations={barStations}
                 onMutate={mutate}
             />
+
+            <TableTypeManagerDialog open={typeDialogOpen} onOpenChange={setTypeDialogOpen} tableTypes={tableTypes} onMutate={mutate} />
         </div>
     );
 }
@@ -512,6 +556,7 @@ function TableDialog({
     mode,
     table,
     zones,
+    tableTypes,
     defaultZoneId,
     onMutate,
     onClose,
@@ -519,6 +564,7 @@ function TableDialog({
     mode: 'create' | 'edit';
     table?: Table;
     zones: Zone[];
+    tableTypes: TableType[];
     defaultZoneId: number;
     onMutate: (fn: () => void) => Promise<void>;
     onClose: () => void;
@@ -527,6 +573,7 @@ function TableDialog({
         name: table?.name ?? '',
         capacity: table?.capacity ?? 4,
         zone_id: String(table?.zone_id ?? defaultZoneId),
+        table_type_id: table?.table_type_id ? String(table.table_type_id) : '',
         position_x: table?.position_x ?? Math.round((CANVAS_W - 96) / 2),
         position_y: table?.position_y ?? Math.round((CANVAS_H - 64) / 2),
         shape: (table?.shape ?? 'square') as TableShape,
@@ -538,7 +585,11 @@ function TableDialog({
 
     const submit = (event: FormEvent) => {
         event.preventDefault();
-        form.transform((data) => ({ ...data, zone_id: Number(data.zone_id) }));
+        form.transform((data) => ({
+            ...data,
+            zone_id: Number(data.zone_id),
+            table_type_id: data.table_type_id ? Number(data.table_type_id) : null,
+        }));
         void onMutate(() => {
             if (mode === 'create') {
                 form.post('/settings/tables', { preserveScroll: true, onSuccess: onClose });
@@ -632,6 +683,26 @@ function TableDialog({
                                 <CircleDot className="mr-1 h-4 w-4" /> Bulat
                             </ToggleGroupItem>
                         </ToggleGroup>
+                    </div>
+
+                    <div className="grid gap-2">
+                        <Label>Tipe Meja (warna)</Label>
+                        <Select value={form.data.table_type_id || 'none'} onValueChange={(v) => form.setData('table_type_id', v === 'none' ? '' : v)}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Tanpa tipe" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Tanpa tipe</SelectItem>
+                                {tableTypes.map((t) => (
+                                    <SelectItem key={t.id} value={String(t.id)}>
+                                        <span className="inline-flex items-center gap-2">
+                                            <span className="size-3 rounded-sm border" style={{ backgroundColor: t.color_hex }} />
+                                            {t.name}
+                                        </span>
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <label className="flex items-center gap-2 text-sm">
@@ -775,32 +846,24 @@ function ZoneSheet({
 
                     <form onSubmit={saveZone} className="space-y-3">
                         <div className="grid gap-2">
-                            <Label>Nama Zona</Label>
-                            <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="Contoh: Indoor" />
+                            <Label>Nama Zona / Lantai</Label>
+                            <Input
+                                value={form.data.name}
+                                onChange={(e) => form.setData('name', e.target.value)}
+                                placeholder="Contoh: Lantai 1 (Depan)"
+                            />
                             <InputError message={form.errors.name} />
+                            <p className="text-muted-foreground text-xs">
+                                Zona menentukan routing ke kitchen/bar. VIP/Indoor/Outdoor diatur lewat Tipe Meja (warna).
+                            </p>
                         </div>
                         <div className="grid gap-2">
                             <Label>Deskripsi</Label>
                             <Input value={form.data.description} onChange={(e) => form.setData('description', e.target.value)} />
                         </div>
-                        <div className="flex items-end gap-3">
-                            <div className="grid gap-2">
-                                <Label>Warna</Label>
-                                <input
-                                    type="color"
-                                    value={form.data.color_hex}
-                                    onChange={(e) => form.setData('color_hex', e.target.value)}
-                                    className="h-9 w-16 rounded-md border"
-                                />
-                            </div>
-                            <div className="grid flex-1 gap-2">
-                                <Label>Urutan</Label>
-                                <Input
-                                    type="number"
-                                    value={form.data.sort_order}
-                                    onChange={(e) => form.setData('sort_order', Number(e.target.value))}
-                                />
-                            </div>
+                        <div className="grid gap-2">
+                            <Label>Urutan</Label>
+                            <Input type="number" value={form.data.sort_order} onChange={(e) => form.setData('sort_order', Number(e.target.value))} />
                         </div>
                         <label className="flex items-center gap-2 text-sm">
                             <Checkbox checked={form.data.is_active} onCheckedChange={(c) => form.setData('is_active', Boolean(c))} /> Zona aktif
@@ -988,6 +1051,81 @@ function StationColumn({
                 </Button>
             </div>
         </div>
+    );
+}
+
+// ─── Table type manager dialog ───────────────────────────────
+function TableTypeManagerDialog({
+    open,
+    onOpenChange,
+    tableTypes,
+    onMutate,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    tableTypes: TableType[];
+    onMutate: (fn: () => void) => Promise<void>;
+}) {
+    const [name, setName] = useState('');
+    const [color, setColor] = useState('#2563EB');
+
+    const add = () => {
+        if (!name.trim()) {
+            return;
+        }
+        void onMutate(() =>
+            router.post(
+                '/table-types',
+                { name, color_hex: color, sort_order: tableTypes.length },
+                { preserveScroll: true, onSuccess: () => setName('') },
+            ),
+        );
+    };
+
+    const updateColor = (id: number, color_hex: string, typeName: string) => {
+        void onMutate(() => router.put(`/table-types/${id}`, { name: typeName, color_hex }, { preserveScroll: true }));
+    };
+
+    const remove = (id: number) => {
+        void onMutate(() => router.delete(`/table-types/${id}`, { preserveScroll: true }));
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Tipe Meja</DialogTitle>
+                </DialogHeader>
+                <p className="text-muted-foreground text-sm">
+                    Tipe meja menentukan warna meja di denah (mis. VIP, Indoor, Outdoor). Warna ini muncul sebagai legenda.
+                </p>
+                <div className="space-y-2">
+                    {tableTypes.map((t) => (
+                        <div key={t.id} className="flex items-center gap-2 rounded-md border px-2 py-1.5">
+                            <input
+                                type="color"
+                                value={t.color_hex}
+                                onChange={(e) => updateColor(t.id, e.target.value, t.name)}
+                                className="h-7 w-9 rounded border"
+                                title="Ubah warna"
+                            />
+                            <span className="flex-1 text-sm">{t.name}</span>
+                            <button type="button" onClick={() => remove(t.id)} className="text-muted-foreground text-xs hover:text-red-600">
+                                Hapus
+                            </button>
+                        </div>
+                    ))}
+                    {tableTypes.length === 0 && <span className="text-muted-foreground text-xs">Belum ada tipe meja.</span>}
+                </div>
+                <DialogFooter className="flex-row items-center gap-2 sm:justify-start">
+                    <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-11 rounded border" />
+                    <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama tipe (mis. VIP)" className="h-9 flex-1" />
+                    <Button size="sm" onClick={add}>
+                        Tambah
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 

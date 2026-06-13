@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
@@ -60,10 +61,14 @@ export default function Edit({ restaurantData }: Props) {
 
     function submit(event: FormEvent) {
         event.preventDefault();
-        router.post('/restaurant', {
-            ...form.data,
-            _method: 'PUT',
-        }, { preserveScroll: true });
+        router.post(
+            '/restaurant',
+            {
+                ...form.data,
+                _method: 'PUT',
+            },
+            { preserveScroll: true },
+        );
     }
 
     return (
@@ -88,59 +93,46 @@ export default function Edit({ restaurantData }: Props) {
                                 {logoPreview ? (
                                     <img src={logoPreview} alt="Logo" className="h-full w-full object-cover" />
                                 ) : (
-                                    <Upload className="h-5 w-5 text-muted-foreground" />
+                                    <Upload className="text-muted-foreground h-5 w-5" />
                                 )}
                             </button>
                             <div className="text-sm">
                                 <p className="font-medium">Logo Restoran</p>
-                                <p className="text-xs text-muted-foreground">PNG, JPG, max 2MB</p>
+                                <p className="text-muted-foreground text-xs">PNG, JPG, max 2MB</p>
                             </div>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={handleLogoChange}
-                            />
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
                         </div>
 
-                        <Input
-                            value={form.data.name}
-                            onChange={(e) => form.setData('name', e.target.value)}
-                            placeholder="Nama restoran"
-                        />
-                        {form.errors.name && <p className="text-xs text-destructive">{form.errors.name}</p>}
+                        <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="Nama restoran" />
+                        {form.errors.name && <p className="text-destructive text-xs">{form.errors.name}</p>}
 
-                        <Input
-                            value={form.data.phone}
-                            onChange={(e) => form.setData('phone', e.target.value)}
-                            placeholder="Telepon"
-                        />
+                        <Input value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} placeholder="Telepon" />
 
-                        <Input
-                            type="email"
-                            value={form.data.email}
-                            onChange={(e) => form.setData('email', e.target.value)}
-                            placeholder="Email"
-                        />
+                        <Input type="email" value={form.data.email} onChange={(e) => form.setData('email', e.target.value)} placeholder="Email" />
 
-                        <Input
-                            value={form.data.address}
-                            onChange={(e) => form.setData('address', e.target.value)}
-                            placeholder="Alamat"
-                        />
+                        <Input value={form.data.address} onChange={(e) => form.setData('address', e.target.value)} placeholder="Alamat" />
 
-                        <Input
-                            value={form.data.receipt_header}
-                            onChange={(e) => form.setData('receipt_header', e.target.value)}
-                            placeholder="Header struk"
-                        />
-
-                        <Input
-                            value={form.data.receipt_footer}
-                            onChange={(e) => form.setData('receipt_footer', e.target.value)}
-                            placeholder="Footer struk"
-                        />
+                        <div className="bg-muted/20 rounded-md border p-3">
+                            <p className="mb-2 text-sm font-medium">Struk</p>
+                            <p className="text-muted-foreground mb-2 text-xs">
+                                Logo & nama restoran tampil otomatis di atas struk. Header & footer bisa beberapa baris (alamat, telepon, password
+                                WiFi, dll).
+                            </p>
+                            <div className="grid gap-2">
+                                <Textarea
+                                    value={form.data.receipt_header}
+                                    onChange={(e) => form.setData('receipt_header', e.target.value)}
+                                    placeholder={'Header struk\nContoh:\nJl. Merdeka No. 1\nTelp 0274-123456'}
+                                    rows={3}
+                                />
+                                <Textarea
+                                    value={form.data.receipt_footer}
+                                    onChange={(e) => form.setData('receipt_footer', e.target.value)}
+                                    placeholder={'Footer struk\nContoh:\nTerima kasih atas kunjungan Anda\nWiFi: namajaringan / pass123'}
+                                    rows={3}
+                                />
+                            </div>
+                        </div>
 
                         <Input
                             type="number"
@@ -150,10 +142,7 @@ export default function Edit({ restaurantData }: Props) {
                             placeholder="Tax %"
                         />
                         <label className="flex items-center gap-2 text-sm">
-                            <Checkbox
-                                checked={form.data.tax_is_active}
-                                onCheckedChange={(v) => form.setData('tax_is_active', Boolean(v))}
-                            />
+                            <Checkbox checked={form.data.tax_is_active} onCheckedChange={(v) => form.setData('tax_is_active', Boolean(v))} />
                             Tax aktif
                         </label>
 

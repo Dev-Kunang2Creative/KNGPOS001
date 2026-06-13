@@ -8,9 +8,9 @@ use App\Models\RestaurantUser;
 use App\Services\RestaurantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -110,7 +110,7 @@ class RestaurantController extends Controller
             $originalSlug = $slug;
             $counter = 1;
             while (Restaurant::withoutGlobalScopes()->where('slug', $slug)->exists()) {
-                $slug = $originalSlug . '-' . $counter++;
+                $slug = $originalSlug.'-'.$counter++;
             }
 
             $logoPath = null;
@@ -153,7 +153,7 @@ class RestaurantController extends Controller
             return $this->performSwitch($restaurantId)
                 ->with('success', 'Restoran berhasil dibuat.');
         } catch (\Exception $e) {
-            return back()->withErrors(['name' => 'Gagal membuat restoran: ' . $e->getMessage()]);
+            return back()->withErrors(['name' => 'Gagal membuat restoran: '.$e->getMessage()]);
         }
     }
 
