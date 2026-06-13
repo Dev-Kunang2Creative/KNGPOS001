@@ -14,6 +14,7 @@ use App\Models\ZoneStationAssignment;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use App\Services\OrderRoutingService;
 
 class SelfOrderService
 {
@@ -92,6 +93,24 @@ class SelfOrderService
                 'order' => $order->fresh(),
                 'payment' => $paymentResult['payment'],
                 'response' => $paymentResult['response'],
+            ];
+        });
+    }
+
+    /**
+     * @return array{self_order: SelfOrder, order: Order, routing: array}
+     */
+    public function submitOpenBill(TableQrcode $qrCode, array $validated, OrderRoutingService $routingService): array
+    {
+        return DB::transaction(function () use ($qrCode, $validated, $routingService): array {
+            $selfOrder = $this->submit($qrCode, array_merge($validated, ['payment_preference' => 'cashier']));
+            $order = $this->convertToOrder($selfOrder, null, true);
+            $routing = $routingService->routeOrder($order);
+
+            return [
+                'self_order' => $selfOrder->fresh(['table.zone:id,name,color_hex', 'items.menuItem:id,name,price,print_to']),
+                'order' => $order->fresh(),
+                'routing' => $routing,
             ];
         });
     }
