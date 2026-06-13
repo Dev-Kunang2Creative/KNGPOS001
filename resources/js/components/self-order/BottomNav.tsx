@@ -14,7 +14,7 @@ export default function BottomNav({ activeTab, onMenuClick, onCartClick, onStatu
                 <button
                     onClick={onMenuClick}
                     className={`flex h-[52px] w-[72px] flex-col items-center justify-center rounded-[26px] transition-colors duration-200 ${
-                        activeTab === 'menu' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-primary bg-transparent'
+                        activeTab === 'menu' ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-primary bg-transparent'
                     }`}
                 >
                     <span className={`material-symbols-outlined mb-0.5 text-[24px] leading-none ${activeTab === 'menu' ? 'icon-fill' : ''}`}>
@@ -27,7 +27,7 @@ export default function BottomNav({ activeTab, onMenuClick, onCartClick, onStatu
                 <button
                     onClick={onCartClick}
                     className={`relative flex h-[52px] w-[72px] flex-col items-center justify-center rounded-[26px] transition-colors duration-200 ${
-                        activeTab === 'cart' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-primary bg-transparent'
+                        activeTab === 'cart' ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-primary bg-transparent'
                     }`}
                 >
                     <div className="relative mb-0.5 flex flex-col items-center">
@@ -47,7 +47,7 @@ export default function BottomNav({ activeTab, onMenuClick, onCartClick, onStatu
                 <button
                     onClick={onStatusClick}
                     className={`flex h-[52px] w-[72px] flex-col items-center justify-center rounded-[26px] transition-colors duration-200 ${
-                        activeTab === 'status' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-primary bg-transparent'
+                        activeTab === 'status' ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-primary bg-transparent'
                     }`}
                 >
                     <span className={`material-symbols-outlined mb-0.5 text-[24px] leading-none ${activeTab === 'status' ? 'icon-fill' : ''}`}>

@@ -6,6 +6,7 @@ import BillSelection from '@/components/self-order/BillSelection';
 import BottomNav from '@/components/self-order/BottomNav';
 import CartView from '@/components/self-order/CartView';
 import MenuDetail from '@/components/self-order/MenuDetail';
+import OrderHistoryView from '@/components/self-order/OrderHistoryView';
 import PaymentSelection from '@/components/self-order/PaymentSelection';
 import RestaurantMenu from '@/components/self-order/RestaurantMenu';
 
@@ -23,13 +24,38 @@ type Table = { id: number; name: string; zone?: { name: string; color_hex: strin
 type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string; image_url?: string | null };
 type Props = { qrToken: string; table: Table; categories: Category[]; restaurant: { name: string } };
 
-type ViewState = 'bill-selection' | 'menu' | 'detail' | 'cart' | 'payment';
+type ViewState = 'bill-selection' | 'menu' | 'detail' | 'cart' | 'payment' | 'orders';
 
 export default function SelfOrderShow({ qrToken, table, categories, restaurant }: Props) {
     const { flash } = usePage<{ flash?: { error?: string; success?: string } }>().props;
 
-    const [view, setView] = useState<ViewState>('bill-selection');
-    const [billType, setBillType] = useState<'open' | 'close' | null>(null);
+    const { url } = usePage();
+    const searchParams = new URLSearchParams(url.includes('?') ? url.substring(url.indexOf('?')) : '');
+    const methodParam = searchParams.get('method') as 'open' | 'close' | null;
+    const viewParam = searchParams.get('view') as ViewState | null;
+
+    const currentMethod = methodParam;
+    let currentView: ViewState = 'bill-selection';
+
+    if (!currentMethod) {
+        currentView = 'bill-selection';
+    } else {
+        currentView = viewParam && ['menu', 'detail', 'cart', 'payment', 'orders'].includes(viewParam) ? viewParam : 'menu';
+    }
+
+    const setView = (newView: ViewState) => {
+        router.visit(`/s/${qrToken}?view=${newView}${currentMethod ? `&method=${currentMethod}` : ''}`, {
+            preserveState: true,
+            preserveScroll: true
+        });
+    };
+
+    const handleMethodChange = (newMethod: 'open' | 'close') => {
+        router.visit(`/s/${qrToken}?view=menu&method=${newMethod}`, {
+            preserveState: true,
+            preserveScroll: true
+        });
+    };
     const [cart, setCart] = useState<CartItem[]>([]);
     const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
 
@@ -40,8 +66,7 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
     const [isProcessing, setIsProcessing] = useState(false);
 
     const handleContinueBillSelection = (type: 'open' | 'close') => {
-        setBillType(type);
-        setView('menu');
+        handleMethodChange(type);
     };
 
     const handleItemSelect = (item: MenuItem) => {
@@ -85,7 +110,7 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
                 customer_name: customerName,
                 customer_email: customerEmail,
                 payment_preference: paymentMethod,
-                bill_type: billType,
+                bill_type: currentMethod,
                 notes: orderNotes,
                 items: cart.map((item) => ({ menu_item_id: item.menu_item_id, quantity: item.quantity, notes: item.notes || undefined })),
             },
@@ -114,9 +139,9 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
                 </div>
             )}
 
-            {view === 'bill-selection' && <BillSelection onContinue={handleContinueBillSelection} />}
+            {currentView === 'bill-selection' && <BillSelection onContinue={handleContinueBillSelection} />}
 
-            {view === 'menu' && (
+            {currentView === 'menu' && (
                 <RestaurantMenu
                     table={table}
                     restaurant={restaurant}
@@ -124,14 +149,16 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
                     onItemSelect={handleItemSelect}
                     onViewCart={() => setView('cart')}
                     cartItemCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
+                    currentMethod={currentMethod}
+                    onMethodChange={handleMethodChange}
                 />
             )}
 
-            {view === 'detail' && selectedItem && (
-                <MenuDetail item={selectedItem} restaurant={restaurant} onBack={() => setView('menu')} onAddToCart={handleAddToCart} />
+            {currentView === 'detail' && selectedItem && (
+                <MenuDetail item={selectedItem} restaurant={restaurant} onAddToCart={handleAddToCart} onBack={() => setView('menu')} />
             )}
 
-            {view === 'cart' && (
+            {currentView === 'cart' && (
                 <CartView
                     table={table}
                     cart={cart}
@@ -146,26 +173,28 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
                 />
             )}
 
-            {view === 'payment' && billType && (
+            {currentView === 'payment' && currentMethod && (
                 <PaymentSelection
                     isProcessing={isProcessing}
                     table={table}
                     cart={cart}
-                    billType={billType}
+                    billType={currentMethod}
                     onBack={() => setView('cart')}
                     onPay={handlePay}
                 />
             )}
 
-            {(view === 'menu' || view === 'cart') && (
+            {currentView === 'orders' && (
+                <OrderHistoryView qrToken={qrToken} onBack={() => setView('menu')} />
+            )}
+
+            {(currentView === 'menu' || currentView === 'cart' || currentView === 'orders') && (
                 <BottomNav
-                    activeTab={view === 'menu' ? 'menu' : 'cart'}
+                    activeTab={currentView === 'menu' ? 'menu' : currentView === 'cart' ? 'cart' : 'status'}
                     cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
                     onMenuClick={() => setView('menu')}
                     onCartClick={() => setView('cart')}
-                    onStatusClick={() => {
-                        alert('Silahkan selesaikan pesanan Anda terlebih dahulu untuk melihat status.');
-                    }}
+                    onStatusClick={() => setView('orders')}
                 />
             )}
         </SelfOrderLayout>

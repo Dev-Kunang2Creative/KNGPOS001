@@ -2,12 +2,12 @@
     --color-surface-variant: #e2e2e7;
     --color-secondary-fixed: #ffe16d;
     --color-outline: #737780;
-    --color-surface-dim: #dad9de;
+    --color-surface-dim: #f3f3f3;
     --color-on-secondary-container: #6e5c00;
     --color-on-error: #ffffff;
     --color-inverse-primary: #a7c8ff;
     --color-tertiary-fixed: #ffdbca;
-    --color-surface: #f9f9fe;
+    --color-surface: #ffffff;
     --color-inverse-on-surface: #f1f0f5;
     --color-tertiary-fixed-dim: #ffb690;
     --color-on-primary-fixed: #001b3c;
@@ -21,11 +21,11 @@
     --color-surface-container-high: #e8e8ed;
     --color-inverse-surface: #2f3034;
     --color-on-tertiary-fixed: #341100;
-    --color-on-primary-container: #799dd6;
+    --color-on-primary-container: #ffffff;
     --color-surface-tint: #3a5f94;
-    --color-surface-bright: #f9f9fe;
+    --color-surface-bright: #ffffff;
     --color-on-primary: #ffffff;
-    --color-surface-container-highest: #e2e2e7;
+    --color-surface-container-highest: #f1f1f1;
     --color-surface-container: #eeedf2;
     --color-on-secondary: #ffffff;
     --color-primary-fixed-dim: #a7c8ff;
@@ -43,15 +43,14 @@
     --color-on-secondary-fixed: #221b00;
     --color-outline-variant: #c3c6d1;
     --color-on-background: #1a1c1f;
-
-    --font-display-lg: 'Lexend', sans-serif;
-    --font-label-lg: 'Lexend', sans-serif;
-    --font-body-lg: 'Lexend', sans-serif;
-    --font-label-md: 'Lexend', sans-serif;
-    --font-headline-lg: 'Lexend', sans-serif;
-    --font-headline-lg-mobile: 'Lexend', sans-serif;
-    --font-body-md: 'Lexend', sans-serif;
-    --font-headline-md: 'Lexend', sans-serif;
+    --font-display-lg: var(--font-sans);
+    --font-label-lg: var(--font-sans);
+    --font-body-lg: var(--font-sans);
+    --font-label-md: var(--font-sans);
+    --font-headline-lg: var(--font-sans);
+    --font-headline-lg-mobile: var(--font-sans);
+    --font-body-md: var(--font-sans);
+    --font-headline-md: var(--font-sans);
 }
 
 @layer utilities {
@@ -124,11 +123,10 @@
 .self-order-theme {
     --primary: #001e40;
     --secondary: #705d00;
-    --background: #f9f9fe;
+    --background: #ffffff;
     --foreground: #1a1c1f;
     --border: #c3c6d1;
     --radius: 0.5rem;
-    font-family: 'Lexend', sans-serif;
     background-color: var(--background);
     color: var(--foreground);
 }
