@@ -1,7 +1,7 @@
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarSeparator } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { type NavItem, type SharedData } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
 import {
@@ -18,12 +18,11 @@ import {
     Plus,
     ScrollText,
     Settings,
-    Table2,
     Timer,
     Users,
     Utensils,
 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AppLogo from './app-logo';
 
 const footerNavItems: NavItem[] = [];
@@ -39,12 +38,11 @@ export function AppSidebar() {
         { title: 'Kitchen', url: '/kitchen', icon: ChefHat, permission: 'kitchen.view' },
         { title: 'Bar', url: '/bar', icon: BarChart3, permission: 'bar.view' },
         { title: 'Orders', url: '/orders', icon: ClipboardList, permission: 'waiter.view' },
-        { title: 'Zones', url: '/zones', icon: MapPinned, permission: 'zones.manage' },
+        { title: 'Zona & Meja', url: '/zones', icon: MapPinned, permission: 'zones.manage' },
         { title: 'Menu', url: '/menu', icon: MenuSquare, permission: 'menu.view' },
         { title: 'Reports', url: '/reports/kasir', icon: FileText, permission: 'reports.view' },
         { title: 'Users', url: '/users', icon: Users, permission: 'users.view' },
         { title: 'Audit Logs', url: '/audit-logs', icon: ScrollText, permission: 'audit.view' },
-        { title: 'Tables', url: '/settings/tables', icon: Table2, permission: 'settings.view' },
         { title: 'Shifts', url: '/shifts', icon: Timer, permission: 'shift.view' },
         { title: 'Restoran', url: '/restaurant/edit', icon: Building2, permission: 'settings.view' },
         { title: 'Settings', url: '/settings/system', icon: Settings, permission: 'settings.view' },
@@ -72,12 +70,7 @@ export function AppSidebar() {
                 </SidebarMenu>
 
                 {/* Restaurant Switcher */}
-                {restaurant && (
-                    <RestaurantSwitcherInline
-                        current={restaurant}
-                        restaurants={restaurants ?? []}
-                    />
-                )}
+                {restaurant && <RestaurantSwitcherInline current={restaurant} restaurants={restaurants ?? []} />}
             </SidebarHeader>
 
             <SidebarContent>
@@ -125,19 +118,19 @@ function RestaurantSwitcherInline({
         <div className="relative px-2" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex w-full items-center gap-2 rounded-lg border border-sidebar-border/50 bg-sidebar-accent/30 px-3 py-2 text-left transition-colors hover:bg-sidebar-accent/60"
+                className="border-sidebar-border/50 bg-sidebar-accent/30 hover:bg-sidebar-accent/60 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors"
             >
-                <Building2 className="h-4 w-4 shrink-0 text-sidebar-primary/70" />
-                <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+                <Building2 className="text-sidebar-primary/70 h-4 w-4 shrink-0" />
+                <span className="text-sidebar-foreground min-w-0 flex-1 truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
                     {current.name}
                 </span>
                 <ChevronDown
-                    className={`h-3.5 w-3.5 shrink-0 text-sidebar-foreground/50 transition-transform group-data-[collapsible=icon]:hidden ${isOpen ? 'rotate-180' : ''}`}
+                    className={`text-sidebar-foreground/50 h-3.5 w-3.5 shrink-0 transition-transform group-data-[collapsible=icon]:hidden ${isOpen ? 'rotate-180' : ''}`}
                 />
             </button>
 
             {isOpen && (
-                <div className="absolute left-2 right-2 top-full z-50 mt-1 overflow-hidden rounded-lg border border-sidebar-border bg-sidebar shadow-lg">
+                <div className="border-sidebar-border bg-sidebar absolute top-full right-2 left-2 z-50 mt-1 overflow-hidden rounded-lg border shadow-lg">
                     {restaurants.length > 1 && (
                         <div className="max-h-48 overflow-y-auto p-1">
                             {restaurants.map((r) => (
@@ -146,7 +139,7 @@ function RestaurantSwitcherInline({
                                     onClick={() => handleSwitch(r.id)}
                                     className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
                                         r.id === current.id
-                                            ? 'bg-sidebar-primary/10 font-medium text-sidebar-primary'
+                                            ? 'bg-sidebar-primary/10 text-sidebar-primary font-medium'
                                             : 'text-sidebar-foreground hover:bg-sidebar-accent'
                                     }`}
                                 >
@@ -156,13 +149,13 @@ function RestaurantSwitcherInline({
                             ))}
                         </div>
                     )}
-                    <div className="border-t border-sidebar-border p-1">
+                    <div className="border-sidebar-border border-t p-1">
                         <button
                             onClick={() => {
                                 setIsOpen(false);
                                 router.visit('/restaurants/create');
                             }}
-                            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                            className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors"
                         >
                             <Plus className="h-3.5 w-3.5" />
                             Tambah Restoran Baru
@@ -172,7 +165,7 @@ function RestaurantSwitcherInline({
                                 setIsOpen(false);
                                 router.visit('/restaurants/select');
                             }}
-                            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                            className="text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors"
                         >
                             <Building2 className="h-3.5 w-3.5" />
                             Kelola Restoran
