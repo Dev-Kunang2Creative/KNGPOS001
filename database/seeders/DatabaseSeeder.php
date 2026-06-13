@@ -14,7 +14,6 @@ class DatabaseSeeder extends Seeder
         $this->call([
             RestaurantSeeder::class,
             StaffSeeder::class,
-            SystemSettingsSeeder::class,
         ]);
     }
 }

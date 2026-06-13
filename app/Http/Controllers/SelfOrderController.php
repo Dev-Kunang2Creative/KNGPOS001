@@ -49,18 +49,26 @@ class SelfOrderController extends Controller
         $this->setRestaurantFromQr($qrCode);
 
         $validated = $request->validated();
-        
+
         $billType = $validated['bill_type'] ?? null;
         if ($billType) {
             $prefix = $billType === 'open' ? '[Open Bill]' : '[Close Bill]';
-            $validated['notes'] = $validated['notes'] 
-                ? "{$prefix} {$validated['notes']}" 
+            $validated['notes'] = ! empty($validated['notes'])
+                ? "{$prefix} {$validated['notes']}"
                 : $prefix;
         }
 
         try {
             if ($validated['payment_preference'] === 'qris') {
                 $result = $selfOrderService->submitQris($qrCode, $validated, $paymentService);
+                $selfOrder = $result['self_order'];
+            } elseif ($validated['payment_preference'] === 'online') {
+                $result = $selfOrderService->submitOnline(
+                    $qrCode,
+                    $validated,
+                    $paymentService,
+                    fn (SelfOrder $so) => route('self-order.status', ['qr_token' => $qrToken, 'selfOrder' => $so->id]),
+                );
                 $selfOrder = $result['self_order'];
             } elseif ($billType === 'open') {
                 $result = $selfOrderService->submitOpenBill($qrCode, $validated, $routingService);
@@ -75,7 +83,7 @@ class SelfOrderController extends Controller
             ]);
             $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API Xendit';
 
-            return back()->with('error', 'Gagal membuat QRIS: ' . (is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
+            return back()->with('error', 'Gagal membuat QRIS: '.(is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
         } catch (RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
@@ -137,7 +145,7 @@ class SelfOrderController extends Controller
             ]);
             $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API simulasi Xendit';
 
-            return back()->with('error', 'Gagal simulasi pembayaran QRIS: ' . (is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
+            return back()->with('error', 'Gagal simulasi pembayaran QRIS: '.(is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
         } catch (RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
@@ -145,6 +153,41 @@ class SelfOrderController extends Controller
         return redirect()
             ->route('self-order.status', ['qr_token' => $qrToken, 'selfOrder' => $selfOrder->id])
             ->with('success', 'Simulasi pembayaran QRIS berhasil.');
+    }
+
+    /**
+     * Confirm an online (Xendit Invoice) payment by querying Xendit.
+     * Used by the status page poll / "Cek status" button so payment is
+     * confirmed even without a publicly reachable webhook.
+     */
+    public function refreshPayment(string $qrToken, SelfOrder $selfOrder, PaymentService $paymentService, OrderRoutingService $routingService): RedirectResponse
+    {
+        $qrCode = $this->activeQrCode($qrToken);
+        $this->setRestaurantFromQr($qrCode);
+
+        abort_unless($selfOrder->table_qrcode_id === $qrCode->id, 404);
+
+        $payment = $selfOrder->order_id
+            ? XenditPayment::query()
+                ->whereHas('transaction', fn ($query) => $query->where('order_id', $selfOrder->order_id))
+                ->latest()
+                ->first()
+            : null;
+
+        if ($payment) {
+            try {
+                $paymentService->refreshInvoiceStatus($payment, $routingService);
+            } catch (RequestException $exception) {
+                Log::error('Self-order Xendit Invoice Refresh Error', [
+                    'response' => $exception->response->json(),
+                    'status' => $exception->response->status(),
+                ]);
+            } catch (RuntimeException $exception) {
+                return back()->with('error', $exception->getMessage());
+            }
+        }
+
+        return redirect()->route('self-order.status', ['qr_token' => $qrToken, 'selfOrder' => $selfOrder->id]);
     }
 
     /**

@@ -113,6 +113,110 @@ class PaymentService
         });
     }
 
+    /**
+     * Create a Xendit hosted Invoice supporting all payment methods enabled on
+     * the account (QRIS, e-wallet, virtual account, card, paylater). The customer
+     * picks the method on Xendit's hosted page; status is confirmed by querying
+     * the invoice (see refreshInvoiceStatus) or via webhook.
+     *
+     * @return array{transaction: Transaction, payment: XenditPayment, response: array<string, mixed>, invoice_url: string}
+     *
+     * @throws RequestException
+     */
+    public function createInvoicePayment(Order $order, string $successRedirectUrl, ?string $payerEmail = null, ?User $cashier = null, ?string $notes = null): array
+    {
+        $secretKey = config('services.xendit.secret_key');
+
+        if (! $secretKey || ! config('services.xendit.enabled')) {
+            throw new RuntimeException('Xendit belum dikonfigurasi.');
+        }
+
+        $total = $this->calculateOrderTotal($order);
+        $externalId = 'karcisqu-'.$order->id.'-'.now()->timestamp.'-'.Str::lower(Str::random(6));
+
+        return DB::transaction(function () use ($order, $cashier, $total, $externalId, $secretKey, $notes, $successRedirectUrl, $payerEmail): array {
+            $transaction = Transaction::query()->create([
+                'order_id' => $order->id,
+                'kasir_id' => $cashier?->id,
+                'payment_method' => 'xendit',
+                'amount_paid' => $total,
+                'change_amount' => 0,
+                'status' => 'pending',
+                'notes' => $notes ?? 'Xendit Invoice',
+            ]);
+
+            $response = Http::withBasicAuth($secretKey, '')
+                ->post('https://api.xendit.co/v2/invoices', [
+                    'external_id' => $externalId,
+                    'amount' => (int) round($total),
+                    'currency' => 'IDR',
+                    'description' => 'Self-order #'.$order->id,
+                    'payer_email' => $payerEmail ?: 'guest@karcisqu.test',
+                    'success_redirect_url' => $successRedirectUrl,
+                    'invoice_duration' => 7200,
+                    'metadata' => [
+                        'order_id' => $order->id,
+                        'transaction_id' => $transaction->id,
+                    ],
+                ])
+                ->throw()
+                ->json();
+
+            $payment = XenditPayment::query()->create([
+                'transaction_id' => $transaction->id,
+                'external_id' => $externalId,
+                'xendit_invoice_id' => $response['id'] ?? null,
+                'payment_method' => 'invoice',
+                'amount' => $total,
+                'status' => $response['status'] ?? 'pending',
+                'xendit_raw_response' => $response,
+            ]);
+
+            return [
+                'transaction' => $transaction,
+                'payment' => $payment,
+                'response' => $response,
+                'invoice_url' => $response['invoice_url'] ?? '',
+            ];
+        });
+    }
+
+    /**
+     * Query a Xendit invoice and mark the payment paid if it has settled.
+     * Lets us confirm payment without a publicly reachable webhook.
+     *
+     * @throws RequestException
+     */
+    public function refreshInvoiceStatus(XenditPayment $payment, ?OrderRoutingService $routingService = null): ?XenditPayment
+    {
+        $secretKey = config('services.xendit.secret_key');
+
+        if (! $secretKey || ! config('services.xendit.enabled')) {
+            throw new RuntimeException('Xendit belum dikonfigurasi.');
+        }
+
+        if (strtolower((string) $payment->status) === 'paid') {
+            return $payment;
+        }
+
+        $invoiceId = $payment->xendit_invoice_id ?: $payment->external_id;
+
+        $response = Http::withBasicAuth($secretKey, '')
+            ->get("https://api.xendit.co/v2/invoices/{$invoiceId}")
+            ->throw()
+            ->json();
+
+        $status = strtoupper((string) ($response['status'] ?? ''));
+
+        if (in_array($status, ['PAID', 'SETTLED', 'COMPLETED'], true)) {
+            return $this->markXenditPaymentPaid($payment->external_id, $response, $routingService);
+        }
+
+        $payment->update(['status' => $response['status'] ?? $payment->status, 'xendit_raw_response' => $response]);
+
+        return $payment->fresh();
+    }
+
     public function markXenditPaymentPaid(string $externalId, array $payload, ?OrderRoutingService $routingService = null): ?XenditPayment
     {
         return DB::transaction(function () use ($externalId, $payload, $routingService): ?XenditPayment {

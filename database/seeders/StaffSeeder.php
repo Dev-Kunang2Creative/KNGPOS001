@@ -78,9 +78,9 @@ class StaffSeeder extends Seeder
             ['Manager', 'manager@karcisqu.test', 'manager'],
             ['Kasir 1', 'kasir1@karcisqu.test', 'kasir'],
             ['Kasir 2', 'kasir2@karcisqu.test', 'kasir'],
-            ['Waiter Indoor', 'waiter.indoor@karcisqu.test', 'waiter'],
-            ['Waiter Outdoor', 'waiter.outdoor@karcisqu.test', 'waiter'],
-            ['Waiter VIP', 'waiter.vip@karcisqu.test', 'waiter'],
+            ['Waiter Lantai 1', 'waiter1@karcisqu.test', 'waiter'],
+            ['Waiter Lantai 2', 'waiter2@karcisqu.test', 'waiter'],
+            ['Waiter Rooftop', 'waiter3@karcisqu.test', 'waiter'],
             ['Dapur 1', 'dapur1@karcisqu.test', 'dapur', $kitchen1?->id, null],
             ['Dapur 2', 'dapur2@karcisqu.test', 'dapur', $kitchen2?->id, null],
             ['Bar 1', 'bar1@karcisqu.test', 'bar', null, $bar1?->id],
@@ -120,9 +120,9 @@ class StaffSeeder extends Seeder
         }
 
         $waiterZones = [
-            'waiter.indoor@karcisqu.test' => 'Indoor',
-            'waiter.outdoor@karcisqu.test' => 'Outdoor',
-            'waiter.vip@karcisqu.test' => 'VIP',
+            'waiter1@karcisqu.test' => 'Lantai 1 (Depan)',
+            'waiter2@karcisqu.test' => 'Lantai 2 (Smoking)',
+            'waiter3@karcisqu.test' => 'Rooftop',
         ];
 
         foreach ($waiterZones as $email => $zoneName) {

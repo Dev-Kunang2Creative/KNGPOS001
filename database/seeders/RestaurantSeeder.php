@@ -8,6 +8,7 @@ use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Restaurant;
 use App\Models\Table;
+use App\Models\TableType;
 use App\Models\Zone;
 use App\Models\ZoneStationAssignment;
 use App\Services\RestaurantContext;
@@ -38,11 +39,23 @@ class RestaurantSeeder extends Seeder
         // on top-level entities (zones, stations, tables, menu, etc.)
         app(RestaurantContext::class)->set($restaurant->id);
 
+        // Zones are now "floors" — they only decide kitchen/bar routing.
         $zones = collect([
-            ['name' => 'Indoor', 'description' => 'Area utama restoran', 'color_hex' => '#2563EB', 'sort_order' => 1],
-            ['name' => 'Outdoor', 'description' => 'Area luar ruangan', 'color_hex' => '#16A34A', 'sort_order' => 2],
-            ['name' => 'VIP', 'description' => 'Area reservasi VIP', 'color_hex' => '#D97706', 'sort_order' => 3],
+            ['name' => 'Lantai 1 (Depan)', 'description' => 'Lantai utama dekat pintu masuk', 'color_hex' => '#64748B', 'sort_order' => 1],
+            ['name' => 'Lantai 2 (Smoking)', 'description' => 'Lantai dua, area merokok', 'color_hex' => '#64748B', 'sort_order' => 2],
+            ['name' => 'Rooftop', 'description' => 'Area rooftop terbuka', 'color_hex' => '#64748B', 'sort_order' => 3],
         ])->map(fn (array $zone) => Zone::query()->updateOrCreate(['name' => $zone['name'], 'restaurant_id' => $restaurant->id], $zone));
+
+        // Table types carry the VIP/Indoor/Outdoor distinction via color (shown as a legend).
+        $tableTypes = collect([
+            ['name' => 'Indoor', 'color_hex' => '#2563EB', 'sort_order' => 1],
+            ['name' => 'Outdoor', 'color_hex' => '#16A34A', 'sort_order' => 2],
+            ['name' => 'VIP', 'color_hex' => '#D97706', 'sort_order' => 3],
+        ])->map(fn (array $type) => TableType::query()->updateOrCreate(['name' => $type['name'], 'restaurant_id' => $restaurant->id], $type));
+
+        $indoor = $tableTypes[0];
+        $outdoor = $tableTypes[1];
+        $vip = $tableTypes[2];
 
         $kitchens = collect(['Kitchen 1', 'Kitchen 2'])
             ->map(fn (string $name) => KitchenStation::query()->updateOrCreate(['name' => $name, 'restaurant_id' => $restaurant->id], ['status' => 'active']));
@@ -64,14 +77,31 @@ class RestaurantSeeder extends Seeder
 
         for ($number = 1; $number <= 30; $number++) {
             $zone = $zones[intdiv($number - 1, 10)];
+            $indexInZone = ($number - 1) % 10;
+
+            // Per floor: 6 Indoor, 2 Outdoor, 2 VIP.
+            $type = match (true) {
+                $indexInZone < 6 => $indoor,
+                $indexInZone < 8 => $outdoor,
+                default => $vip,
+            };
+            $isVip = $type->is($vip);
+
+            // Lay each floor out as 2 rows of 5.
+            $col = $indexInZone % 5;
+            $row = intdiv($indexInZone, 5);
 
             Table::query()->updateOrCreate(
                 ['name' => 'Meja '.$number, 'restaurant_id' => $restaurant->id],
                 [
-                    'capacity' => $number > 20 ? 6 : 4,
+                    'capacity' => $isVip ? 6 : 4,
                     'zone_id' => $zone->id,
-                    'position_x' => (($number - 1) % 10) * 120,
-                    'position_y' => intdiv($number - 1, 10) * 120,
+                    'table_type_id' => $type->id,
+                    'position_x' => 40 + $col * 150,
+                    'position_y' => 40 + $row * 140,
+                    'shape' => $isVip ? 'round' : 'square',
+                    'width' => $isVip ? 96 : 96,
+                    'height' => $isVip ? 96 : 64,
                     'status' => 'available',
                     'self_order_enabled' => true,
                 ],

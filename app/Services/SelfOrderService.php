@@ -10,11 +10,11 @@ use App\Models\SelfOrder;
 use App\Models\Table;
 use App\Models\TableQrcode;
 use App\Models\User;
+use App\Models\XenditPayment;
 use App\Models\ZoneStationAssignment;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
-use App\Services\OrderRoutingService;
 
 class SelfOrderService
 {
@@ -73,7 +73,7 @@ class SelfOrderService
     }
 
     /**
-     * @return array{self_order: SelfOrder, order: Order, payment: \App\Models\XenditPayment, response: array<string, mixed>}
+     * @return array{self_order: SelfOrder, order: Order, payment: XenditPayment, response: array<string, mixed>}
      *
      * @throws RequestException
      */
@@ -93,6 +93,35 @@ class SelfOrderService
                 'order' => $order->fresh(),
                 'payment' => $paymentResult['payment'],
                 'response' => $paymentResult['response'],
+            ];
+        });
+    }
+
+    /**
+     * Create a self-order paid via a Xendit hosted Invoice (all online methods).
+     *
+     * @return array{self_order: SelfOrder, order: Order, payment: XenditPayment, invoice_url: string}
+     *
+     * @throws RequestException
+     */
+    public function submitOnline(TableQrcode $qrCode, array $validated, PaymentService $paymentService, \Closure $successUrlResolver): array
+    {
+        return DB::transaction(function () use ($qrCode, $validated, $paymentService, $successUrlResolver): array {
+            $selfOrder = $this->submit($qrCode, array_merge($validated, ['payment_preference' => 'online']));
+            $order = $this->convertToOrder($selfOrder, null, false);
+            $paymentResult = $paymentService->createInvoicePayment(
+                order: $order->fresh('items'),
+                successRedirectUrl: $successUrlResolver($selfOrder),
+                payerEmail: $validated['customer_email'] ?? null,
+                cashier: null,
+                notes: 'Self-order Online',
+            );
+
+            return [
+                'self_order' => $selfOrder->fresh(['table.zone:id,name,color_hex', 'items.menuItem:id,name,price,print_to']),
+                'order' => $order->fresh(),
+                'payment' => $paymentResult['payment'],
+                'invoice_url' => $paymentResult['invoice_url'],
             ];
         });
     }

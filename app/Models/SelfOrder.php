@@ -21,6 +21,7 @@ class SelfOrder extends Model
             'approved_at' => 'datetime',
             'rejected_at' => 'datetime',
             'receipt_emailed_at' => 'datetime',
+            'receipt_printed_at' => 'datetime',
         ];
     }
 

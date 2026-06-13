@@ -28,6 +28,7 @@ Route::get('s/{qr_token}/menu', [SelfOrderController::class, 'menu'])->name('sel
 Route::post('s/{qr_token}/orders', [SelfOrderController::class, 'checkout'])->name('self-order.checkout');
 Route::get('s/{qr_token}/status/{selfOrder}', [SelfOrderController::class, 'status'])->name('self-order.status');
 Route::post('s/{qr_token}/status/{selfOrder}/payments/{payment}/simulate', [SelfOrderController::class, 'simulatePayment'])->name('self-order.payment.simulate');
+Route::post('s/{qr_token}/status/{selfOrder}/refresh', [SelfOrderController::class, 'refreshPayment'])->name('self-order.payment.refresh');
 
 // ─── Restaurant Selection (auth but no restaurant required) ──
 Route::middleware(['auth'])->group(function () {
@@ -63,6 +64,7 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::get('pos/orders/{order}/station-ticket', [OrderController::class, 'stationTicket'])->name('pos.orders.station-ticket');
         Route::post('pos/self-orders/{selfOrder}/approve', [OrderController::class, 'approveSelfOrder'])->name('pos.self-orders.approve');
         Route::post('pos/self-orders/{selfOrder}/reject', [OrderController::class, 'rejectSelfOrder'])->name('pos.self-orders.reject');
+        Route::post('pos/self-orders/{selfOrder}/receipt-printed', [OrderController::class, 'markSelfOrderReceiptPrinted'])->name('pos.self-orders.receipt-printed');
     });
 
     Route::middleware(['permission:pos.create', 'permission:pos.checkout', 'active.shift'])->group(function () {

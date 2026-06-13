@@ -82,9 +82,10 @@ class OrderController extends Controller
                     'order.transaction:id,order_id,payment_method,amount_paid,status,paid_at',
                 ])
                 ->where('status', 'converted_to_order')
-                ->where('payment_preference', 'qris')
+                ->whereIn('payment_preference', ['qris', 'online'])
+                ->whereNull('receipt_printed_at')
                 ->whereHas('order.transaction', fn ($query) => $query
-                    ->where('payment_method', 'qris')
+                    ->whereIn('payment_method', ['qris', 'xendit'])
                     ->where('status', 'paid'))
                 ->latest()
                 ->limit(20)
@@ -104,6 +105,15 @@ class OrderController extends Controller
             403
         );
         abort_unless($transaction->status === 'paid', 404);
+
+        // Printing the receipt for a paid self-order clears it from the POS
+        // "QRIS lunas, cetak struk" notification (unless explicitly reprinting).
+        if ($transaction->order?->order_type === 'self_order' && ! request()->boolean('reprint')) {
+            SelfOrder::query()
+                ->where('order_id', $transaction->order_id)
+                ->whereNull('receipt_printed_at')
+                ->update(['receipt_printed_at' => now()]);
+        }
 
         $transaction->load([
             'cashier:id,name',
@@ -500,6 +510,19 @@ class OrderController extends Controller
         }
 
         return back()->with('success', 'Self-order berhasil ditolak.');
+    }
+
+    /**
+     * Mark a paid QRIS self-order's receipt as printed so it leaves the
+     * "QRIS lunas, cetak struk" notification list.
+     */
+    public function markSelfOrderReceiptPrinted(SelfOrder $selfOrder): RedirectResponse
+    {
+        if (! $selfOrder->receipt_printed_at) {
+            $selfOrder->update(['receipt_printed_at' => now()]);
+        }
+
+        return back()->with('success', 'Struk ditandai sudah dicetak.');
     }
 
     private function createOrder(StoreOrderRequest $request, array $validated): Order

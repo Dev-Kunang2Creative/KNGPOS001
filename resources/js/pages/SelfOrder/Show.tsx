@@ -46,14 +46,14 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
     const setView = (newView: ViewState) => {
         router.visit(`/s/${qrToken}?view=${newView}${currentMethod ? `&method=${currentMethod}` : ''}`, {
             preserveState: true,
-            preserveScroll: true
+            preserveScroll: true,
         });
     };
 
     const handleMethodChange = (newMethod: 'open' | 'close') => {
         router.visit(`/s/${qrToken}?view=menu&method=${newMethod}`, {
             preserveState: true,
-            preserveScroll: true
+            preserveScroll: true,
         });
     };
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -102,7 +102,7 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
         setOrderNotes(notes);
     };
 
-    const handlePay = (paymentMethod: 'qris' | 'cashier') => {
+    const handlePay = (paymentMethod: 'qris' | 'cashier' | 'online') => {
         setIsProcessing(true);
         router.post(
             `/s/${qrToken}/orders`,
@@ -184,9 +184,7 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
                 />
             )}
 
-            {currentView === 'orders' && (
-                <OrderHistoryView qrToken={qrToken} onBack={() => setView('menu')} />
-            )}
+            {currentView === 'orders' && <OrderHistoryView qrToken={qrToken} onBack={() => setView('menu')} />}
 
             {(currentView === 'menu' || currentView === 'cart' || currentView === 'orders') && (
                 <BottomNav

@@ -16,7 +16,7 @@ class CheckoutRequest extends FormRequest
         return [
             'customer_name' => ['required', 'string', 'max:100'],
             'customer_email' => ['required', 'email', 'max:255'],
-            'payment_preference' => ['required', 'in:qris,cashier'],
+            'payment_preference' => ['required', 'in:qris,cashier,online'],
             'bill_type' => ['required', 'in:open,close'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'items' => ['required', 'array', 'min:1'],
