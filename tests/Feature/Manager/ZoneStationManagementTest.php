@@ -4,16 +4,16 @@ namespace Tests\Feature\Manager;
 
 use App\Models\BarStation;
 use App\Models\KitchenStation;
-use App\Models\User;
+use App\Models\Table;
 use App\Models\Zone;
 use App\Models\ZoneStationAssignment;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Tests\Concerns\InteractsWithRestaurant;
 use Tests\TestCase;
 
 class ZoneStationManagementTest extends TestCase
 {
-    use RefreshDatabase;
+    use InteractsWithRestaurant, RefreshDatabase;
 
     protected function setUp(): void
     {
@@ -22,18 +22,9 @@ class ZoneStationManagementTest extends TestCase
         $this->withoutVite();
     }
 
-    private function manager(): User
-    {
-        Permission::query()->firstOrCreate(['name' => 'zones.manage', 'guard_name' => 'web']);
-
-        $user = User::factory()->create(['role' => 'manager']);
-        $user->givePermissionTo('zones.manage');
-
-        return $user;
-    }
-
     public function test_manager_can_view_zone_station_management(): void
     {
+        $restaurant = $this->activeRestaurant();
         $zone = Zone::query()->create(['name' => 'Indoor', 'color_hex' => '#2563EB']);
         $kitchen = KitchenStation::query()->create(['name' => 'Kitchen 1']);
         $bar = BarStation::query()->create(['name' => 'Bar 1']);
@@ -44,7 +35,10 @@ class ZoneStationManagementTest extends TestCase
             'bar_station_id' => $bar->id,
         ]);
 
-        $this->actingAs($this->manager())
+        $user = $this->managerFor($restaurant, ['zones.manage']);
+
+        $this->actingAs($user)
+            ->withSession(['active_restaurant_id' => $restaurant->id])
             ->get('/zones')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
@@ -55,11 +49,14 @@ class ZoneStationManagementTest extends TestCase
 
     public function test_assignment_update_creates_audit_log(): void
     {
+        $restaurant = $this->activeRestaurant();
         $zone = Zone::query()->create(['name' => 'Indoor', 'color_hex' => '#2563EB']);
         $kitchen = KitchenStation::query()->create(['name' => 'Kitchen 1']);
         $bar = BarStation::query()->create(['name' => 'Bar 1']);
+        $user = $this->managerFor($restaurant, ['zones.manage']);
 
-        $this->actingAs($this->manager())
+        $this->actingAs($user)
+            ->withSession(['active_restaurant_id' => $restaurant->id])
             ->put("/zones/{$zone->id}/assignment", [
                 'kitchen_station_id' => $kitchen->id,
                 'bar_station_id' => $bar->id,
@@ -81,11 +78,36 @@ class ZoneStationManagementTest extends TestCase
 
     public function test_unassigned_zone_is_reported_before_pos_phase(): void
     {
+        $restaurant = $this->activeRestaurant();
         Zone::query()->create(['name' => 'Rooftop', 'color_hex' => '#0F766E']);
+        $user = $this->managerFor($restaurant, ['zones.manage']);
 
-        $this->actingAs($this->manager())
+        $this->actingAs($user)
+            ->withSession(['active_restaurant_id' => $restaurant->id])
             ->get('/zones')
             ->assertOk()
             ->assertInertia(fn ($page) => $page->where('allZonesAssigned', false));
+    }
+
+    public function test_index_payload_includes_table_shape_and_size(): void
+    {
+        $restaurant = $this->activeRestaurant();
+        $zone = Zone::query()->create(['name' => 'Indoor', 'color_hex' => '#2563EB']);
+        Table::query()->create(['name' => 'A1', 'capacity' => 4, 'zone_id' => $zone->id]);
+        $user = $this->managerFor($restaurant, ['zones.manage']);
+
+        $this->actingAs($user)
+            ->withSession(['active_restaurant_id' => $restaurant->id])
+            ->get('/zones')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Zones/Index')
+                ->has('tables.0', fn ($table) => $table
+                    ->where('shape', 'square')
+                    ->where('width', 96)
+                    ->where('height', 64)
+                    ->etc()
+                )
+            );
     }
 }

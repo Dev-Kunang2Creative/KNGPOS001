@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Bar\BarDisplayController;
 use App\Http\Controllers\Cashier\ShiftController;
+use App\Http\Controllers\Kitchen\KitchenDisplayController;
 use App\Http\Controllers\Manager\AuditLogController;
 use App\Http\Controllers\Manager\DashboardController;
 use App\Http\Controllers\Manager\MenuController;
@@ -13,8 +15,8 @@ use App\Http\Controllers\Restaurant\RestaurantController;
 use App\Http\Controllers\Restaurant\RestaurantStaffController;
 use App\Http\Controllers\SelfOrderController;
 use App\Http\Controllers\Settings\SystemSettingsController;
+use App\Http\Controllers\Waiter\WaiterOrderController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::get('/', function () {
     return redirect()->route('login');
@@ -78,26 +80,27 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
 
     // Kitchen / Bar / Waiter
     Route::middleware(['permission:kitchen.view'])->group(function () {
-        Route::get('kitchen', [App\Http\Controllers\Kitchen\KitchenDisplayController::class, 'index'])->name('kitchen.index');
+        Route::get('kitchen', [KitchenDisplayController::class, 'index'])->name('kitchen.index');
     });
 
     Route::middleware(['permission:bar.view'])->group(function () {
-        Route::get('bar', [App\Http\Controllers\Bar\BarDisplayController::class, 'index'])->name('bar.index');
+        Route::get('bar', [BarDisplayController::class, 'index'])->name('bar.index');
     });
 
     Route::middleware(['permission:waiter.view'])->group(function () {
-        Route::get('orders', [App\Http\Controllers\Waiter\WaiterOrderController::class, 'index'])->name('waiter.orders.index');
+        Route::get('orders', [WaiterOrderController::class, 'index'])->name('waiter.orders.index');
     });
 
     Route::middleware(['permission:waiter.update'])->group(function () {
-        Route::post('waiter/kitchen-orders/{kitchenOrder}/deliver', [App\Http\Controllers\Waiter\WaiterOrderController::class, 'deliverKitchenOrder'])->name('waiter.kitchen-orders.deliver');
-        Route::post('waiter/bar-orders/{barOrder}/deliver', [App\Http\Controllers\Waiter\WaiterOrderController::class, 'deliverBarOrder'])->name('waiter.bar-orders.deliver');
-        Route::patch('waiter/tables/{table}/status', [App\Http\Controllers\Waiter\WaiterOrderController::class, 'toggleTableStatus'])->name('waiter.tables.status');
+        Route::post('waiter/kitchen-orders/{kitchenOrder}/deliver', [WaiterOrderController::class, 'deliverKitchenOrder'])->name('waiter.kitchen-orders.deliver');
+        Route::post('waiter/bar-orders/{barOrder}/deliver', [WaiterOrderController::class, 'deliverBarOrder'])->name('waiter.bar-orders.deliver');
+        Route::patch('waiter/tables/{table}/status', [WaiterOrderController::class, 'toggleTableStatus'])->name('waiter.tables.status');
     });
 
     // Zone & Station Management
     Route::middleware(['permission:zones.manage'])->group(function () {
         Route::get('zones', [ZoneStationController::class, 'index'])->name('zones.index');
+        Route::patch('zones/layout', [ZoneStationController::class, 'saveLayout'])->name('zones.layout.save');
         Route::get('zones/create', [ZoneStationController::class, 'create'])->name('zones.create');
         Route::get('zones/{zone}/edit', [ZoneStationController::class, 'edit'])->name('zones.edit');
         Route::post('zones', [ZoneStationController::class, 'storeZone'])->name('zones.store');

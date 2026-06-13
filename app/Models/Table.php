@@ -18,6 +18,10 @@ class Table extends Model
     {
         return [
             'self_order_enabled' => 'boolean',
+            'position_x' => 'integer',
+            'position_y' => 'integer',
+            'width' => 'integer',
+            'height' => 'integer',
         ];
     }
 

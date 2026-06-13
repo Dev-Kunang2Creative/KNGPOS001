@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Manager;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Manager\SaveTableLayoutRequest;
 use App\Http\Requests\Manager\StoreStationRequest;
 use App\Http\Requests\Manager\StoreZoneRequest;
 use App\Http\Requests\Manager\UpdateZoneRequest;
@@ -13,14 +14,15 @@ use App\Models\BarOrder;
 use App\Models\BarStation;
 use App\Models\KitchenOrder;
 use App\Models\KitchenStation;
-use App\Models\RestaurantUser;
 use App\Models\Table;
 use App\Models\User;
 use App\Models\WaiterZoneAssignment;
 use App\Models\Zone;
 use App\Models\ZoneStationAssignment;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -58,6 +60,36 @@ class ZoneStationController extends Controller
         ]);
     }
 
+    /**
+     * Persist drag/resize positions for multiple tables at once.
+     *
+     * Ownership is enforced by the scoped re-fetch: the BelongsToRestaurant
+     * global scope restricts the query to the active restaurant, so any id
+     * belonging to another restaurant is simply skipped.
+     */
+    public function saveLayout(SaveTableLayoutRequest $request): JsonResponse
+    {
+        $payload = collect($request->validated('tables'))->keyBy('id');
+
+        $tables = Table::query()->whereIn('id', $payload->keys())->get();
+
+        DB::transaction(function () use ($tables, $payload): void {
+            foreach ($tables as $table) {
+                $data = $payload->get($table->id);
+
+                $table->update([
+                    'position_x' => $data['position_x'],
+                    'position_y' => $data['position_y'],
+                    'width' => $data['width'],
+                    'height' => $data['height'],
+                    'shape' => $data['shape'],
+                ]);
+            }
+        });
+
+        return response()->json(['saved' => $tables->pluck('id')]);
+    }
+
     public function create(): Response
     {
         return Inertia::render('Zones/Create');
@@ -66,6 +98,7 @@ class ZoneStationController extends Controller
     public function edit(Zone $zone): Response
     {
         $zone->load(['assignment.kitchenStation', 'assignment.barStation', 'waiters:id,name,email']);
+
         return Inertia::render('Zones/Edit', [
             'zone' => $zone,
             'kitchenStations' => KitchenStation::query()->where('status', 'active')->orderBy('name')->get(),
