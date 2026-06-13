@@ -98,6 +98,8 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     // Zone & Station Management
     Route::middleware(['permission:zones.manage'])->group(function () {
         Route::get('zones', [ZoneStationController::class, 'index'])->name('zones.index');
+        Route::get('zones/create', [ZoneStationController::class, 'create'])->name('zones.create');
+        Route::get('zones/{zone}/edit', [ZoneStationController::class, 'edit'])->name('zones.edit');
         Route::post('zones', [ZoneStationController::class, 'storeZone'])->name('zones.store');
         Route::put('zones/{zone}', [ZoneStationController::class, 'updateZone'])->name('zones.update');
         Route::delete('zones/{zone}', [ZoneStationController::class, 'destroyZone'])->name('zones.destroy');
@@ -105,10 +107,14 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::post('zones/{zone}/waiters', [ZoneStationController::class, 'assignWaiter'])->name('zones.waiters.store');
         Route::delete('zones/{zone}/waiters/{user}', [ZoneStationController::class, 'unassignWaiter'])->name('zones.waiters.destroy');
 
+        Route::get('stations/kitchen/create', [ZoneStationController::class, 'createKitchenStation'])->name('stations.kitchen.create');
         Route::post('stations/kitchen', [ZoneStationController::class, 'storeKitchenStation'])->name('stations.kitchen.store');
+        Route::get('stations/kitchen/{station}/edit', [ZoneStationController::class, 'editKitchenStation'])->name('stations.kitchen.edit');
         Route::put('stations/kitchen/{station}', [ZoneStationController::class, 'updateKitchenStation'])->name('stations.kitchen.update');
         Route::delete('stations/kitchen/{station}', [ZoneStationController::class, 'destroyKitchenStation'])->name('stations.kitchen.destroy');
+        Route::get('stations/bar/create', [ZoneStationController::class, 'createBarStation'])->name('stations.bar.create');
         Route::post('stations/bar', [ZoneStationController::class, 'storeBarStation'])->name('stations.bar.store');
+        Route::get('stations/bar/{station}/edit', [ZoneStationController::class, 'editBarStation'])->name('stations.bar.edit');
         Route::put('stations/bar/{station}', [ZoneStationController::class, 'updateBarStation'])->name('stations.bar.update');
         Route::delete('stations/bar/{station}', [ZoneStationController::class, 'destroyBarStation'])->name('stations.bar.destroy');
     });
@@ -154,12 +160,13 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
 
     // Settings
     Route::middleware(['permission:settings.view'])->group(function () {
-        Route::get('settings/tables', [TableQrController::class, 'index'])->name('settings.tables.index');
         Route::get('settings/system', [SystemSettingsController::class, 'index'])->name('settings.system.index');
     });
 
     Route::middleware(['permission:settings.manage'])->group(function () {
+        Route::get('settings/tables/create', [TableQrController::class, 'create'])->name('settings.tables.create');
         Route::post('settings/tables', [TableQrController::class, 'store'])->name('settings.tables.store');
+        Route::get('settings/tables/{table}/edit', [TableQrController::class, 'edit'])->name('settings.tables.edit');
         Route::put('settings/tables/{table}', [TableQrController::class, 'update'])->name('settings.tables.update');
         Route::delete('settings/tables/{table}', [TableQrController::class, 'destroy'])->name('settings.tables.destroy');
         Route::post('settings/tables/{table}/qr', [TableQrController::class, 'regenerateQr'])->name('settings.tables.qr');

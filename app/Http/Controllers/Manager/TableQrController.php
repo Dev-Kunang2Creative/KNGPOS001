@@ -15,18 +15,19 @@ use Inertia\Response;
 
 class TableQrController extends Controller
 {
-    public function index(): Response
+    public function create(): Response
     {
-        return Inertia::render('settings/Tables/Index', [
-            'tables' => Table::query()
-                ->with(['zone:id,name,color_hex', 'zone.assignment', 'activeQrCode'])
-                ->orderBy('name')
-                ->get(),
-            'zones' => Zone::query()
-                ->with('assignment')
-                ->where('is_active', true)
-                ->orderBy('sort_order')
-                ->get(),
+        return Inertia::render('settings/Tables/Create', [
+            'zones' => Zone::query()->where('is_active', true)->orderBy('sort_order')->get(),
+        ]);
+    }
+
+    public function edit(Table $table): Response
+    {
+        $table->load('activeQrCode');
+        return Inertia::render('settings/Tables/Edit', [
+            'table' => $table,
+            'zones' => Zone::query()->where('is_active', true)->orderBy('sort_order')->get(),
         ]);
     }
 
@@ -35,14 +36,14 @@ class TableQrController extends Controller
         $table = Table::query()->create($request->validated());
         $this->generateQrCode($table);
 
-        return back()->with('success', 'Meja berhasil dibuat.');
+        return redirect()->route('zones.index')->with('success', 'Meja berhasil dibuat.');
     }
 
     public function update(TableRequest $request, Table $table): RedirectResponse
     {
         $table->update($request->validated());
 
-        return back()->with('success', 'Meja berhasil diperbarui.');
+        return redirect()->route('zones.index')->with('success', 'Meja berhasil diperbarui.');
     }
 
     public function destroy(Table $table): RedirectResponse

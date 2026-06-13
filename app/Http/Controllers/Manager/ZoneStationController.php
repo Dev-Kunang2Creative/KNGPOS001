@@ -14,6 +14,7 @@ use App\Models\BarStation;
 use App\Models\KitchenOrder;
 use App\Models\KitchenStation;
 use App\Models\RestaurantUser;
+use App\Models\Table;
 use App\Models\User;
 use App\Models\WaiterZoneAssignment;
 use App\Models\Zone;
@@ -50,6 +51,32 @@ class ZoneStationController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'email']),
             'allZonesAssigned' => ! Zone::query()->whereDoesntHave('assignment')->exists(),
+            'tables' => Table::query()
+                ->with(['zone:id,name,color_hex', 'zone.assignment', 'activeQrCode'])
+                ->orderBy('name')
+                ->get(),
+        ]);
+    }
+
+    public function create(): Response
+    {
+        return Inertia::render('Zones/Create');
+    }
+
+    public function edit(Zone $zone): Response
+    {
+        $zone->load(['assignment.kitchenStation', 'assignment.barStation', 'waiters:id,name,email']);
+        return Inertia::render('Zones/Edit', [
+            'zone' => $zone,
+            'kitchenStations' => KitchenStation::query()->where('status', 'active')->orderBy('name')->get(),
+            'barStations' => BarStation::query()->where('status', 'active')->orderBy('name')->get(),
+            'waiters' => User::query()
+                ->whereHas('restaurantUsers', fn ($q) => $q
+                    ->where('restaurant_id', session('active_restaurant_id'))
+                    ->where('role', 'waiter'))
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'email']),
         ]);
     }
 
@@ -57,14 +84,14 @@ class ZoneStationController extends Controller
     {
         Zone::query()->create($request->validated());
 
-        return back()->with('success', 'Zona berhasil dibuat.');
+        return redirect()->route('zones.index')->with('success', 'Zona berhasil dibuat.');
     }
 
     public function updateZone(UpdateZoneRequest $request, Zone $zone): RedirectResponse
     {
         $zone->update($request->validated());
 
-        return back()->with('success', 'Zona berhasil diperbarui.');
+        return redirect()->route('zones.index')->with('success', 'Zona berhasil diperbarui.');
     }
 
     public function destroyZone(Zone $zone): RedirectResponse
@@ -122,18 +149,28 @@ class ZoneStationController extends Controller
         return back()->with('success', 'Waiter berhasil dilepas dari zona.');
     }
 
+    public function createKitchenStation(): Response
+    {
+        return Inertia::render('Zones/Stations/Create', ['type' => 'kitchen']);
+    }
+
+    public function editKitchenStation(KitchenStation $station): Response
+    {
+        return Inertia::render('Zones/Stations/Edit', ['type' => 'kitchen', 'station' => $station]);
+    }
+
     public function storeKitchenStation(StoreStationRequest $request): RedirectResponse
     {
         KitchenStation::query()->create($request->validated());
 
-        return back()->with('success', 'Kitchen station berhasil dibuat.');
+        return redirect()->route('zones.index')->with('success', 'Kitchen station berhasil dibuat.');
     }
 
     public function updateKitchenStation(StoreStationRequest $request, KitchenStation $station): RedirectResponse
     {
         $station->update($request->validated());
 
-        return back()->with('success', 'Kitchen station berhasil diperbarui.');
+        return redirect()->route('zones.index')->with('success', 'Kitchen station berhasil diperbarui.');
     }
 
     public function destroyKitchenStation(KitchenStation $station): RedirectResponse
@@ -147,18 +184,28 @@ class ZoneStationController extends Controller
         return back()->with('success', 'Kitchen station berhasil dihapus.');
     }
 
+    public function createBarStation(): Response
+    {
+        return Inertia::render('Zones/Stations/Create', ['type' => 'bar']);
+    }
+
+    public function editBarStation(BarStation $station): Response
+    {
+        return Inertia::render('Zones/Stations/Edit', ['type' => 'bar', 'station' => $station]);
+    }
+
     public function storeBarStation(StoreStationRequest $request): RedirectResponse
     {
         BarStation::query()->create($request->validated());
 
-        return back()->with('success', 'Bar station berhasil dibuat.');
+        return redirect()->route('zones.index')->with('success', 'Bar station berhasil dibuat.');
     }
 
     public function updateBarStation(StoreStationRequest $request, BarStation $station): RedirectResponse
     {
         $station->update($request->validated());
 
-        return back()->with('success', 'Bar station berhasil diperbarui.');
+        return redirect()->route('zones.index')->with('success', 'Bar station berhasil diperbarui.');
     }
 
     public function destroyBarStation(BarStation $station): RedirectResponse
