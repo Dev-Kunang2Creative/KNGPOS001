@@ -30,20 +30,28 @@ class RestaurantStaffController extends Controller
                 $query->withoutGlobalScopes()
                     ->select(['id', 'name', 'email', 'kitchen_station_id', 'bar_station_id', 'is_active']);
             }])
-            ->get()
-            ->map(function (RestaurantUser $ru) {
-                return [
-                    'id' => $ru->user->id,
-                    'name' => $ru->user->name,
-                    'email' => $ru->user->email,
-                    'role' => $ru->role,
-                    'kitchen_station_id' => $ru->user->kitchen_station_id,
-                    'bar_station_id' => $ru->user->bar_station_id,
-                    'is_active' => $ru->user->is_active,
-                    'is_primary' => $ru->is_primary,
-                    'restaurant_user_id' => $ru->id,
-                ];
-            });
+            ->get();
+
+        $zoneIdsByUser = WaiterZoneAssignment::query()
+            ->whereIn('user_id', $staff->pluck('user.id'))
+            ->get(['user_id', 'zone_id'])
+            ->groupBy('user_id')
+            ->map(fn ($rows) => $rows->pluck('zone_id')->values());
+
+        $staff = $staff->map(function (RestaurantUser $ru) use ($zoneIdsByUser) {
+            return [
+                'id' => $ru->user->id,
+                'name' => $ru->user->name,
+                'email' => $ru->user->email,
+                'role' => $ru->role,
+                'kitchen_station_id' => $ru->user->kitchen_station_id,
+                'bar_station_id' => $ru->user->bar_station_id,
+                'is_active' => $ru->user->is_active,
+                'is_primary' => $ru->is_primary,
+                'restaurant_user_id' => $ru->id,
+                'zone_ids' => $zoneIdsByUser->get($ru->user->id, collect())->all(),
+            ];
+        });
 
         return Inertia::render('Users/Index', [
             'users' => $staff,

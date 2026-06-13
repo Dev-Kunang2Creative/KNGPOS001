@@ -71,4 +71,25 @@ class TableQrManagementTest extends TestCase
         $this->assertDatabaseHas('table_qrcodes', ['id' => $old->id, 'is_active' => false]);
         $this->assertSame(1, $table->activeQrCode()->count());
     }
+
+    public function test_generate_all_qr_creates_tokens_for_tables_without_one(): void
+    {
+        $restaurant = $this->activeRestaurant();
+        $zone = Zone::query()->create(['name' => 'Indoor', 'color_hex' => '#2563EB']);
+        $withQr = Table::query()->create(['name' => 'A1', 'capacity' => 4, 'zone_id' => $zone->id]);
+        $withQr->activeQrCode()->create(['qr_token' => str_repeat('a', 48), 'is_active' => true]);
+        $withoutQr1 = Table::query()->create(['name' => 'A2', 'capacity' => 4, 'zone_id' => $zone->id]);
+        $withoutQr2 = Table::query()->create(['name' => 'A3', 'capacity' => 4, 'zone_id' => $zone->id]);
+        $user = $this->managerFor($restaurant, ['settings.view', 'settings.manage']);
+
+        $this->actingAs($user)
+            ->withSession(['active_restaurant_id' => $restaurant->id])
+            ->post('/settings/tables/generate-all-qr')
+            ->assertRedirect();
+
+        $this->assertSame(1, $withoutQr1->activeQrCode()->count());
+        $this->assertSame(1, $withoutQr2->activeQrCode()->count());
+        // The table that already had a QR keeps exactly one active token.
+        $this->assertSame(1, $withQr->activeQrCode()->count());
+    }
 }

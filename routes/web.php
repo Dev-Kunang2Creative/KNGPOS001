@@ -178,6 +178,7 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::put('settings/tables/{table}', [TableQrController::class, 'update'])->name('settings.tables.update');
         Route::delete('settings/tables/{table}', [TableQrController::class, 'destroy'])->name('settings.tables.destroy');
         Route::post('settings/tables/{table}/qr', [TableQrController::class, 'regenerateQr'])->name('settings.tables.qr');
+        Route::post('settings/tables/generate-all-qr', [TableQrController::class, 'generateAllQr'])->name('settings.tables.qr.generate-all');
         Route::put('settings/system', [SystemSettingsController::class, 'update'])->name('settings.system.update');
         Route::post('settings/printers', [SystemSettingsController::class, 'storePrinter'])->name('settings.printers.store');
         Route::put('settings/printers/{printer}', [SystemSettingsController::class, 'updatePrinter'])->name('settings.printers.update');

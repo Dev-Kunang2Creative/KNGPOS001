@@ -1133,12 +1133,34 @@ function TableTypeManagerDialog({
 function QrCatalog({ tables }: { tables: Table[] }) {
     const { appUrl, restaurant } = usePage().props as unknown as { appUrl: string; restaurant?: { name?: string } };
 
+    const missingQrCount = tables.filter((t) => !t.active_qr_code).length;
+    const tablesWithQr = tables.filter((t) => t.active_qr_code);
+
+    function generateAll() {
+        router.post('/settings/tables/generate-all-qr', {}, { preserveScroll: true });
+    }
+
+    function downloadAll() {
+        // Trigger each poster download sequentially so the browser doesn't drop them.
+        tablesWithQr.forEach((table, index) => {
+            window.setTimeout(() => downloadQRPoster(table.name, restaurant?.name, `qr-cat-${table.id}`), index * 400);
+        });
+    }
+
     return (
         <Card className="rounded-md">
-            <CardHeader>
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                 <CardTitle className="flex items-center gap-2 text-base">
                     <QrCode className="h-5 w-5" /> QR Code Self-Order
                 </CardTitle>
+                <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" onClick={generateAll} disabled={missingQrCount === 0}>
+                        <QrCode className="mr-1 h-4 w-4" /> Generate Semua QR{missingQrCount > 0 ? ` (${missingQrCount})` : ''}
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={downloadAll} disabled={tablesWithQr.length === 0}>
+                        <Download className="mr-1 h-4 w-4" /> Download Semua Poster{tablesWithQr.length > 0 ? ` (${tablesWithQr.length})` : ''}
+                    </Button>
+                </div>
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

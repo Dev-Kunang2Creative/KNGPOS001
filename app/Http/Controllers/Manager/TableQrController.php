@@ -25,6 +25,7 @@ class TableQrController extends Controller
     public function edit(Table $table): Response
     {
         $table->load('activeQrCode');
+
         return Inertia::render('settings/Tables/Edit', [
             'table' => $table,
             'zones' => Zone::query()->where('is_active', true)->orderBy('sort_order')->get(),
@@ -55,6 +56,19 @@ class TableQrController extends Controller
         $table->delete();
 
         return back()->with('success', 'Meja berhasil dihapus.');
+    }
+
+    public function generateAllQr(): RedirectResponse
+    {
+        $tables = Table::query()->whereDoesntHave('activeQrCode')->get();
+
+        foreach ($tables as $table) {
+            $this->generateQrCode($table);
+        }
+
+        return back()->with('success', $tables->isEmpty()
+            ? 'Semua meja sudah punya QR.'
+            : $tables->count().' QR meja berhasil dibuat.');
     }
 
     public function regenerateQr(Table $table): RedirectResponse
