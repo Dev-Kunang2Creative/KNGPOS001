@@ -41,8 +41,15 @@ export default function Create() {
 
     function submit(event: FormEvent) {
         event.preventDefault();
-        form.post('/restaurants');
+        form.post('/restaurants', {
+            forceFormData: true,
+            onError: (errors) => {
+                console.error('Form errors:', errors);
+            },
+        });
     }
+
+    const allErrors = Object.entries(form.errors);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -51,6 +58,17 @@ export default function Create() {
             <main className="grid flex-1 gap-4 p-4 xl:grid-cols-[420px_1fr]">
                 <form onSubmit={submit} className="h-fit rounded-md border p-4">
                     <h1 className="mb-3 text-xl font-semibold">Buat Restoran Baru</h1>
+
+                    {allErrors.length > 0 && (
+                        <div className="mb-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                            <p className="mb-1 font-medium">Terjadi kesalahan:</p>
+                            <ul className="list-inside list-disc space-y-0.5 text-xs">
+                                {allErrors.map(([key, msg]) => (
+                                    <li key={key}>{key}: {msg}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
                     <div className="grid gap-3">
                         {/* Logo */}

@@ -105,47 +105,56 @@ class RestaurantController extends Controller
             'logo' => ['nullable', 'image', 'max:2048'],
         ]);
 
-        $slug = Str::slug($validated['name']);
-        $originalSlug = $slug;
-        $counter = 1;
-        while (Restaurant::withoutGlobalScopes()->where('slug', $slug)->exists()) {
-            $slug = $originalSlug . '-' . $counter++;
+        try {
+            $slug = Str::slug($validated['name']);
+            $originalSlug = $slug;
+            $counter = 1;
+            while (Restaurant::withoutGlobalScopes()->where('slug', $slug)->exists()) {
+                $slug = $originalSlug . '-' . $counter++;
+            }
+
+            $logoPath = null;
+            if ($request->hasFile('logo')) {
+                $logoPath = $request->file('logo')->store('restaurants', 'public');
+            }
+
+            // Use DB::table to completely bypass any Eloquent events/scopes
+            $restaurantId = DB::table('restaurants')->insertGetId([
+                'name' => $validated['name'],
+                'slug' => $slug,
+                'phone' => $validated['phone'] ?? null,
+                'email' => $validated['email'] ?? null,
+                'address' => $validated['address'] ?? null,
+                'tax_percentage' => $validated['tax_percentage'] ?? 0,
+                'tax_is_active' => $request->boolean('tax_is_active'),
+                'service_charge_percentage' => $validated['service_charge_percentage'] ?? 0,
+                'service_charge_is_active' => $request->boolean('service_charge_is_active'),
+                'currency' => $validated['currency'] ?? 'IDR',
+                'receipt_header' => $validated['receipt_header'] ?? null,
+                'receipt_footer' => $validated['receipt_footer'] ?? null,
+                'logo_path' => $logoPath,
+                'status' => 'active',
+                'owner_id' => $request->user()->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // Assign the creator as manager
+            DB::table('restaurant_users')->insert([
+                'restaurant_id' => $restaurantId,
+                'user_id' => $request->user()->id,
+                'role' => 'manager',
+                'is_primary' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            // Auto-switch to the new restaurant
+            return $this->performSwitch($restaurantId)
+                ->with('success', 'Restoran berhasil dibuat.');
+        } catch (\Exception $e) {
+            return back()->withErrors(['name' => 'Gagal membuat restoran: ' . $e->getMessage()]);
         }
-
-        $logoPath = null;
-        if ($request->hasFile('logo')) {
-            $logoPath = $request->file('logo')->store('restaurants', 'public');
-        }
-
-        $restaurant = Restaurant::withoutGlobalScopes()->create([
-            'name' => $validated['name'],
-            'slug' => $slug,
-            'phone' => $validated['phone'] ?? null,
-            'email' => $validated['email'] ?? null,
-            'address' => $validated['address'] ?? null,
-            'tax_percentage' => $validated['tax_percentage'] ?? 0,
-            'tax_is_active' => $request->boolean('tax_is_active'),
-            'service_charge_percentage' => $validated['service_charge_percentage'] ?? 0,
-            'service_charge_is_active' => $request->boolean('service_charge_is_active'),
-            'currency' => $validated['currency'] ?? 'IDR',
-            'receipt_header' => $validated['receipt_header'] ?? null,
-            'receipt_footer' => $validated['receipt_footer'] ?? null,
-            'logo_path' => $logoPath,
-            'status' => 'active',
-            'owner_id' => $request->user()->id,
-        ]);
-
-        // Assign the creator as manager
-        RestaurantUser::query()->create([
-            'restaurant_id' => $restaurant->id,
-            'user_id' => $request->user()->id,
-            'role' => 'manager',
-            'is_primary' => true,
-        ]);
-
-        // Auto-switch to the new restaurant
-        return $this->performSwitch($restaurant->id)
-            ->with('success', 'Restoran berhasil dibuat.');
     }
 
     /**
