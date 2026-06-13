@@ -29,6 +29,9 @@ class SelfOrderController extends Controller
             'qrToken' => $qrToken,
             'table' => $qrCode->table()->with('zone:id,name,color_hex')->first(),
             'categories' => $this->menuCategories(),
+            'restaurant' => [
+                'name' => app(RestaurantContext::class)->restaurant()?->name ?? 'Restoran',
+            ],
         ]);
     }
 
@@ -40,16 +43,27 @@ class SelfOrderController extends Controller
         return ['categories' => $this->menuCategories()];
     }
 
-    public function checkout(CheckoutRequest $request, string $qrToken, SelfOrderService $selfOrderService, PaymentService $paymentService): RedirectResponse
+    public function checkout(CheckoutRequest $request, string $qrToken, SelfOrderService $selfOrderService, PaymentService $paymentService, OrderRoutingService $routingService): RedirectResponse
     {
         $qrCode = $this->activeQrCode($qrToken);
         $this->setRestaurantFromQr($qrCode);
 
         $validated = $request->validated();
+        
+        $billType = $validated['bill_type'] ?? null;
+        if ($billType) {
+            $prefix = $billType === 'open' ? '[Open Bill]' : '[Close Bill]';
+            $validated['notes'] = $validated['notes'] 
+                ? "{$prefix} {$validated['notes']}" 
+                : $prefix;
+        }
 
         try {
             if ($validated['payment_preference'] === 'qris') {
                 $result = $selfOrderService->submitQris($qrCode, $validated, $paymentService);
+                $selfOrder = $result['self_order'];
+            } elseif ($billType === 'open') {
+                $result = $selfOrderService->submitOpenBill($qrCode, $validated, $routingService);
                 $selfOrder = $result['self_order'];
             } else {
                 $selfOrder = $selfOrderService->submit($qrCode, $validated);
@@ -88,6 +102,9 @@ class SelfOrderController extends Controller
                     ->latest()
                     ->first()
                 : null,
+            'restaurant' => [
+                'name' => app(RestaurantContext::class)->restaurant()?->name ?? 'Restoran',
+            ],
         ]);
     }
 

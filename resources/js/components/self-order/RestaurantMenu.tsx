@@ -14,13 +14,14 @@ type Table = { id: number; name: string };
 
 type Props = {
     table: Table;
+    restaurant: { name: string };
     categories: Category[];
     onItemSelect: (item: MenuItem) => void;
     onViewCart: () => void;
     cartItemCount: number;
 };
 
-export default function RestaurantMenu({ table, categories, onItemSelect, onViewCart, cartItemCount }: Props) {
+export default function RestaurantMenu({ table, restaurant, categories, onItemSelect, onViewCart, cartItemCount }: Props) {
     const [timeString, setTimeString] = useState('');
     const [activeCategory, setActiveCategory] = useState<number | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -50,14 +51,14 @@ export default function RestaurantMenu({ table, categories, onItemSelect, onView
 
     return (
         <>
-            <header className="bg-surface text-primary font-headline-md text-headline-md fixed top-0 left-0 right-0 mx-auto max-w-md z-50 flex h-16 w-full items-center justify-between px-4 shadow-[0px_4px_12px_rgba(0,0,0,0.05)]">
+            <header className="bg-surface text-primary font-headline-md text-headline-md fixed top-0 right-0 left-0 z-50 mx-auto flex h-16 w-full max-w-md items-center justify-between px-4 shadow-[0px_4px_12px_rgba(0,0,0,0.05)]">
                 <button
                     aria-label="Menu"
                     className="text-on-surface-variant hover:bg-surface-container-low rounded-full p-2 transition-colors duration-200 active:scale-95"
                 >
                     <span className="material-symbols-outlined">restaurant</span>
                 </button>
-                <div className="text-headline-lg-mobile text-primary flex-1 text-center font-bold">D'Resto</div>
+                <div className="text-headline-lg-mobile text-primary flex-1 text-center font-bold">{restaurant.name}</div>
                 <button
                     aria-label="Search"
                     className="text-on-surface-variant hover:bg-surface-container-low rounded-full p-2 transition-colors duration-200 active:scale-95"

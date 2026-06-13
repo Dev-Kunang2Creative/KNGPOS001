@@ -3,11 +3,11 @@ import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 import BillSelection from '@/components/self-order/BillSelection';
+import BottomNav from '@/components/self-order/BottomNav';
 import CartView from '@/components/self-order/CartView';
 import MenuDetail from '@/components/self-order/MenuDetail';
 import PaymentSelection from '@/components/self-order/PaymentSelection';
 import RestaurantMenu from '@/components/self-order/RestaurantMenu';
-import BottomNav from '@/components/self-order/BottomNav';
 
 type MenuItem = {
     id: number;
@@ -21,11 +21,11 @@ type MenuItem = {
 type Category = { id: number; name: string; description?: string | null; active_items: MenuItem[] };
 type Table = { id: number; name: string; zone?: { name: string; color_hex: string } };
 type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string; image_url?: string | null };
-type Props = { qrToken: string; table: Table; categories: Category[] };
+type Props = { qrToken: string; table: Table; categories: Category[]; restaurant: { name: string } };
 
 type ViewState = 'bill-selection' | 'menu' | 'detail' | 'cart' | 'payment';
 
-export default function SelfOrderShow({ qrToken, table, categories }: Props) {
+export default function SelfOrderShow({ qrToken, table, categories, restaurant }: Props) {
     const { flash } = usePage<{ flash?: { error?: string; success?: string } }>().props;
 
     const [view, setView] = useState<ViewState>('bill-selection');
@@ -37,6 +37,7 @@ export default function SelfOrderShow({ qrToken, table, categories }: Props) {
     const [customerName, setCustomerName] = useState('');
     const [customerEmail, setCustomerEmail] = useState('');
     const [orderNotes, setOrderNotes] = useState('');
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const handleContinueBillSelection = (type: 'open' | 'close') => {
         setBillType(type);
@@ -77,26 +78,38 @@ export default function SelfOrderShow({ qrToken, table, categories }: Props) {
     };
 
     const handlePay = (paymentMethod: 'qris' | 'cashier') => {
+        setIsProcessing(true);
         router.post(
             `/s/${qrToken}/orders`,
             {
                 customer_name: customerName,
                 customer_email: customerEmail,
                 payment_preference: paymentMethod,
+                bill_type: billType,
                 notes: orderNotes,
                 items: cart.map((item) => ({ menu_item_id: item.menu_item_id, quantity: item.quantity, notes: item.notes || undefined })),
             },
             {
                 preserveScroll: true,
                 preserveState: true,
+                onFinish: () => setIsProcessing(false),
+                onError: (errors) => {
+                    const firstError = Object.values(errors)[0];
+                    if (firstError) {
+                        alert(firstError);
+                    }
+                    if (errors.customer_name || errors.customer_email) {
+                        setView('cart');
+                    }
+                },
             },
         );
     };
 
     return (
-        <SelfOrderLayout title={`Self Order - ${table.name}`}>
+        <SelfOrderLayout title={`Self Order - ${restaurant.name} - ${table.name}`}>
             {flash?.error && (
-                <div className="border-error/40 bg-error-container text-on-error-container fixed top-20 left-0 right-0 mx-auto z-[100] w-[90%] max-w-[calc(28rem-2rem)] rounded-md border p-3 text-sm shadow-md">
+                <div className="border-error/40 bg-error-container text-on-error-container fixed top-20 right-0 left-0 z-[100] mx-auto w-[90%] max-w-[calc(28rem-2rem)] rounded-md border p-3 text-sm shadow-md">
                     {flash.error}
                 </div>
             )}
@@ -106,6 +119,7 @@ export default function SelfOrderShow({ qrToken, table, categories }: Props) {
             {view === 'menu' && (
                 <RestaurantMenu
                     table={table}
+                    restaurant={restaurant}
                     categories={categories}
                     onItemSelect={handleItemSelect}
                     onViewCart={() => setView('cart')}
@@ -113,7 +127,9 @@ export default function SelfOrderShow({ qrToken, table, categories }: Props) {
                 />
             )}
 
-            {view === 'detail' && selectedItem && <MenuDetail item={selectedItem} onBack={() => setView('menu')} onAddToCart={handleAddToCart} />}
+            {view === 'detail' && selectedItem && (
+                <MenuDetail item={selectedItem} restaurant={restaurant} onBack={() => setView('menu')} onAddToCart={handleAddToCart} />
+            )}
 
             {view === 'cart' && (
                 <CartView
@@ -131,7 +147,14 @@ export default function SelfOrderShow({ qrToken, table, categories }: Props) {
             )}
 
             {view === 'payment' && billType && (
-                <PaymentSelection table={table} cart={cart} billType={billType} onBack={() => setView('cart')} onPay={handlePay} />
+                <PaymentSelection
+                    isProcessing={isProcessing}
+                    table={table}
+                    cart={cart}
+                    billType={billType}
+                    onBack={() => setView('cart')}
+                    onPay={handlePay}
+                />
             )}
 
             {(view === 'menu' || view === 'cart') && (

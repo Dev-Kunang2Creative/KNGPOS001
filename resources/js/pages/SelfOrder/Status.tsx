@@ -14,9 +14,9 @@ type SelfOrder = {
     items: { id: number; quantity: number; menu_item?: { name: string } }[];
 };
 type Payment = { id: number; external_id: string; status: string; xendit_raw_response?: Record<string, unknown> | null } | null;
-type Props = { qrToken: string; selfOrder: SelfOrder; payment: Payment };
+type Props = { qrToken: string; selfOrder: SelfOrder; payment: Payment; restaurant: { name: string } };
 
-export default function SelfOrderStatus({ qrToken, selfOrder, payment }: Props) {
+export default function SelfOrderStatus({ qrToken, selfOrder, payment, restaurant }: Props) {
     const { flash } = usePage<{ flash?: { error?: string; success?: string } }>().props;
     const qrString = typeof payment?.xendit_raw_response?.qr_string === 'string' ? payment.xendit_raw_response.qr_string : null;
     const isQrisPending =
@@ -57,7 +57,7 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment }: Props) 
     const isRejected = selfOrder.status === 'rejected';
 
     return (
-        <SelfOrderLayout title={`Status Pesanan - ${selfOrder.table?.name}`}>
+        <SelfOrderLayout title={`Status Pesanan - ${restaurant.name} - ${selfOrder.table?.name}`}>
             <header className="bg-surface px-4 fixed top-0 left-0 right-0 mx-auto max-w-md z-50 flex h-16 w-full items-center justify-between shadow-[0px_4px_12px_rgba(0,0,0,0.05)]">
                 <Link
                     href={`/s/${qrToken}`}
@@ -65,7 +65,7 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment }: Props) 
                 >
                     <span className="material-symbols-outlined">arrow_back</span>
                 </Link>
-                <div className="text-headline-lg-mobile text-primary flex-1 text-center font-bold">D'Resto</div>
+                <div className="text-headline-lg-mobile text-primary flex-1 text-center font-bold">{restaurant.name}</div>
                 <div className="w-10"></div>
             </header>
 

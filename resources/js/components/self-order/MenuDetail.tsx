@@ -1,14 +1,23 @@
 import { useState } from 'react';
 
-type MenuItem = { id: number; category_id: number; name: string; description?: string | null; price: string; print_to: string; image_url?: string | null };
+type MenuItem = {
+    id: number;
+    category_id: number;
+    name: string;
+    description?: string | null;
+    price: string;
+    print_to: string;
+    image_url?: string | null;
+};
 
 type Props = {
     item: MenuItem;
+    restaurant: { name: string };
     onBack: () => void;
     onAddToCart: (item: MenuItem, quantity: number, notes: string) => void;
 };
 
-export default function MenuDetail({ item, onBack, onAddToCart }: Props) {
+export default function MenuDetail({ item, restaurant, onBack, onAddToCart }: Props) {
     const [quantity, setQuantity] = useState(1);
     const [notes, setNotes] = useState('');
 
@@ -21,18 +30,18 @@ export default function MenuDetail({ item, onBack, onAddToCart }: Props) {
 
     return (
         <div className="bg-surface text-on-surface font-body-md pt-safe min-h-screen overflow-x-hidden pb-[120px] antialiased md:pb-0">
-            <header className="pt-safe fixed top-0 left-0 right-0 mx-auto max-w-md z-50 w-full transition-all duration-300">
-                <div className="px-4 bg-surface text-primary hidden h-16 w-full items-center justify-between shadow-sm md:flex">
+            <header className="pt-safe fixed top-0 right-0 left-0 z-50 mx-auto w-full max-w-md transition-all duration-300">
+                <div className="bg-surface text-primary hidden h-16 w-full items-center justify-between px-4 shadow-sm md:flex">
                     <button
                         onClick={onBack}
                         className="hover:bg-surface-container-low flex items-center rounded-full p-2 transition-colors active:scale-95"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
-                    <h1 className="text-headline-md text-primary font-bold">D'Resto</h1>
+                    <h1 className="text-headline-md text-primary font-bold">{restaurant.name}</h1>
                     <div className="w-10"></div>
                 </div>
-                <div className="px-4 mt-2 flex h-16 w-full items-center justify-between md:hidden">
+                <div className="mt-2 flex h-16 w-full items-center justify-between px-4 md:hidden">
                     <button
                         onClick={onBack}
                         className="bg-surface/80 text-primary elevation-1 rounded-full p-2 backdrop-blur-md transition-transform active:scale-95"
@@ -52,7 +61,7 @@ export default function MenuDetail({ item, onBack, onAddToCart }: Props) {
                     <div className="from-surface absolute bottom-0 left-0 h-32 w-full bg-gradient-to-t to-transparent md:hidden"></div>
                 </section>
 
-                <section className="px-4 pt-2 md:pt-lg relative z-10 -mt-6 md:mt-0">
+                <section className="md:pt-lg relative z-10 -mt-6 px-4 pt-2 md:mt-0">
                     <div className="mb-2 flex items-start justify-between">
                         <div>
                             <h1 className="text-headline-lg-mobile md:text-headline-lg text-on-surface mb-1">{item.name}</h1>
@@ -71,7 +80,7 @@ export default function MenuDetail({ item, onBack, onAddToCart }: Props) {
                         <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            className="bg-surface-container-lowest border-outline-variant p-4 text-body-md text-on-surface placeholder:text-outline focus:ring-primary focus:border-primary h-24 w-full resize-none rounded-lg border transition-all focus:ring-2"
+                            className="bg-surface-container-lowest border-outline-variant text-body-md text-on-surface placeholder:text-outline focus:ring-primary focus:border-primary h-24 w-full resize-none rounded-lg border p-4 transition-all focus:ring-2"
                             placeholder="Contoh: Tanpa saus, saus dipisah, dll."
                         ></textarea>
                     </div>
@@ -80,11 +89,11 @@ export default function MenuDetail({ item, onBack, onAddToCart }: Props) {
                 </section>
             </main>
 
-            <div className="elevation-2 pb-safe md:mb-xl fixed bottom-0 left-0 right-0 mx-auto max-w-md z-40 w-full md:bg-transparent md:p-0 md:shadow-none">
-                <div className="bg-surface p-4 gap-4 border-outline-variant/30 flex flex-col rounded-t-xl border-t">
+            <div className="elevation-2 pb-safe md:mb-xl fixed right-0 bottom-0 left-0 z-40 mx-auto w-full max-w-md md:bg-transparent md:p-0 md:shadow-none">
+                <div className="bg-surface border-outline-variant/30 flex flex-col gap-4 rounded-t-xl border-t p-4">
                     <div className="flex items-center justify-between">
                         <span className="text-on-surface text-body-md font-bold">Mau berapa?</span>
-                        <div className="gap-4 flex items-center">
+                        <div className="flex items-center gap-4">
                             <button
                                 onClick={() => updateQuantity(-1)}
                                 className="border-outline-variant text-on-surface flex h-8 w-8 items-center justify-center rounded-full border transition-transform active:scale-95"
