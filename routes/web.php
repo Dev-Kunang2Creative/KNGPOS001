@@ -94,8 +94,7 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     });
 
     Route::middleware(['permission:waiter.update'])->group(function () {
-        Route::post('waiter/kitchen-orders/{kitchenOrder}/deliver', [WaiterOrderController::class, 'deliverKitchenOrder'])->name('waiter.kitchen-orders.deliver');
-        Route::post('waiter/bar-orders/{barOrder}/deliver', [WaiterOrderController::class, 'deliverBarOrder'])->name('waiter.bar-orders.deliver');
+        Route::post('waiter/orders/{order}/deliver', [WaiterOrderController::class, 'deliverOrder'])->name('waiter.orders.deliver');
         Route::patch('waiter/tables/{table}/status', [WaiterOrderController::class, 'toggleTableStatus'])->name('waiter.tables.status');
     });
 

@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Waiter;
 use App\Http\Controllers\Controller;
 use App\Models\BarOrder;
 use App\Models\KitchenOrder;
+use App\Models\Order;
 use App\Models\Table;
 use App\Models\WaiterZoneAssignment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -30,18 +32,19 @@ class WaiterOrderController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'status', 'zone_id', 'capacity']);
 
+        $eagerLoads = [
+            'order:id,table_id,notes,status',
+            'order.table:id,name,zone_id',
+            'order.table.zone:id,name,color_hex',
+            'items.orderItem:id,menu_item_id,notes,quantity',
+            'items.orderItem.menuItem:id,name',
+        ];
+
         // Kitchen orders in waiter's zones that are not yet delivered
         $kitchenOrders = KitchenOrder::query()
             ->whereNull('completed_at')
             ->whereHas('order.table', fn ($q) => $q->whereIn('zone_id', $zoneIds))
-            ->with([
-                'order:id,table_id,notes,status',
-                'order.table:id,name,zone_id',
-                'order.table.zone:id,name,color_hex',
-                'items.orderItem:id,menu_item_id,notes,quantity',
-                'items.orderItem.menuItem:id,name',
-                'station:id,name',
-            ])
+            ->with($eagerLoads)
             ->orderBy('sent_at', 'asc')
             ->get();
 
@@ -49,49 +52,77 @@ class WaiterOrderController extends Controller
         $barOrders = BarOrder::query()
             ->whereNull('completed_at')
             ->whereHas('order.table', fn ($q) => $q->whereIn('zone_id', $zoneIds))
-            ->with([
-                'order:id,table_id,notes,status',
-                'order.table:id,name,zone_id',
-                'order.table.zone:id,name,color_hex',
-                'items.orderItem:id,menu_item_id,notes,quantity',
-                'items.orderItem.menuItem:id,name',
-                'station:id,name',
-            ])
+            ->with($eagerLoads)
             ->orderBy('sent_at', 'asc')
             ->get();
 
+        // Group kitchen + bar station orders into a single card per order/bill.
+        $orders = $kitchenOrders->map(fn ($stationOrder) => $this->mapStationOrder($stationOrder, 'kitchen'))
+            ->merge($barOrders->map(fn ($stationOrder) => $this->mapStationOrder($stationOrder, 'bar')))
+            ->groupBy('order_id')
+            ->map(function ($group) {
+                $first = $group->first();
+
+                return [
+                    'order' => $first['order'],
+                    'sent_at' => $group->pluck('sent_at')->filter()->min(),
+                    'items' => $group->flatMap(fn ($entry) => $entry['items'])->values(),
+                ];
+            })
+            ->sortBy('sent_at')
+            ->values();
+
         return Inertia::render('Waiter/Orders', [
             'tables' => $tables,
-            'kitchenOrders' => $kitchenOrders,
-            'barOrders' => $barOrders,
+            'orders' => $orders,
             'zoneIds' => $zoneIds,
         ]);
     }
 
     /**
-     * Waiter marks a kitchen order as delivered (completed).
+     * Normalize a kitchen/bar order into a flat structure for grouping.
+     *
+     * @return array{order_id: int, order: array<string, mixed>, sent_at: ?string, items: Collection<int, array<string, mixed>>}
      */
-    public function deliverKitchenOrder(KitchenOrder $kitchenOrder): RedirectResponse
+    private function mapStationOrder(KitchenOrder|BarOrder $stationOrder, string $station): array
     {
-        $kitchenOrder->update([
-            'status' => 'delivered',
-            'completed_at' => now(),
-        ]);
-
-        return back()->with('success', 'Order kitchen telah diantar.');
+        return [
+            'order_id' => $stationOrder->order_id,
+            'order' => [
+                'id' => $stationOrder->order->id,
+                'notes' => $stationOrder->order->notes,
+                'table' => $stationOrder->order->table,
+            ],
+            'sent_at' => $stationOrder->sent_at,
+            'items' => $stationOrder->items->map(fn ($item) => [
+                'id' => $station.'-'.$item->id,
+                'station' => $station,
+                'name' => $item->orderItem?->menuItem?->name ?? 'Item',
+                'quantity' => $item->quantity,
+                'notes' => $item->notes ?? $item->orderItem?->notes,
+            ]),
+        ];
     }
 
     /**
-     * Waiter marks a bar order as delivered (completed).
+     * Waiter marks an entire order as delivered, completing both its
+     * kitchen and bar station orders at once.
      */
-    public function deliverBarOrder(BarOrder $barOrder): RedirectResponse
+    public function deliverOrder(Order $order): RedirectResponse
     {
-        $barOrder->update([
-            'status' => 'delivered',
-            'completed_at' => now(),
+        $now = now();
+
+        $order->kitchenOrders()->whereNull('completed_at')->update([
+            'status' => 'done',
+            'completed_at' => $now,
         ]);
 
-        return back()->with('success', 'Order bar telah diantar.');
+        $order->barOrders()->whereNull('completed_at')->update([
+            'status' => 'done',
+            'completed_at' => $now,
+        ]);
+
+        return back()->with('success', 'Pesanan telah diantar.');
     }
 
     /**

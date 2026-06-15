@@ -2,30 +2,23 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import { Check, ChefHat, Clock, GlassWater, MapPin, StickyNote, Table2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type OrderItem = {
-    id: number;
+    id: string;
+    station: 'kitchen' | 'bar';
+    name: string;
     quantity: number;
     notes?: string | null;
-    order_item?: {
-        id: number;
-        quantity?: number;
-        notes?: string | null;
-        menu_item?: { id: number; name: string } | null;
-    } | null;
 };
 
-type StationOrder = {
-    id: number;
-    status: string;
-    sent_at: string | null;
+type WaiterOrder = {
     order: {
         id: number;
         notes?: string | null;
         table?: { id: number; name: string; zone?: { id: number; name: string; color_hex: string } | null } | null;
     };
-    station?: { id: number; name: string } | null;
+    sent_at: string | null;
     items: OrderItem[];
 };
 
@@ -40,8 +33,7 @@ type TableData = {
 
 type Props = {
     tables: TableData[];
-    kitchenOrders: StationOrder[];
-    barOrders: StationOrder[];
+    orders: WaiterOrder[];
     zoneIds: number[];
 };
 
@@ -69,30 +61,39 @@ function timeAgo(dateStr: string | null): string {
     return `${Math.floor(diff / 3600)} jam`;
 }
 
-export default function Orders({ tables, kitchenOrders, barOrders }: Props) {
+export default function Orders({ tables, orders }: Props) {
     const [activeTab, setActiveTab] = useState<'orders' | 'tables'>('orders');
     const [delivering, setDelivering] = useState<number | null>(null);
 
-    const allOrders = [
-        ...kitchenOrders.map((o) => ({ ...o, type: 'kitchen' as const })),
-        ...barOrders.map((o) => ({ ...o, type: 'bar' as const })),
-    ].sort((a, b) => new Date(a.sent_at ?? 0).getTime() - new Date(b.sent_at ?? 0).getTime());
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            if (document.hidden) return;
+            router.reload({ only: ['orders', 'tables'], preserveScroll: true, preserveState: true });
+        }, 5000);
+        return () => window.clearInterval(interval);
+    }, []);
 
-    function handleDeliver(order: (typeof allOrders)[0]) {
-        setDelivering(order.id);
-        const routeName = order.type === 'kitchen' ? 'waiter.kitchen-orders.deliver' : 'waiter.bar-orders.deliver';
-        const paramKey = order.type === 'kitchen' ? 'kitchenOrder' : 'barOrder';
+    function handleDeliver(order: WaiterOrder) {
+        setDelivering(order.order.id);
 
-        router.post(route(routeName, { [paramKey]: order.id }), {}, {
-            preserveScroll: true,
-            onFinish: () => setDelivering(null),
-        });
+        router.post(
+            route('waiter.orders.deliver', { order: order.order.id }),
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => setDelivering(null),
+            },
+        );
     }
 
     function handleTableStatus(table: TableData, newStatus: string) {
-        router.patch(route('waiter.tables.status', { table: table.id }), { status: newStatus }, {
-            preserveScroll: true,
-        });
+        router.patch(
+            route('waiter.tables.status', { table: table.id }),
+            { status: newStatus },
+            {
+                preserveScroll: true,
+            },
+        );
     }
 
     return (
@@ -101,28 +102,24 @@ export default function Orders({ tables, kitchenOrders, barOrders }: Props) {
 
             <div className="p-4 sm:p-6">
                 {/* Tabs */}
-                <div className="mb-6 flex gap-1 rounded-xl bg-muted/50 p-1">
+                <div className="bg-muted/50 mb-6 flex gap-1 rounded-xl p-1">
                     <button
                         onClick={() => setActiveTab('orders')}
                         className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                            activeTab === 'orders'
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
+                            activeTab === 'orders' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                         }`}
                     >
                         Order Masuk
-                        {allOrders.length > 0 && (
-                            <span className="ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                                {allOrders.length}
+                        {orders.length > 0 && (
+                            <span className="bg-primary text-primary-foreground ml-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold">
+                                {orders.length}
                             </span>
                         )}
                     </button>
                     <button
                         onClick={() => setActiveTab('tables')}
                         className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-                            activeTab === 'tables'
-                                ? 'bg-background text-foreground shadow-sm'
-                                : 'text-muted-foreground hover:text-foreground'
+                            activeTab === 'tables' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                         }`}
                     >
                         <Table2 className="mr-1 inline h-4 w-4" />
@@ -133,30 +130,23 @@ export default function Orders({ tables, kitchenOrders, barOrders }: Props) {
                 {/* Orders Tab */}
                 {activeTab === 'orders' && (
                     <>
-                        {allOrders.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/50 bg-muted/30 py-20">
+                        {orders.length === 0 ? (
+                            <div className="border-border/50 bg-muted/30 flex flex-col items-center justify-center rounded-2xl border border-dashed py-20">
                                 <Check className="mb-3 h-10 w-10 text-emerald-500/40" />
-                                <p className="text-sm font-medium text-muted-foreground">Semua order sudah diantar</p>
-                                <p className="mt-1 text-xs text-muted-foreground/60">Order baru akan muncul otomatis</p>
+                                <p className="text-muted-foreground text-sm font-medium">Semua order sudah diantar</p>
+                                <p className="text-muted-foreground/60 mt-1 text-xs">Order baru akan muncul otomatis</p>
                             </div>
                         ) : (
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                {allOrders.map((order) => (
+                                {orders.map((order) => (
                                     <div
-                                        key={`${order.type}-${order.id}`}
-                                        className="group overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all hover:shadow-md"
+                                        key={order.order.id}
+                                        className="group border-border bg-card overflow-hidden rounded-xl border shadow-sm transition-all hover:shadow-md"
                                     >
                                         {/* Header */}
-                                        <div className="flex items-center justify-between border-b border-border/50 bg-muted/30 px-4 py-3">
+                                        <div className="border-border/50 bg-muted/30 flex items-center justify-between border-b px-4 py-3">
                                             <div className="flex items-center gap-2">
-                                                {order.type === 'kitchen' ? (
-                                                    <ChefHat className="h-4 w-4 text-orange-500" />
-                                                ) : (
-                                                    <GlassWater className="h-4 w-4 text-violet-500" />
-                                                )}
-                                                <span className="text-sm font-bold text-foreground">
-                                                    #{order.order.id}
-                                                </span>
+                                                <span className="text-foreground text-sm font-bold">#{order.order.id}</span>
                                                 {order.order.table?.zone && (
                                                     <span
                                                         className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white"
@@ -166,54 +156,59 @@ export default function Orders({ tables, kitchenOrders, barOrders }: Props) {
                                                     </span>
                                                 )}
                                             </div>
-                                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                            <div className="text-muted-foreground flex items-center gap-1 text-xs">
                                                 <Clock className="h-3 w-3" />
                                                 {timeAgo(order.sent_at)}
                                             </div>
                                         </div>
 
-                                        {/* Table + Station */}
-                                        <div className="flex items-center justify-between border-b border-border/30 px-4 py-2 text-xs text-muted-foreground">
-                                            <span className="flex items-center gap-1">
-                                                <MapPin className="h-3 w-3" />
-                                                {order.order.table?.name ?? '-'}
-                                            </span>
-                                            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium">
-                                                {order.station?.name ?? (order.type === 'kitchen' ? 'Kitchen' : 'Bar')}
-                                            </span>
+                                        {/* Table */}
+                                        <div className="border-border/30 text-muted-foreground flex items-center gap-1.5 border-b px-4 py-2 text-xs">
+                                            <MapPin className="h-3 w-3" />
+                                            {order.order.table?.name ?? '-'}
                                         </div>
 
                                         {/* Items */}
-                                        <div className="divide-y divide-border/30 px-4">
+                                        <div className="divide-border/30 divide-y px-4">
                                             {order.items.map((item) => (
                                                 <div key={item.id} className="py-2.5">
                                                     <div className="flex items-start justify-between gap-2">
-                                                        <span className="text-sm font-medium text-foreground">
-                                                            {item.order_item?.menu_item?.name ?? 'Item'}
+                                                        <span className="text-foreground flex items-center gap-1.5 text-sm font-medium">
+                                                            {item.station === 'kitchen' ? (
+                                                                <ChefHat className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+                                                            ) : (
+                                                                <GlassWater className="h-3.5 w-3.5 shrink-0 text-violet-500" />
+                                                            )}
+                                                            {item.name}
                                                         </span>
-                                                        <span className="shrink-0 text-xs font-bold text-muted-foreground">
-                                                            x{item.quantity}
-                                                        </span>
+                                                        <span className="text-muted-foreground shrink-0 text-xs font-bold">x{item.quantity}</span>
                                                     </div>
-                                                    {(item.notes || item.order_item?.notes) && (
+                                                    {item.notes && (
                                                         <div className="mt-0.5 flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400">
                                                             <StickyNote className="mt-0.5 h-3 w-3 shrink-0" />
-                                                            <span>{item.notes || item.order_item?.notes}</span>
+                                                            <span>{item.notes}</span>
                                                         </div>
                                                     )}
                                                 </div>
                                             ))}
                                         </div>
 
+                                        {/* Order notes */}
+                                        {order.order.notes && (
+                                            <div className="border-border/30 border-t bg-amber-50/50 px-4 py-2 text-xs text-amber-700 dark:bg-amber-950/20 dark:text-amber-400">
+                                                <strong>Catatan:</strong> {order.order.notes}
+                                            </div>
+                                        )}
+
                                         {/* Deliver Button */}
-                                        <div className="border-t border-border/50 p-3">
+                                        <div className="border-border/50 border-t p-3">
                                             <button
                                                 onClick={() => handleDeliver(order)}
-                                                disabled={delivering === order.id}
+                                                disabled={delivering === order.order.id}
                                                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50"
                                             >
                                                 <Check className="h-4 w-4" />
-                                                {delivering === order.id ? 'Memproses...' : 'Sudah Diantar'}
+                                                {delivering === order.order.id ? 'Memproses...' : 'Sudah Diantar'}
                                             </button>
                                         </div>
                                     </div>
@@ -225,23 +220,20 @@ export default function Orders({ tables, kitchenOrders, barOrders }: Props) {
 
                 {/* Tables Tab */}
                 {activeTab === 'tables' && (
-                    <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                         {tables.map((table) => (
-                            <div
-                                key={table.id}
-                                className="group overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-                            >
+                            <div key={table.id} className="group border-border bg-card overflow-hidden rounded-xl border shadow-sm">
                                 <div className="px-3 py-3 text-center">
-                                    <p className="text-sm font-bold text-foreground">{table.name}</p>
-                                    {table.zone && (
-                                        <p className="mt-0.5 text-[10px] text-muted-foreground">{table.zone.name}</p>
-                                    )}
-                                    <div className={`mt-2 inline-block rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusColor[table.status] ?? statusColor.available}`}>
+                                    <p className="text-foreground text-sm font-bold">{table.name}</p>
+                                    {table.zone && <p className="text-muted-foreground mt-0.5 text-[10px]">{table.zone.name}</p>}
+                                    <div
+                                        className={`mt-2 inline-block rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusColor[table.status] ?? statusColor.available}`}
+                                    >
                                         {statusLabel[table.status] ?? table.status}
                                     </div>
                                 </div>
 
-                                <div className="flex border-t border-border/50">
+                                <div className="border-border/50 flex border-t">
                                     {table.status !== 'available' ? (
                                         <button
                                             onClick={() => handleTableStatus(table, 'available')}
