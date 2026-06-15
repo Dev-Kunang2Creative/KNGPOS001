@@ -42,9 +42,16 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Waiter', href: '/orders' }];
 const statusLabel: Record<string, string> = {
     available: 'Kosong',
     occupied: 'Terisi',
-    open_bill: 'Open Bill',
+    open_bill: 'Sedang Pembayaran',
     reserved: 'Reservasi',
 };
+
+const tableStatusOptions: { value: string; label: string }[] = [
+    { value: 'available', label: 'Kosong' },
+    { value: 'occupied', label: 'Terisi' },
+    { value: 'open_bill', label: 'Pembayaran' },
+    { value: 'reserved', label: 'Reservasi' },
+];
 
 const statusColor: Record<string, string> = {
     available: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30',
@@ -233,22 +240,23 @@ export default function Orders({ tables, orders }: Props) {
                                     </div>
                                 </div>
 
-                                <div className="border-border/50 flex border-t">
-                                    {table.status !== 'available' ? (
-                                        <button
-                                            onClick={() => handleTableStatus(table, 'available')}
-                                            className="flex-1 px-2 py-2 text-[11px] font-medium text-emerald-600 transition hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
-                                        >
-                                            → Kosong
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={() => handleTableStatus(table, 'occupied')}
-                                            className="flex-1 px-2 py-2 text-[11px] font-medium text-red-600 transition hover:bg-red-50 dark:hover:bg-red-950/20"
-                                        >
-                                            → Terisi
-                                        </button>
-                                    )}
+                                <div className="border-border/50 grid grid-cols-2 border-t">
+                                    {tableStatusOptions.map((option) => {
+                                        const isActive = table.status === option.value;
+
+                                        return (
+                                            <button
+                                                key={option.value}
+                                                onClick={() => handleTableStatus(table, option.value)}
+                                                disabled={isActive}
+                                                className={`border-border/50 border-t border-r px-2 py-2 text-[11px] font-medium transition last:border-r-0 odd:border-r [&:nth-child(-n+2)]:border-t-0 ${
+                                                    isActive ? 'bg-muted text-muted-foreground cursor-default' : 'text-foreground hover:bg-muted/50'
+                                                }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}

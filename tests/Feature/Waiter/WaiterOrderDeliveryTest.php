@@ -62,6 +62,36 @@ class WaiterOrderDeliveryTest extends TestCase
             ->assertInertia(fn ($page) => $page->has('orders', 0));
     }
 
+    public function test_waiter_can_change_table_status_to_each_allowed_status(): void
+    {
+        $restaurant = $this->activeRestaurant();
+        $zone = Zone::query()->create(['name' => 'Indoor']);
+        $table = Table::query()->create(['name' => 'A1', 'zone_id' => $zone->id, 'status' => 'occupied']);
+        $waiter = $this->waiterFor($restaurant, $zone);
+
+        foreach (['available', 'occupied', 'open_bill', 'reserved'] as $status) {
+            $this->actingAs($waiter)
+                ->patch(route('waiter.tables.status', $table), ['status' => $status])
+                ->assertRedirect();
+
+            $this->assertDatabaseHas('tables', ['id' => $table->id, 'status' => $status]);
+        }
+    }
+
+    public function test_waiter_cannot_set_invalid_table_status(): void
+    {
+        $restaurant = $this->activeRestaurant();
+        $zone = Zone::query()->create(['name' => 'Indoor']);
+        $table = Table::query()->create(['name' => 'A1', 'zone_id' => $zone->id, 'status' => 'occupied']);
+        $waiter = $this->waiterFor($restaurant, $zone);
+
+        $this->actingAs($waiter)
+            ->patch(route('waiter.tables.status', $table), ['status' => 'blocked'])
+            ->assertSessionHasErrors('status');
+
+        $this->assertDatabaseHas('tables', ['id' => $table->id, 'status' => 'occupied']);
+    }
+
     /**
      * Build a routed dine-in order in the waiter's zone.
      *
