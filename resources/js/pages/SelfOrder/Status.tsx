@@ -7,11 +7,14 @@ import { useEffect } from 'react';
 type SelfOrder = {
     id: number;
     status: string;
+    subtotal: string;
+    service_charge_amount: string;
+    tax_amount: string;
     total_amount: string;
     payment_preference: string;
     rejection_reason?: string | null;
     table?: { name: string };
-    items: { id: number; quantity: number; menu_item?: { name: string } }[];
+    items: { id: number; quantity: number; menu_item?: { name: string }; addons?: { id: number; name: string }[] }[];
 };
 type Payment = { id: number; external_id: string; status: string; xendit_raw_response?: Record<string, unknown> | null } | null;
 type StoredOrder = { id: number; status: string; total_amount: string; items_count: number; timestamp: string };
@@ -53,8 +56,6 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment, restauran
             }
             router.reload({
                 only: ['selfOrder', 'payment'],
-                preserveScroll: true,
-                preserveState: true,
             });
         }, 5000);
 
@@ -286,14 +287,39 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment, restauran
                                     </span>
                                     <div>
                                         <p className="text-on-surface text-base">{item.menu_item?.name}</p>
+                                        {item.addons && item.addons.length > 0 && (
+                                            <p className="text-on-surface-variant mt-0.5 text-xs">+ {item.addons.map((a) => a.name).join(', ')}</p>
+                                        )}
                                     </div>
                                 </div>
                             </li>
                         ))}
                     </ul>
-                    <div className="border-surface-variant flex items-center justify-between border-t pt-2">
-                        <span className="text-on-surface-variant text-sm font-semibold">Total</span>
-                        <span className="text-primary text-base font-bold">Rp {Number(selfOrder.total_amount).toLocaleString('id-ID')}</span>
+                    <div className="border-surface-variant flex flex-col gap-2 border-t pt-4">
+                        {Number(selfOrder.service_charge_amount ?? 0) > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-on-surface-variant">Subtotal</span>
+                                <span className="text-on-surface">Rp {Number(selfOrder.subtotal).toLocaleString('id-ID')}</span>
+                            </div>
+                        )}
+                        {Number(selfOrder.service_charge_amount ?? 0) > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-on-surface-variant">Service Charge</span>
+                                <span className="text-on-surface">Rp {Number(selfOrder.service_charge_amount).toLocaleString('id-ID')}</span>
+                            </div>
+                        )}
+                        {Number(selfOrder.tax_amount ?? 0) > 0 && (
+                            <div className="flex items-center justify-between text-sm">
+                                <span className="text-on-surface-variant">PB1</span>
+                                <span className="text-on-surface">Rp {Number(selfOrder.tax_amount).toLocaleString('id-ID')}</span>
+                            </div>
+                        )}
+                        <div
+                            className={`flex items-center justify-between ${Number(selfOrder.service_charge_amount ?? 0) > 0 || Number(selfOrder.tax_amount ?? 0) > 0 ? 'mt-2 border-t pt-2' : ''}`}
+                        >
+                            <span className="text-on-surface-variant text-sm font-semibold">Total</span>
+                            <span className="text-primary text-base font-bold">Rp {Number(selfOrder.total_amount).toLocaleString('id-ID')}</span>
+                        </div>
                     </div>
                 </section>
             </main>

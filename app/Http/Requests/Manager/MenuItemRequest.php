@@ -23,6 +23,11 @@ class MenuItemRequest extends FormRequest
             'print_to' => ['required', Rule::in(['kasir', 'kitchen', 'bar', 'kitchen_bar'])],
             'is_available' => ['required', 'boolean'],
             'sort_order' => ['required', 'integer', 'min:0'],
+            'addons' => ['nullable', 'array'],
+            'addons.*.id' => ['nullable', 'integer', 'exists:menu_item_addons,id'],
+            'addons.*.name' => ['required', 'string', 'max:255'],
+            'addons.*.price' => ['required', 'numeric', 'min:0'],
+            'addons.*.is_active' => ['required', 'boolean'],
         ];
     }
 }

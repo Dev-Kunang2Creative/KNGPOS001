@@ -21,7 +21,7 @@ class MenuController extends Controller
     {
         return Inertia::render('Menu/Index', [
             'categories' => MenuCategory::query()->withCount('activeItems')->orderBy('sort_order')->get(),
-            'items' => MenuItem::query()->with('category:id,name')->orderBy('sort_order')->get(),
+            'items' => MenuItem::query()->with(['category:id,name', 'addons'])->orderBy('sort_order')->get(),
             'promotions' => MenuPromotion::query()->latest('valid_from')->get(),
         ]);
     }
@@ -53,7 +53,11 @@ class MenuController extends Controller
 
     public function storeItem(MenuItemRequest $request): RedirectResponse
     {
-        MenuItem::query()->create($this->itemData($request));
+        $item = MenuItem::query()->create($this->itemData($request));
+        
+        if ($request->has('addons')) {
+            $this->syncAddons($item, $request->input('addons'));
+        }
 
         return back()->with('success', 'Menu item berhasil dibuat.');
     }
@@ -61,6 +65,10 @@ class MenuController extends Controller
     public function updateItem(MenuItemRequest $request, MenuItem $item): RedirectResponse
     {
         $item->update($this->itemData($request, $item));
+
+        if ($request->has('addons')) {
+            $this->syncAddons($item, $request->input('addons'));
+        }
 
         return back()->with('success', 'Menu item berhasil diperbarui.');
     }
@@ -113,8 +121,30 @@ class MenuController extends Controller
             $data['image_path'] = $item->image_path;
         }
 
-        unset($data['image']);
+        unset($data['image'], $data['addons']);
 
         return $data;
+    }
+
+    private function syncAddons(MenuItem $item, array $addons): void
+    {
+        $addonIds = collect($addons)->pluck('id')->filter()->toArray();
+        $item->addons()->whereNotIn('id', $addonIds)->delete();
+
+        foreach ($addons as $addonData) {
+            if (isset($addonData['id']) && $addonData['id']) {
+                $item->addons()->where('id', $addonData['id'])->update([
+                    'name' => $addonData['name'],
+                    'price' => $addonData['price'],
+                    'is_active' => $addonData['is_active'] ?? true,
+                ]);
+            } else {
+                $item->addons()->create([
+                    'name' => $addonData['name'],
+                    'price' => $addonData['price'],
+                    'is_active' => $addonData['is_active'] ?? true,
+                ]);
+            }
+        }
     }
 }

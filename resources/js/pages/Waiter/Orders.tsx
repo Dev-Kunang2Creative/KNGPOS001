@@ -75,7 +75,7 @@ export default function Orders({ tables, orders }: Props) {
     useEffect(() => {
         const interval = window.setInterval(() => {
             if (document.hidden) return;
-            router.reload({ only: ['orders', 'tables'], preserveScroll: true, preserveState: true });
+            router.reload({ only: ['orders', 'tables'] });
         }, 5000);
         return () => window.clearInterval(interval);
     }, []);

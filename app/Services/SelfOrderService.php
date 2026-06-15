@@ -39,7 +39,29 @@ class SelfOrderService
                 throw new RuntimeException('Ada menu yang tidak tersedia.');
             }
 
-            $subtotal = collect($validated['items'])->sum(fn (array $item): float => (float) $menuItems[$item['menu_item_id']]->price * (int) $item['quantity']);
+            $subtotal = collect($validated['items'])->sum(function (array $item) use ($menuItems): float {
+                $basePrice = (float) $menuItems[$item['menu_item_id']]->price;
+                $addonPrice = 0;
+                
+                if (!empty($item['addons'])) {
+                    $addonPrice = \App\Models\MenuItemAddon::query()
+                        ->whereIn('id', $item['addons'])
+                        ->where('menu_item_id', $item['menu_item_id'])
+                        ->where('is_active', true)
+                        ->sum('price');
+                }
+                
+                return ($basePrice + $addonPrice) * (int) $item['quantity'];
+            });
+
+            $restaurant = \App\Models\Restaurant::find($table->restaurant_id);
+            $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
+                ? $subtotal * ($restaurant->service_charge_percentage / 100)
+                : 0;
+            $taxAmount = $restaurant && $restaurant->tax_is_active
+                ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
+                : 0;
+            $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
 
             $selfOrder = SelfOrder::query()->create([
                 'table_id' => $table->id,
@@ -50,19 +72,42 @@ class SelfOrderService
                 'notes' => $validated['notes'] ?? null,
                 'status' => 'pending',
                 'subtotal' => $subtotal,
-                'total_amount' => $subtotal,
+                'service_charge_amount' => $serviceChargeAmount,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $totalAmount,
             ]);
 
             foreach ($validated['items'] as $item) {
                 $menuItem = $menuItems[$item['menu_item_id']];
                 $quantity = (int) $item['quantity'];
+                
+                $addonPrice = 0;
+                $addonsData = null;
+                
+                if (!empty($item['addons'])) {
+                    $selectedAddons = \App\Models\MenuItemAddon::query()
+                        ->whereIn('id', $item['addons'])
+                        ->where('menu_item_id', $menuItem->id)
+                        ->where('is_active', true)
+                        ->get(['id', 'name', 'price']);
+                        
+                    $addonPrice = $selectedAddons->sum('price');
+                    $addonsData = $selectedAddons->map(fn($a) => [
+                        'id' => $a->id,
+                        'name' => $a->name,
+                        'price' => (float) $a->price
+                    ])->toArray();
+                }
+                
+                $unitPrice = (float) $menuItem->price + $addonPrice;
 
                 $selfOrder->items()->create([
                     'menu_item_id' => $menuItem->id,
                     'quantity' => $quantity,
-                    'unit_price' => $menuItem->price,
-                    'subtotal' => (float) $menuItem->price * $quantity,
+                    'unit_price' => $unitPrice,
+                    'subtotal' => $unitPrice * $quantity,
                     'notes' => $item['notes'] ?? null,
+                    'addons' => $addonsData,
                 ]);
             }
 
@@ -242,6 +287,8 @@ class SelfOrderService
                 'status' => 'open',
                 'notes' => $selfOrder->notes,
                 'subtotal' => 0,
+                'service_charge_amount' => 0,
+                'tax_amount' => 0,
                 'total_amount' => 0,
             ]);
         } else {
@@ -258,17 +305,29 @@ class SelfOrderService
                 'unit_price' => $item->unit_price,
                 'subtotal' => $item->subtotal,
                 'notes' => $item->notes,
+                'addons' => $item->addons,
                 'status' => 'pending',
             ]);
         }
 
-        $total = (float) $order->items()
+        $subtotal = (float) $order->items()
             ->where('status', '!=', 'cancelled')
             ->sum('subtotal');
 
+        $restaurant = \App\Models\Restaurant::find($order->table->restaurant_id);
+        $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
+            ? $subtotal * ($restaurant->service_charge_percentage / 100)
+            : 0;
+        $taxAmount = $restaurant && $restaurant->tax_is_active
+            ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
+            : 0;
+        $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+
         $order->update([
-            'subtotal' => $total,
-            'total_amount' => $total,
+            'subtotal' => $subtotal,
+            'service_charge_amount' => $serviceChargeAmount,
+            'tax_amount' => $taxAmount,
+            'total_amount' => $totalAmount,
         ]);
         $order->table?->update(['status' => 'open_bill']);
 

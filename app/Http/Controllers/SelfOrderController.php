@@ -31,6 +31,10 @@ class SelfOrderController extends Controller
             'categories' => $this->menuCategories(),
             'restaurant' => [
                 'name' => app(RestaurantContext::class)->restaurant()?->name ?? 'Restoran',
+                'tax_percentage' => app(RestaurantContext::class)->restaurant()?->tax_percentage ?? 0,
+                'tax_is_active' => app(RestaurantContext::class)->restaurant()?->tax_is_active ?? false,
+                'service_charge_percentage' => app(RestaurantContext::class)->restaurant()?->service_charge_percentage ?? 0,
+                'service_charge_is_active' => app(RestaurantContext::class)->restaurant()?->service_charge_is_active ?? false,
             ],
         ]);
     }
@@ -216,6 +220,7 @@ class SelfOrderController extends Controller
     {
         return MenuCategory::query()
             ->with(['activeItems' => fn ($query) => $query
+                ->with(['addons' => fn ($q) => $q->orderBy('id')])
                 ->where('is_available', true)
                 ->orderBy('sort_order')
                 ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id'])])

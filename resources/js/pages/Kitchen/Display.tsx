@@ -48,7 +48,7 @@ export default function Display({ orders, stationName }: Props) {
     useEffect(() => {
         const interval = window.setInterval(() => {
             if (document.hidden) return;
-            router.reload({ only: ['orders'], preserveScroll: true, preserveState: true });
+            router.reload({ only: ['orders'] });
         }, 5000);
         return () => window.clearInterval(interval);
     }, []);

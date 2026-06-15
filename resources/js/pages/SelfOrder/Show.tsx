@@ -18,11 +18,12 @@ type MenuItem = {
     price: string;
     print_to: string;
     image_url?: string | null;
+    addons?: { id: number; name: string; price: string; is_active: boolean }[];
 };
 type Category = { id: number; name: string; description?: string | null; active_items: MenuItem[] };
 type Table = { id: number; name: string; zone?: { name: string; color_hex: string } };
-type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string; image_url?: string | null };
-type Props = { qrToken: string; table: Table; categories: Category[]; restaurant: { name: string } };
+type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string; image_url?: string | null; addons?: number[] };
+type Props = { qrToken: string; table: Table; categories: Category[]; restaurant: { name: string; tax_percentage: number; tax_is_active: boolean; service_charge_percentage: number; service_charge_is_active: boolean } };
 
 type ViewState = 'bill-selection' | 'menu' | 'detail' | 'cart' | 'payment' | 'orders';
 
@@ -74,26 +75,38 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
         setView('detail');
     };
 
-    const handleAddToCart = (item: MenuItem, quantity: number, notes: string) => {
+    const handleAddToCart = (item: MenuItem, quantity: number, notes: string, addons: number[]) => {
+        const addonPrice = item.addons?.filter((a) => addons.includes(a.id)).reduce((sum, a) => sum + Number(a.price), 0) ?? 0;
+        const unitPrice = Number(item.price) + addonPrice;
+
         setCart((current) => {
-            const existing = current.find((c) => c.menu_item_id === item.id);
-            if (existing) {
-                return current.map((c) => (c.menu_item_id === item.id ? { ...c, quantity: c.quantity + quantity, notes: notes || c.notes } : c));
+            // Kita pisahkan item di keranjang jika addons-nya berbeda (meskipun menu_item_id sama)
+            const addonsHash = [...addons].sort().join(',');
+            const existingIndex = current.findIndex(
+                (c) => c.menu_item_id === item.id && (c.addons ? [...c.addons].sort().join(',') : '') === addonsHash,
+            );
+
+            if (existingIndex !== -1) {
+                const newCart = [...current];
+                newCart[existingIndex] = {
+                    ...newCart[existingIndex],
+                    quantity: newCart[existingIndex].quantity + quantity,
+                    notes: notes || newCart[existingIndex].notes,
+                };
+                return newCart;
             }
-            return [...current, { menu_item_id: item.id, name: item.name, price: Number(item.price), quantity, notes, image_url: item.image_url }];
+            return [...current, { menu_item_id: item.id, name: item.name, price: unitPrice, quantity, notes, image_url: item.image_url, addons }];
         });
         setSelectedItem(null);
         setView('menu');
     };
 
-    const handleUpdateQuantity = (menuItemId: number, delta: number) => {
-        setCart((current) =>
-            current.map((item) => (item.menu_item_id === menuItemId ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item)),
-        );
+    const handleUpdateQuantity = (cartIndex: number, delta: number) => {
+        setCart((current) => current.map((item, index) => (index === cartIndex ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item)));
     };
 
-    const handleRemoveItem = (menuItemId: number) => {
-        setCart((current) => current.filter((item) => item.menu_item_id !== menuItemId));
+    const handleRemoveItem = (cartIndex: number) => {
+        setCart((current) => current.filter((_, index) => index !== cartIndex));
     };
 
     const handleUpdateCustomer = (name: string, email: string, notes: string) => {
@@ -112,7 +125,12 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
                 payment_preference: paymentMethod,
                 bill_type: currentMethod,
                 notes: orderNotes,
-                items: cart.map((item) => ({ menu_item_id: item.menu_item_id, quantity: item.quantity, notes: item.notes || undefined })),
+                items: cart.map((item) => ({
+                    menu_item_id: item.menu_item_id,
+                    quantity: item.quantity,
+                    notes: item.notes || undefined,
+                    addons: item.addons && item.addons.length > 0 ? item.addons : undefined,
+                })),
             },
             {
                 preserveScroll: true,
@@ -141,7 +159,7 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
 
             {currentView === 'bill-selection' && <BillSelection onContinue={handleContinueBillSelection} />}
 
-            {currentView === 'menu' && (
+            {(currentView === 'menu' || (currentView === 'detail' && !selectedItem)) && (
                 <RestaurantMenu
                     table={table}
                     restaurant={restaurant}
@@ -179,6 +197,7 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
                     table={table}
                     cart={cart}
                     billType={currentMethod}
+                    restaurant={restaurant}
                     onBack={() => setView('cart')}
                     onPay={handlePay}
                 />

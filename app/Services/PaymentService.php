@@ -18,9 +18,9 @@ class PaymentService
     public function createCashPayment(Order $order, User $cashier, float $amountPaid, ?string $notes = null): Transaction
     {
         return DB::transaction(function () use ($order, $cashier, $amountPaid, $notes): Transaction {
-            $total = $this->calculateOrderTotal($order);
+            $details = $this->calculateOrderTotals($order);
 
-            if ($amountPaid < $total) {
+            if ($amountPaid < $details['total']) {
                 throw new RuntimeException('Nominal bayar kurang dari total order.');
             }
 
@@ -29,15 +29,17 @@ class PaymentService
                 'kasir_id' => $cashier->id,
                 'payment_method' => 'cash',
                 'amount_paid' => $amountPaid,
-                'change_amount' => $amountPaid - $total,
+                'change_amount' => $amountPaid - $details['total'],
                 'status' => 'paid',
                 'notes' => $notes,
                 'paid_at' => now(),
             ]);
 
             $order->update([
-                'subtotal' => $total,
-                'total_amount' => $total,
+                'subtotal' => $details['subtotal'],
+                'service_charge_amount' => $details['service_charge'],
+                'tax_amount' => $details['tax'],
+                'total_amount' => $details['total'],
                 'status' => 'paid',
             ]);
 
@@ -297,12 +299,36 @@ class PaymentService
             ->json();
     }
 
-    public function calculateOrderTotal(Order $order): float
+    public function calculateOrderTotals(Order $order): array
     {
-        $order->loadMissing('items');
+        $order->loadMissing(['items', 'table']);
 
-        return (float) $order->items
+        $subtotal = (float) $order->items
             ->where('status', '!=', 'cancelled')
             ->sum(fn ($item) => (float) $item->subtotal);
+
+        $restaurant = \App\Models\Restaurant::find($order->table->restaurant_id);
+        
+        $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
+            ? $subtotal * ($restaurant->service_charge_percentage / 100)
+            : 0;
+            
+        $taxAmount = $restaurant && $restaurant->tax_is_active
+            ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
+            : 0;
+            
+        $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+
+        return [
+            'subtotal' => $subtotal,
+            'service_charge' => $serviceChargeAmount,
+            'tax' => $taxAmount,
+            'total' => $totalAmount,
+        ];
+    }
+
+    public function calculateOrderTotal(Order $order): float
+    {
+        return $this->calculateOrderTotals($order)['total'];
     }
 }

@@ -1,5 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
@@ -37,7 +39,16 @@ type Table = {
     status: string;
     zone?: { id: number; name: string; color_hex: string; assignment?: unknown | null };
 };
-type MenuItem = { id: number; category_id: number; name: string; price: string; print_to: string; image_url?: string | null };
+type MenuItemAddon = { id: number; name: string; price: string; is_active: boolean };
+type MenuItem = {
+    id: number;
+    category_id: number;
+    name: string;
+    price: string;
+    print_to: string;
+    image_url?: string | null;
+    addons?: MenuItemAddon[];
+};
 type Category = { id: number; name: string; active_items: MenuItem[] };
 type ActiveOrderItem = {
     id: number;
@@ -64,7 +75,7 @@ type XenditPayment = {
     status: string;
     xendit_raw_response?: Record<string, unknown> | null;
 } | null;
-type CartItem = { menu_item_id: number; name: string; quantity: number; notes: string; price: number };
+type CartItem = { menu_item_id: number; name: string; quantity: number; notes: string; price: number; addons?: number[]; addonNames?: string[] };
 type PendingSelfOrderItem = {
     id: number;
     menu_item_id: number;
@@ -73,6 +84,7 @@ type PendingSelfOrderItem = {
     notes?: string | null;
     menu_item?: { id: number; name: string; price?: string; print_to?: string };
     name?: string | null;
+    addons?: { id: number; name: string; price: number }[];
 };
 type PendingSelfOrder = {
     id: number;
@@ -199,7 +211,7 @@ export default function PosIndex({
     pendingStationTickets,
     stationTicketHistory,
 }: Props) {
-    const { flash } = usePage<SharedData>().props;
+    const { flash, restaurant } = usePage<SharedData & { restaurant?: { tax_percentage: number; tax_is_active: boolean; service_charge_percentage: number; service_charge_is_active: boolean } }>().props;
     const menuRef = useRef<HTMLElement>(null);
     const [selectedTableId, setSelectedTableId] = useState('');
     const [cartTarget, setCartTarget] = useState<CartTarget>('close_bill');
@@ -242,7 +254,10 @@ export default function PosIndex({
     const selectedTable = tables.find((t) => String(t.id) === selectedTableId);
     const activeOrderTotal = activeOrder ? Number(activeOrder.total_amount ?? activeOrder.subtotal) : 0;
     const pendingActiveItems = activeOrder?.items.filter((i) => i.status === 'pending') ?? [];
-    const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+    const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
+    const cartServiceCharge = restaurant && restaurant.service_charge_is_active ? cartSubtotal * (Number(restaurant.service_charge_percentage) / 100) : 0;
+    const cartTax = restaurant && restaurant.tax_is_active ? (cartSubtotal + cartServiceCharge) * (Number(restaurant.tax_percentage) / 100) : 0;
+    const cartTotal = cartSubtotal + cartServiceCharge + cartTax;
     const activeOrderSections = useMemo(() => groupOpenBillItems(activeOrder?.items ?? []), [activeOrder?.items]);
     const selectedCartOrderId = cartTarget.startsWith('bill:') ? Number(cartTarget.replace('bill:', '')) : null;
     const selectedCartOrder = openOrders.find((o) => o.id === selectedCartOrderId);
@@ -253,9 +268,10 @@ export default function PosIndex({
         table_id: '',
         notes: '',
         bill_mode: 'open_bill' as BillMode,
-        amount_paid: 0,
-        items: [] as { menu_item_id: number; quantity: number; notes?: string }[],
+        items: [] as { menu_item_id: number; quantity: number; notes?: string; addons?: number[] }[],
     });
+    const [menuItemForAddon, setMenuItemForAddon] = useState<MenuItem | null>(null);
+    const [selectedAddonIds, setSelectedAddonIds] = useState<number[]>([]);
     const cashForm = useForm({ amount_paid: activeOrderTotal, notes: '' });
     const [closeBillPaymentMethod, setCloseBillPaymentMethod] = useState<CloseBillPaymentMethod>('cash');
     const [openBillPaymentMethod, setOpenBillPaymentMethod] = useState<CloseBillPaymentMethod>('cash');
@@ -289,8 +305,6 @@ export default function PosIndex({
                     'stationTicketHistory',
                     'openOrders',
                 ],
-                preserveScroll: true,
-                preserveState: true,
             });
         }, 7000);
         return () => window.clearInterval(interval);
@@ -314,26 +328,69 @@ export default function PosIndex({
         return () => window.clearTimeout(t);
     }, [itemNotice]);
 
-    function addItem(menuItem: MenuItem) {
+    function handleMenuClick(menuItem: MenuItem) {
+        if (menuItem.addons && menuItem.addons.length > 0) {
+            setMenuItemForAddon(menuItem);
+            setSelectedAddonIds([]);
+        } else {
+            addItem(menuItem, []);
+        }
+    }
+
+    function confirmAddWithAddons() {
+        if (menuItemForAddon) {
+            addItem(menuItemForAddon, selectedAddonIds);
+            setMenuItemForAddon(null);
+            setSelectedAddonIds([]);
+        }
+    }
+
+    function addItem(menuItem: MenuItem, addons: number[] = []) {
+        const sortedAddons = [...addons].sort((a, b) => a - b);
+        const addonsHash = sortedAddons.join(',');
+
+        let addonPrice = 0;
+        let addonNames: string[] = [];
+        if (addons.length > 0 && menuItem.addons) {
+            const selectedAddonObjects = menuItem.addons.filter((a) => addons.includes(a.id));
+            addonPrice = selectedAddonObjects.reduce((sum, a) => sum + Number(a.price), 0);
+            addonNames = selectedAddonObjects.map((a) => a.name);
+        }
+
         setCart((cur) => {
-            const ex = cur.find((i) => i.menu_item_id === menuItem.id);
-            if (ex) return cur.map((i) => (i.menu_item_id === menuItem.id ? { ...i, quantity: i.quantity + 1 } : i));
-            return [...cur, { menu_item_id: menuItem.id, name: menuItem.name, quantity: 1, notes: '', price: Number(menuItem.price) }];
+            const exIndex = cur.findIndex((i) => i.menu_item_id === menuItem.id && (i.addons || []).sort((a, b) => a - b).join(',') === addonsHash);
+            if (exIndex >= 0) {
+                const newCart = [...cur];
+                newCart[exIndex] = { ...newCart[exIndex], quantity: newCart[exIndex].quantity + 1 };
+                return newCart;
+            }
+            return [
+                ...cur,
+                {
+                    menu_item_id: menuItem.id,
+                    name: menuItem.name,
+                    quantity: 1,
+                    notes: '',
+                    price: Number(menuItem.price) + addonPrice,
+                    addons: addons.length > 0 ? addons : undefined,
+                    addonNames: addonNames.length > 0 ? addonNames : undefined,
+                },
+            ];
         });
         setItemNotice(`${menuItem.name} ditambahkan.`);
     }
 
-    function updateQuantity(menuItemId: number, delta: number) {
-        setCart((cur) => cur.map((i) => (i.menu_item_id === menuItemId ? { ...i, quantity: i.quantity + delta } : i)).filter((i) => i.quantity > 0));
+    function updateQuantity(cartIndex: number, delta: number) {
+        setCart((cur) => cur.map((i, idx) => (idx === cartIndex ? { ...i, quantity: i.quantity + delta } : i)).filter((i) => i.quantity > 0));
     }
 
-    function removeItem(menuItemId: number) {
-        setCart((cur) => cur.filter((i) => i.menu_item_id !== menuItemId));
+    function removeItem(cartIndex: number) {
+        setCart((cur) => cur.filter((i, idx) => idx !== cartIndex));
     }
 
     function submitOrder(e: FormEvent) {
         e.preventDefault();
-        const items = cart.map((i) => ({ menu_item_id: i.menu_item_id, quantity: i.quantity, notes: i.notes || undefined }));
+        const items = cart.map((i) => ({ menu_item_id: i.menu_item_id, quantity: i.quantity, notes: i.notes || undefined, addons: i.addons }));
         if (selectedCartOrderId) {
             form.transform(() => ({ items }));
             form.post(`/pos/orders/${selectedCartOrderId}/items/submit`, {
@@ -405,7 +462,9 @@ export default function PosIndex({
                 name: item.menu_item?.name ?? '',
                 quantity: item.quantity,
                 notes: item.notes ?? '',
-                price: Number(item.menu_item?.price ?? 0),
+                price: Number(item.subtotal) / item.quantity,
+                addons: item.addons?.map((a) => a.id) || undefined,
+                addonNames: item.addons?.map((a) => a.name) || undefined,
             }));
         setCart(items);
         setSelectedTableId(String(so.table_id));
@@ -442,15 +501,12 @@ export default function PosIndex({
             ),
         );
         setApprovingAll(false);
-        router.reload({ only: ['pendingSelfOrders', 'paidSelfOrderReceipts'], preserveScroll: true, preserveState: true });
+        router.reload({ only: ['pendingSelfOrders', 'paidSelfOrderReceipts'] });
     }
 
     function printAllTickets() {
         pendingStationTickets.forEach((ticket, i) => setTimeout(() => window.open(stationTicketUrl(ticket), '_blank'), i * 400));
-        setTimeout(
-            () => router.reload({ only: ['pendingStationTickets', 'stationTicketHistory'], preserveScroll: true, preserveState: true }),
-            pendingStationTickets.length * 400 + 2500,
-        );
+        setTimeout(() => router.reload({ only: ['pendingStationTickets', 'stationTicketHistory'] }), pendingStationTickets.length * 400 + 2500);
     }
 
     function printAllReceipts() {
@@ -820,17 +876,20 @@ export default function PosIndex({
                             <div className="space-y-2">
                                 <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">3. Item Pesanan</p>
                                 <div className="space-y-2">
-                                    {cart.map((item) => (
-                                        <div key={item.menu_item_id} className="space-y-2 rounded-xl border px-3 py-3">
+                                    {cart.map((item, index) => (
+                                        <div key={`${item.menu_item_id}-${index}`} className="space-y-2 rounded-xl border px-3 py-3">
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="min-w-0">
                                                     <p className="truncate text-sm font-medium">{item.name}</p>
-                                                    <p className="text-muted-foreground text-xs">Rp {money(item.price)} / item</p>
+                                                    {item.addonNames && item.addonNames.length > 0 && (
+                                                        <p className="text-muted-foreground mt-0.5 text-xs">+ {item.addonNames.join(', ')}</p>
+                                                    )}
+                                                    <p className="text-muted-foreground mt-0.5 text-xs">Rp {money(item.price)} / item</p>
                                                 </div>
                                                 <button
                                                     type="button"
                                                     className="bg-muted text-muted-foreground hover:text-destructive flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
-                                                    onClick={() => removeItem(item.menu_item_id)}
+                                                    onClick={() => removeItem(index)}
                                                 >
                                                     <Trash2 className="size-3" />
                                                 </button>
@@ -842,7 +901,7 @@ export default function PosIndex({
                                                         size="icon"
                                                         variant="outline"
                                                         className="h-9 w-9"
-                                                        onClick={() => updateQuantity(item.menu_item_id, -1)}
+                                                        onClick={() => updateQuantity(index, -1)}
                                                     >
                                                         <Minus className="size-3" />
                                                     </Button>
@@ -852,7 +911,7 @@ export default function PosIndex({
                                                         size="icon"
                                                         variant="outline"
                                                         className="h-9 w-9"
-                                                        onClick={() => updateQuantity(item.menu_item_id, 1)}
+                                                        onClick={() => updateQuantity(index, 1)}
                                                     >
                                                         <Plus className="size-3" />
                                                     </Button>
@@ -861,7 +920,25 @@ export default function PosIndex({
                                             </div>
                                         </div>
                                     ))}
-                                    <div className="flex justify-between border-t pt-3 text-base font-bold">
+                                    {cartServiceCharge > 0 && (
+                                        <div className="flex justify-between border-t pt-3 text-sm text-muted-foreground">
+                                            <span>Subtotal</span>
+                                            <span>Rp {money(cartSubtotal)}</span>
+                                        </div>
+                                    )}
+                                    {cartServiceCharge > 0 && (
+                                        <div className="flex justify-between pt-1 text-sm text-muted-foreground">
+                                            <span>Service Charge ({restaurant?.service_charge_percentage}%)</span>
+                                            <span>Rp {money(cartServiceCharge)}</span>
+                                        </div>
+                                    )}
+                                    {cartTax > 0 && (
+                                        <div className="flex justify-between pt-1 text-sm text-muted-foreground">
+                                            <span>PB1 ({restaurant?.tax_percentage}%)</span>
+                                            <span>Rp {money(cartTax)}</span>
+                                        </div>
+                                    )}
+                                    <div className={`flex justify-between ${cartServiceCharge > 0 || cartTax > 0 ? 'pt-2' : 'border-t pt-3'} text-base font-bold`}>
                                         <span>Total</span>
                                         <span>Rp {money(cartTotal)}</span>
                                     </div>
@@ -1176,22 +1253,23 @@ export default function PosIndex({
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
-                                        {cart.map((item) => (
-                                            <div key={item.menu_item_id} className="space-y-2 rounded-lg border px-3 py-2.5">
+                                        {cart.map((item, index) => (
+                                            <div key={`${item.menu_item_id}-${index}`} className="space-y-2 rounded-lg border px-3 py-2.5">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div className="min-w-0">
                                                         <p className="truncate text-sm font-medium">{item.name}</p>
-                                                        <p className="text-muted-foreground text-xs">Rp {money(item.price)} / item</p>
+                                                        {item.addonNames && item.addonNames.length > 0 && (
+                                                            <p className="text-muted-foreground mt-0.5 text-xs">+ {item.addonNames.join(', ')}</p>
+                                                        )}
+                                                        <p className="text-muted-foreground mt-0.5 text-xs">Rp {money(item.price)} / item</p>
                                                     </div>
-                                                    <Button
+                                                    <button
                                                         type="button"
-                                                        size="icon"
-                                                        variant="ghost"
-                                                        className="text-muted-foreground hover:text-destructive h-7 w-7 shrink-0"
-                                                        onClick={() => removeItem(item.menu_item_id)}
+                                                        className="bg-muted text-muted-foreground hover:text-destructive flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
+                                                        onClick={() => removeItem(index)}
                                                     >
                                                         <Trash2 className="size-3" />
-                                                    </Button>
+                                                    </button>
                                                 </div>
                                                 <div className="flex items-center justify-between">
                                                     <div className="flex items-center gap-1">
@@ -1199,27 +1277,45 @@ export default function PosIndex({
                                                             type="button"
                                                             size="icon"
                                                             variant="outline"
-                                                            className="h-8 w-8"
-                                                            onClick={() => updateQuantity(item.menu_item_id, -1)}
+                                                            className="h-9 w-9"
+                                                            onClick={() => updateQuantity(index, -1)}
                                                         >
                                                             <Minus className="size-3" />
                                                         </Button>
-                                                        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                                                        <span className="w-9 text-center text-sm font-semibold">{item.quantity}</span>
                                                         <Button
                                                             type="button"
                                                             size="icon"
                                                             variant="outline"
-                                                            className="h-8 w-8"
-                                                            onClick={() => updateQuantity(item.menu_item_id, 1)}
+                                                            className="h-9 w-9"
+                                                            onClick={() => updateQuantity(index, 1)}
                                                         >
                                                             <Plus className="size-3" />
                                                         </Button>
                                                     </div>
-                                                    <span className="text-sm font-semibold">Rp {money(item.price * item.quantity)}</span>
+                                                    <span className="text-sm font-bold">Rp {money(item.price * item.quantity)}</span>
                                                 </div>
                                             </div>
                                         ))}
-                                        <div className="flex justify-between border-t pt-2 text-sm font-bold">
+                                        {cartServiceCharge > 0 && (
+                                            <div className="flex justify-between border-t pt-2 text-xs text-muted-foreground">
+                                                <span>Subtotal</span>
+                                                <span>Rp {money(cartSubtotal)}</span>
+                                            </div>
+                                        )}
+                                        {cartServiceCharge > 0 && (
+                                            <div className="flex justify-between pt-1 text-xs text-muted-foreground">
+                                                <span>Service Charge ({restaurant?.service_charge_percentage}%)</span>
+                                                <span>Rp {money(cartServiceCharge)}</span>
+                                            </div>
+                                        )}
+                                        {cartTax > 0 && (
+                                            <div className="flex justify-between pt-1 text-xs text-muted-foreground">
+                                                <span>PB1 ({restaurant?.tax_percentage}%)</span>
+                                                <span>Rp {money(cartTax)}</span>
+                                            </div>
+                                        )}
+                                        <div className={`flex justify-between ${cartServiceCharge > 0 || cartTax > 0 ? 'pt-2' : 'border-t pt-2'} text-sm font-bold`}>
                                             <span>Total</span>
                                             <span>Rp {money(cartTotal)}</span>
                                         </div>
@@ -1869,7 +1965,7 @@ export default function PosIndex({
                                         <button
                                             key={item.id}
                                             type="button"
-                                            onClick={() => addItem(item)}
+                                            onClick={() => handleMenuClick(item)}
                                             className={`border-border relative overflow-hidden rounded-xl border text-left transition-all active:scale-95 ${cartItem ? 'bg-primary/5 ring-primary/60 ring-2' : 'hover:ring-primary/30 hover:ring-1'}`}
                                         >
                                             <div className="bg-muted aspect-[4/3]">
@@ -1901,6 +1997,54 @@ export default function PosIndex({
                     )}
                 </section>
             </main>
+
+            <Dialog open={!!menuItemForAddon} onOpenChange={(open) => !open && setMenuItemForAddon(null)}>
+                <DialogContent className="bg-surface overflow-hidden p-0 sm:max-w-md">
+                    <DialogHeader className="p-4 pb-2 md:p-6">
+                        <DialogTitle className="text-xl font-bold md:text-2xl">{menuItemForAddon?.name}</DialogTitle>
+                        <p className="text-muted-foreground text-sm">Rp {money(menuItemForAddon?.price || 0)}</p>
+                    </DialogHeader>
+                    <div className="max-h-[60vh] space-y-4 overflow-y-auto p-4 md:p-6">
+                        <h4 className="text-on-surface text-sm font-bold">Pilih Add-on (Opsional)</h4>
+                        {menuItemForAddon?.addons?.map((addon) => (
+                            <label
+                                key={addon.id}
+                                className={`flex cursor-pointer items-center justify-between rounded-xl border-2 p-4 transition-all select-none ${
+                                    selectedAddonIds.includes(addon.id)
+                                        ? 'border-primary bg-primary/5'
+                                        : 'border-outline-variant hover:border-primary/50'
+                                }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Checkbox
+                                        checked={selectedAddonIds.includes(addon.id)}
+                                        onCheckedChange={(checked) => {
+                                            if (checked) {
+                                                setSelectedAddonIds([...selectedAddonIds, addon.id]);
+                                            } else {
+                                                setSelectedAddonIds(selectedAddonIds.filter((id) => id !== addon.id));
+                                            }
+                                        }}
+                                        className="h-5 w-5 rounded-md"
+                                    />
+                                    <span className="text-on-surface text-base font-medium">{addon.name}</span>
+                                </div>
+                                <span className="text-primary text-sm font-bold">+Rp {money(addon.price)}</span>
+                            </label>
+                        ))}
+                    </div>
+                    <DialogFooter className="border-outline-variant bg-surface-container-lowest border-t p-4 md:p-6">
+                        <div className="flex w-full gap-3">
+                            <Button variant="outline" className="min-h-[48px] flex-1 rounded-xl font-bold" onClick={() => setMenuItemForAddon(null)}>
+                                Batal
+                            </Button>
+                            <Button className="min-h-[48px] flex-1 rounded-xl font-bold shadow-md" onClick={confirmAddWithAddons}>
+                                Tambahkan
+                            </Button>
+                        </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </AppLayout>
     );
 }

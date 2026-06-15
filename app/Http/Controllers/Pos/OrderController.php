@@ -55,6 +55,7 @@ class OrderController extends Controller
                 ->get(['id', 'table_id', 'status', 'total_amount', 'created_at']),
             'categories' => MenuCategory::query()
                 ->with(['activeItems' => fn ($query) => $query
+                    ->with(['addons' => fn ($q) => $q->where('is_active', true)])
                     ->where('is_available', true)
                     ->orderBy('sort_order')
                     ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path'])])
@@ -542,12 +543,32 @@ class OrderController extends Controller
                 ->keyBy('id');
 
             $subtotal = collect($validated['items'])->sum(function (array $item) use ($menuItems): float {
-                return (float) $menuItems[$item['menu_item_id']]->price * (int) $item['quantity'];
+                $basePrice = (float) $menuItems[$item['menu_item_id']]->price;
+                $addonPrice = 0;
+                
+                if (!empty($item['addons'])) {
+                    $addonPrice = \App\Models\MenuItemAddon::query()
+                        ->whereIn('id', $item['addons'])
+                        ->where('menu_item_id', $item['menu_item_id'])
+                        ->where('is_active', true)
+                        ->sum('price');
+                }
+                
+                return ($basePrice + $addonPrice) * (int) $item['quantity'];
             });
+
+            $restaurant = \App\Models\Restaurant::find($table->restaurant_id);
+            $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
+                ? $subtotal * ($restaurant->service_charge_percentage / 100)
+                : 0;
+            $taxAmount = $restaurant && $restaurant->tax_is_active
+                ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
+                : 0;
+            $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
 
             $paymentMethod = $validated['payment_method'] ?? 'cash';
 
-            if (($validated['bill_mode'] ?? 'open_bill') === 'close_bill' && $paymentMethod === 'cash' && (float) ($validated['amount_paid'] ?? 0) < $subtotal) {
+            if (($validated['bill_mode'] ?? 'open_bill') === 'close_bill' && $paymentMethod === 'cash' && (float) ($validated['amount_paid'] ?? 0) < $totalAmount) {
                 throw new RuntimeException('Uang pelanggan kurang dari total tagihan.');
             }
 
@@ -558,7 +579,9 @@ class OrderController extends Controller
                 'status' => 'open',
                 'notes' => $validated['notes'] ?? null,
                 'subtotal' => $subtotal,
-                'total_amount' => $subtotal,
+                'service_charge_amount' => $serviceChargeAmount,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $totalAmount,
             ]);
 
             $table->update(['status' => 'open_bill']);
@@ -595,13 +618,24 @@ class OrderController extends Controller
                 $this->createOrderItem($order, $menuItems[$item['menu_item_id']], $item);
             }
 
-            $total = (float) $order->items()
+            $subtotal = (float) $order->items()
                 ->where('status', '!=', 'cancelled')
                 ->sum('subtotal');
 
+            $restaurant = \App\Models\Restaurant::find($order->table->restaurant_id);
+            $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
+                ? $subtotal * ($restaurant->service_charge_percentage / 100)
+                : 0;
+            $taxAmount = $restaurant && $restaurant->tax_is_active
+                ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
+                : 0;
+            $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+
             $order->update([
-                'subtotal' => $total,
-                'total_amount' => $total,
+                'subtotal' => $subtotal,
+                'service_charge_amount' => $serviceChargeAmount,
+                'tax_amount' => $taxAmount,
+                'total_amount' => $totalAmount,
             ]);
 
             $order->table?->update(['status' => 'open_bill']);
@@ -611,13 +645,34 @@ class OrderController extends Controller
     private function createOrderItem(Order $order, MenuItem $menuItem, array $item): void
     {
         $quantity = (int) $item['quantity'];
+        
+        $addonPrice = 0;
+        $addonsData = null;
+        
+        if (!empty($item['addons'])) {
+            $selectedAddons = \App\Models\MenuItemAddon::query()
+                ->whereIn('id', $item['addons'])
+                ->where('menu_item_id', $menuItem->id)
+                ->where('is_active', true)
+                ->get(['id', 'name', 'price']);
+                
+            $addonPrice = $selectedAddons->sum('price');
+            $addonsData = $selectedAddons->map(fn($a) => [
+                'id' => $a->id,
+                'name' => $a->name,
+                'price' => (float) $a->price
+            ])->toArray();
+        }
+        
+        $unitPrice = (float) $menuItem->price + $addonPrice;
 
         $order->items()->create([
             'menu_item_id' => $menuItem->id,
             'quantity' => $quantity,
-            'unit_price' => $menuItem->price,
-            'subtotal' => (float) $menuItem->price * $quantity,
+            'unit_price' => $unitPrice,
+            'subtotal' => $unitPrice * $quantity,
             'notes' => $item['notes'] ?? null,
+            'addons' => $addonsData,
             'status' => 'pending',
         ]);
     }
