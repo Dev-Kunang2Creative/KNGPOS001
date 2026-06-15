@@ -11,6 +11,7 @@ type ReceiptItem = {
     unit_price: string;
     subtotal: string;
     notes?: string | null;
+    addons?: { id: number; name: string }[];
     menu_item?: { id: number; name: string; print_to: string } | null;
 };
 
@@ -58,7 +59,13 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
         const groups = new Map<string, ReceiptLine>();
 
         for (const item of order.items) {
-            const key = [item.menu_item?.id ?? item.menu_item?.name ?? 'item', item.unit_price, item.notes ?? ''].join('|');
+            const addonHash = item.addons
+                ? item.addons
+                      .map((a) => a.id)
+                      .sort()
+                      .join(',')
+                : '';
+            const key = [item.menu_item?.id ?? item.menu_item?.name ?? 'item', item.unit_price, item.notes ?? '', addonHash].join('|');
             const existing = groups.get(key);
 
             if (existing) {
@@ -204,6 +211,9 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                         {groupedItems.map((item) => (
                             <div key={item.ids.join('-')}>
                                 <div className="font-semibold">{item.menu_item?.name ?? 'Item'}</div>
+                                {item.addons && item.addons.length > 0 && (
+                                    <div className="ml-2 text-xs">+ {item.addons.map((a) => a.name).join(', ')}</div>
+                                )}
                                 <div className="flex justify-between gap-3 text-xs">
                                     <span>
                                         {item.quantity} x {money(item.unit_price)}

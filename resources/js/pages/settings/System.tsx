@@ -76,7 +76,12 @@ function PrinterForm({ printer, kitchenStations, barStations }: { printer?: Prin
     function submit(event: FormEvent) {
         event.preventDefault();
         const payload = { ...form.data, kitchen_station_id: form.data.kitchen_station_id === 'none' ? null : Number(form.data.kitchen_station_id), bar_station_id: form.data.bar_station_id === 'none' ? null : Number(form.data.bar_station_id) };
-        form.transform(() => payload).submit(printer ? 'put' : 'post', printer ? `/settings/printers/${printer.id}` : '/settings/printers', { preserveScroll: true });
+        form.transform(() => payload);
+        if (printer) {
+            form.put(`/settings/printers/${printer.id}`);
+        } else {
+            form.post('/settings/printers');
+        }
     }
     return (
         <form onSubmit={submit} className="rounded-md border p-4">

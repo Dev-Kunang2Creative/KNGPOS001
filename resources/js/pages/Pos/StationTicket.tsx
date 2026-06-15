@@ -3,8 +3,8 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ArrowLeft, CreditCard, Printer, QrCode, ReceiptText } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useEffect, useMemo, useRef } from 'react';
 
 type TicketItem = {
     id: number;
@@ -14,6 +14,7 @@ type TicketItem = {
         id: number;
         quantity: number;
         notes?: string | null;
+        addons?: { id: number; name: string }[];
         menu_item?: { id: number; name: string; print_to: string } | null;
     } | null;
 };
@@ -81,11 +82,14 @@ function TicketBlock({ title, batch, order }: { title: string; batch: StationBat
 
             <div className="space-y-3">
                 {batch.items.map((item) => (
-                    <div key={item.id}>
+                    <div key={item.id} className="mb-2">
                         <div className="flex justify-between gap-3 font-semibold">
                             <span>{item.order_item?.menu_item?.name ?? 'Item'}</span>
                             <span>x{item.quantity}</span>
                         </div>
+                        {item.order_item?.addons && item.order_item.addons.length > 0 && (
+                            <div className="ml-2 text-xs">+ {item.order_item.addons.map((a) => a.name).join(', ')}</div>
+                        )}
                         {(item.notes || item.order_item?.notes) && <div className="text-xs">Catatan: {item.notes ?? item.order_item?.notes}</div>}
                     </div>
                 ))}
@@ -94,7 +98,10 @@ function TicketBlock({ title, batch, order }: { title: string; batch: StationBat
             {order.notes && (
                 <>
                     <div className="my-3 border-t border-dashed border-black" />
-                    <div className="text-xs"><span className="font-semibold">Catatan: </span>{order.notes}</div>
+                    <div className="text-xs">
+                        <span className="font-semibold">Catatan: </span>
+                        {order.notes}
+                    </div>
                 </>
             )}
 
@@ -196,7 +203,7 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
                 {isWaitingForPayment && (
                     <div className="no-print w-full max-w-sm space-y-4 rounded-xl border bg-white p-5 shadow-sm">
                         <div className="flex items-center gap-2 font-semibold">
-                            <QrCode className="size-5 text-primary" />
+                            <QrCode className="text-primary size-5" />
                             <span>QRIS – Menunggu Pembayaran</span>
                         </div>
                         {typeof xenditPayment.xendit_raw_response?.qr_string === 'string' ? (
@@ -206,7 +213,7 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
                         ) : (
                             <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-700">QR string belum tersedia.</p>
                         )}
-                        <p className="text-center text-xs text-muted-foreground">Tampilkan kode QR ini ke pelanggan untuk dibayar via QRIS.</p>
+                        <p className="text-muted-foreground text-center text-xs">Tampilkan kode QR ini ke pelanggan untuk dibayar via QRIS.</p>
                         <Button
                             type="button"
                             className="w-full"

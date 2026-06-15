@@ -8,19 +8,18 @@ type Props = {
     cart: CartItem[];
     billType: 'open' | 'close';
     isProcessing: boolean;
+    restaurant: { tax_percentage: number; tax_is_active: boolean; service_charge_percentage: number; service_charge_is_active: boolean; name: string };
     onBack: () => void;
     onPay: (paymentMethod: 'qris' | 'cashier' | 'online') => void;
 };
 
-export default function PaymentSelection({ table, cart, billType, isProcessing, onBack, onPay }: Props) {
+export default function PaymentSelection({ table, cart, billType, isProcessing, restaurant, onBack, onPay }: Props) {
     const [selectedMethod, setSelectedMethod] = useState<'qris' | 'cashier' | 'online'>(billType === 'open' ? 'cashier' : 'qris');
 
-    const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    // As per previous generic implementation, assuming no tax added by frontend logic unless backend returns it.
-    // Wait, the mockup shows Tax & Service charge.
-    // In Show.tsx previously, total was just the sum of items. I will stick to just the items sum, or add a visual tax if needed.
-    // Let's just use the sum for now to match backend expectations.
-    const total = subtotal;
+    const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    const cartServiceCharge = restaurant.service_charge_is_active ? cartSubtotal * (Number(restaurant.service_charge_percentage) / 100) : 0;
+    const cartTax = restaurant.tax_is_active ? (cartSubtotal + cartServiceCharge) * (Number(restaurant.tax_percentage) / 100) : 0;
+    const total = cartSubtotal + cartServiceCharge + cartTax;
 
     const handlePay = () => {
         onPay(selectedMethod);
@@ -71,6 +70,24 @@ export default function PaymentSelection({ table, cart, billType, isProcessing, 
                     </div>
 
                     <div className="border-surface-variant space-y-xs mt-2 border-t pt-2">
+                        {cartServiceCharge > 0 && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-on-surface text-sm">Subtotal</span>
+                                <span className="text-on-surface text-sm">Rp {cartSubtotal.toLocaleString('id-ID')}</span>
+                            </div>
+                        )}
+                        {cartServiceCharge > 0 && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-on-surface text-sm">Service Charge ({restaurant.service_charge_percentage}%)</span>
+                                <span className="text-on-surface text-sm">Rp {cartServiceCharge.toLocaleString('id-ID')}</span>
+                            </div>
+                        )}
+                        {cartTax > 0 && (
+                            <div className="flex items-center justify-between">
+                                <span className="text-on-surface text-sm">PB1 ({restaurant.tax_percentage}%)</span>
+                                <span className="text-on-surface text-sm">Rp {cartTax.toLocaleString('id-ID')}</span>
+                            </div>
+                        )}
                         <div className="border-surface-variant mt-2 flex items-center justify-between border-t pt-2">
                             <span className="text-primary text-sm font-semibold">Total</span>
                             <span className="text-primary text-base font-bold">Rp {total.toLocaleString('id-ID')}</span>
