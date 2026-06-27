@@ -22,7 +22,7 @@ interface LoginProps {
 }
 
 export default function Login({ status, canResetPassword }: LoginProps) {
-    const { data, setData, post, processing, errors, reset } = useForm<LoginForm>({
+    const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
         remember: false,
@@ -88,13 +88,6 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                         {processing && <LoaderCircle className="h-4 w-4 animate-spin" />}
                         Log in
                     </Button>
-                </div>
-
-                <div className="text-muted-foreground text-center text-sm">
-                    Don't have an account?{' '}
-                    <TextLink href={route('register')} tabIndex={5}>
-                        Sign up
-                    </TextLink>
                 </div>
             </form>
 

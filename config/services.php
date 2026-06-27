@@ -28,6 +28,13 @@ return [
         'key' => env('RESEND_KEY'),
     ],
 
+    'xendit' => [
+        'enabled' => env('XENDIT_ENABLED', false),
+        'secret_key' => env('XENDIT_SECRET_KEY'),
+        'webhook_token' => env('XENDIT_WEBHOOK_TOKEN'),
+        'active_methods' => array_filter(array_map('trim', explode(',', env('XENDIT_ACTIVE_METHODS', 'qris')))),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
