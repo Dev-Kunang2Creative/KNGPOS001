@@ -1,6 +1,8 @@
+import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -636,25 +638,30 @@ function CategoriesTab({ categories, canManage }: { categories: Category[]; canM
                 </div>
             </div>
 
-            <Dialog open={dialog !== null} onOpenChange={(open) => !open && setDialog(null)}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>{dialog?.mode === 'edit' ? 'Edit Kategori' : 'Tambah Kategori Baru'}</DialogTitle>
-                    </DialogHeader>
-                    {dialog && (
-                        <CategoryForm 
-                            editCat={dialog.cat ?? null} 
-                            categories={categories} 
-                            onCancelEdit={() => setDialog(null)} 
-                        />
-                    )}
-                </DialogContent>
-            </Dialog>
+            {dialog && (
+                <CategoryDialog
+                    key={dialog.cat?.id ?? 'create'}
+                    mode={dialog.mode}
+                    editCat={dialog.cat ?? null}
+                    categories={categories}
+                    onClose={() => setDialog(null)}
+                />
+            )}
         </div>
     );
 }
 
-function CategoryForm({ editCat, categories, onCancelEdit }: { editCat: Category | null; categories: Category[]; onCancelEdit: () => void }) {
+function CategoryDialog({
+    mode,
+    editCat,
+    categories,
+    onClose,
+}: {
+    mode: 'create' | 'edit';
+    editCat: Category | null;
+    categories: Category[];
+    onClose: () => void;
+}) {
     const form = useForm({
         parent_id: editCat?.parent_id ? String(editCat.parent_id) : 'none',
         name: editCat?.name ?? '',
@@ -663,109 +670,91 @@ function CategoryForm({ editCat, categories, onCancelEdit }: { editCat: Category
         is_active: editCat?.is_active ?? true,
     });
 
-    const [lastEditId, setLastEditId] = useState<number | null>(null);
-    if (editCat && editCat.id !== lastEditId) {
-        setLastEditId(editCat.id);
-        form.setData({ parent_id: editCat.parent_id ? String(editCat.parent_id) : 'none', name: editCat.name, description: editCat.description ?? '', sort_order: editCat.sort_order, is_active: editCat.is_active });
-    }
-    if (!editCat && lastEditId !== null) {
-        setLastEditId(null);
-        form.reset();
-    }
-
     function submit(e: FormEvent) {
         e.preventDefault();
-        const opts = { preserveScroll: true, onSuccess: onCancelEdit };
-        const payload = {
-            name: form.data.name,
-            description: form.data.description,
-            sort_order: form.data.sort_order,
-            is_active: form.data.is_active,
-            parent_id: form.data.parent_id === 'none' ? null : Number(form.data.parent_id)
-        };
-        
-        if (editCat) {
-            router.put(`/menu/categories/${editCat.id}`, payload, opts);
+        form.transform((data) => ({
+            ...data,
+            parent_id: data.parent_id === 'none' ? null : Number(data.parent_id),
+        }));
+        if (mode === 'edit' && editCat) {
+            form.put(`/menu/categories/${editCat.id}`, { preserveScroll: true, onSuccess: onClose });
         } else {
-            router.post('/menu/categories', payload, opts);
+            form.post('/menu/categories', { preserveScroll: true, onSuccess: onClose });
         }
     }
 
     return (
-        <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-1.5">
-                <Label>Kategori Induk (Opsional)</Label>
-                <Select value={form.data.parent_id} onValueChange={(v) => form.setData('parent_id', v)}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Tidak ada (Kategori Utama)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="none">Tidak ada (Kategori Utama)</SelectItem>
-                        {categories.filter(c => c.parent_id === null && c.id !== editCat?.id).map((c) => (
-                            <SelectItem key={c.id} value={String(c.id)}>
-                                {c.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                <p className="text-muted-foreground text-xs">Pilih induk jika ini adalah sub-kategori.</p>
-            </div>
+        <Dialog open onOpenChange={(o) => (!o ? onClose() : undefined)}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>{mode === 'edit' ? `Edit Kategori: ${editCat?.name}` : 'Tambah Kategori Baru'}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={submit} className="space-y-4">
+                    <div className="grid gap-2">
+                        <Label>Kategori Induk (Opsional)</Label>
+                        <Select value={form.data.parent_id} onValueChange={(v) => form.setData('parent_id', v)}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Tidak ada (Kategori Utama)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Tidak ada (Kategori Utama)</SelectItem>
+                                {categories
+                                    .filter((c) => c.parent_id === null && c.id !== editCat?.id)
+                                    .map((c) => (
+                                        <SelectItem key={c.id} value={String(c.id)}>
+                                            {c.name}
+                                        </SelectItem>
+                                    ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-muted-foreground text-xs">Pilih induk jika ini adalah sub-kategori.</p>
+                    </div>
 
-            <div className="space-y-1.5">
-                <Label>
-                    Nama Kategori <span className="text-destructive">*</span>
-                </Label>
-                <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="cth: Makanan, Minuman, Snack" />
-                {form.errors.name && <p className="text-destructive text-xs">{form.errors.name}</p>}
-            </div>
+                    <div className="grid gap-2">
+                        <Label>
+                            Nama Kategori <span className="text-destructive">*</span>
+                        </Label>
+                        <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="cth: Makanan, Minuman, Snack" />
+                        <InputError message={form.errors.name} />
+                    </div>
 
-            <div className="space-y-1.5">
-                <Label>Deskripsi</Label>
-                <Input
-                    value={form.data.description}
-                    onChange={(e) => form.setData('description', e.target.value)}
-                    placeholder="Deskripsi kategori (opsional)"
-                />
-            </div>
+                    <div className="grid gap-2">
+                        <Label>Deskripsi</Label>
+                        <Input
+                            value={form.data.description}
+                            onChange={(e) => form.setData('description', e.target.value)}
+                            placeholder="Deskripsi kategori (opsional)"
+                        />
+                        <InputError message={form.errors.description} />
+                    </div>
 
-            <div className="space-y-1.5">
-                <Label>Urutan Tampil</Label>
-                <Input
-                    type="number"
-                    min={0}
-                    value={form.data.sort_order}
-                    onChange={(e) => form.setData('sort_order', Number(e.target.value))}
-                    placeholder="0"
-                />
-                <p className="text-muted-foreground text-xs">Angka lebih kecil tampil lebih dulu</p>
-            </div>
+                    <div className="grid gap-2">
+                        <Label>Urutan Tampil</Label>
+                        <Input
+                            type="number"
+                            min={0}
+                            value={form.data.sort_order}
+                            onChange={(e) => form.setData('sort_order', Number(e.target.value))}
+                            placeholder="0"
+                        />
+                        <p className="text-muted-foreground text-xs">Angka lebih kecil tampil lebih dulu</p>
+                    </div>
 
-            <div className="flex items-center gap-2">
-                <Checkbox id="cat_active" checked={form.data.is_active} onCheckedChange={(v) => form.setData('is_active', Boolean(v))} />
-                <Label htmlFor="cat_active" className="cursor-pointer font-normal">
-                    Kategori aktif / ditampilkan
-                </Label>
-            </div>
+                    <label className="flex items-center gap-2 text-sm">
+                        <Checkbox checked={form.data.is_active} onCheckedChange={(v) => form.setData('is_active', Boolean(v))} /> Kategori aktif / ditampilkan
+                    </label>
 
-            <div className="flex gap-2 pt-1">
-                <Button type="submit" disabled={form.processing} className="flex-1">
-                    {editCat ? (
-                        <>
-                            <Save className="size-4" /> Simpan
-                        </>
-                    ) : (
-                        <>
-                            <Plus className="size-4" /> Tambah Kategori
-                        </>
-                    )}
-                </Button>
-                {editCat && (
-                    <Button type="button" variant="outline" onClick={onCancelEdit}>
-                        <X className="size-4" />
-                    </Button>
-                )}
-            </div>
-        </form>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={onClose}>
+                            Batal
+                        </Button>
+                        <Button type="submit" disabled={form.processing}>
+                            {mode === 'edit' ? 'Simpan Perubahan' : 'Tambah Kategori'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     );
 }
 
