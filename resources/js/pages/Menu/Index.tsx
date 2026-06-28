@@ -552,80 +552,104 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
 /* ─────────────────────────── CATEGORIES TAB ─────────────────────────── */
 
 function CategoriesTab({ categories, canManage }: { categories: Category[]; canManage: boolean }) {
-    const [editCat, setEditCat] = useState<Category | null>(null);
+    const [dialog, setDialog] = useState<{ mode: 'create' | 'edit'; cat?: Category } | null>(null);
 
     return (
-        <div className={`grid gap-6 ${canManage ? 'xl:grid-cols-[380px_1fr]' : ''}`}>
-            {/* Form */}
-            {canManage && (
-                <div className="bg-card rounded-xl border">
-                    <div className="border-b px-5 py-4">
-                        <h2 className="font-semibold">{editCat ? 'Edit Kategori' : 'Tambah Kategori Baru'}</h2>
-                        <p className="text-muted-foreground mt-0.5 text-xs">
-                            {editCat ? `Mengedit: ${editCat.name}` : 'Buat kategori untuk mengelompokkan menu'}
-                        </p>
-                    </div>
-                    <div className="p-5">
-                        <CategoryForm editCat={editCat} categories={categories} onCancelEdit={() => setEditCat(null)} />
-                    </div>
+        <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+                <div>
+                    <h2 className="text-lg font-semibold">Kategori Menu</h2>
+                    <p className="text-muted-foreground text-sm">Kelola daftar kategori dan sub-kategori menu.</p>
                 </div>
-            )}
-
-            {/* List */}
-            <div className="space-y-3">
-                {categories.length === 0 ? (
-                    <div className="rounded-xl border-2 border-dashed p-12 text-center">
-                        <Tag className="text-muted-foreground/40 mx-auto size-10" />
-                        <p className="text-muted-foreground mt-3 font-medium">Belum ada kategori</p>
-                    </div>
-                ) : (
-                    categories.map((cat) => (
-                        <div
-                            key={cat.id}
-                            className={`bg-card flex items-center gap-4 rounded-xl border px-5 py-4 transition-all hover:shadow-sm ${!cat.is_active ? 'opacity-60' : ''}`}
-                        >
-                            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold">
-                                {cat.name.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                    <p className="font-semibold">{cat.name}</p>
-                                    {!cat.is_active && (
-                                        <Badge variant="outline" className="text-xs">
-                                            Nonaktif
-                                        </Badge>
-                                    )}
-                                </div>
-                                <p className="text-muted-foreground text-sm">
-                                    {cat.active_items_count} item aktif · urutan {cat.sort_order}
-                                    {cat.parent && ` · Sub-kategori dari ${cat.parent.name}`}
-                                </p>
-                                {cat.description && <p className="text-muted-foreground mt-0.5 truncate text-xs">{cat.description}</p>}
-                            </div>
-                            {canManage && (
-                                <div className="flex shrink-0 gap-1.5">
-                                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setEditCat(cat)}>
-                                        <Edit2 className="size-3.5" /> Edit
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="text-muted-foreground hover:text-destructive h-8 w-8"
-                                        onClick={() => {
-                                            if (confirm(`Hapus kategori "${cat.name}"? Item di dalamnya perlu dipindah dulu.`)) {
-                                                router.delete(`/menu/categories/${cat.id}`, { preserveScroll: true });
-                                            }
-                                        }}
-                                    >
-                                        <Trash2 className="size-3.5" />
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    ))
+                {canManage && (
+                    <Button onClick={() => setDialog({ mode: 'create' })}>
+                        <Plus className="mr-2 h-4 w-4" /> Tambah Kategori
+                    </Button>
                 )}
             </div>
+
+            <div className="bg-card rounded-xl border">
+                <div className="overflow-x-auto p-0">
+                    <table className="w-full min-w-[720px] text-sm">
+                        <thead className="text-muted-foreground border-b text-left bg-muted/50">
+                            <tr>
+                                <th className="py-3 px-5 font-medium">Kategori</th>
+                                <th className="py-3 px-5 font-medium">Induk Kategori</th>
+                                <th className="py-3 px-5 font-medium">Urutan</th>
+                                <th className="py-3 px-5 font-medium">Item Aktif</th>
+                                <th className="py-3 px-5 font-medium">Status</th>
+                                <th className="py-3 px-5 text-right font-medium">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {categories.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                                        <Tag className="mx-auto size-8 mb-2 opacity-20" />
+                                        Belum ada kategori
+                                    </td>
+                                </tr>
+                            ) : (
+                                categories.map((cat) => (
+                                    <tr key={cat.id} className={`border-b hover:bg-muted/50 ${!cat.is_active ? 'opacity-70' : ''}`}>
+                                        <td className="py-3 px-5 font-medium">
+                                            {cat.name}
+                                            {cat.description && <p className="text-muted-foreground mt-0.5 font-normal truncate max-w-[200px] text-xs">{cat.description}</p>}
+                                        </td>
+                                        <td className="py-3 px-5 text-muted-foreground">
+                                            {cat.parent ? cat.parent.name : '-'}
+                                        </td>
+                                        <td className="py-3 px-5">{cat.sort_order}</td>
+                                        <td className="py-3 px-5">{cat.active_items_count}</td>
+                                        <td className="py-3 px-5">
+                                            <Badge variant={cat.is_active ? 'secondary' : 'outline'} className="text-xs">
+                                                {cat.is_active ? 'Aktif' : 'Nonaktif'}
+                                            </Badge>
+                                        </td>
+                                        <td className="py-3 px-5 text-right">
+                                            {canManage && (
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={() => setDialog({ mode: 'edit', cat })}>
+                                                        <Edit2 className="size-3.5" />
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-muted-foreground hover:text-destructive h-8 w-8 px-0"
+                                                        onClick={() => {
+                                                            if (confirm(`Hapus kategori "${cat.name}"? Item di dalamnya perlu dipindah dulu.`)) {
+                                                                router.delete(`/menu/categories/${cat.id}`, { preserveScroll: true });
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Trash2 className="size-3.5" />
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <Dialog open={dialog !== null} onOpenChange={(open) => !open && setDialog(null)}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>{dialog?.mode === 'edit' ? 'Edit Kategori' : 'Tambah Kategori Baru'}</DialogTitle>
+                    </DialogHeader>
+                    {dialog && (
+                        <CategoryForm 
+                            editCat={dialog.cat ?? null} 
+                            categories={categories} 
+                            onCancelEdit={() => setDialog(null)} 
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
@@ -651,15 +675,19 @@ function CategoryForm({ editCat, categories, onCancelEdit }: { editCat: Category
 
     function submit(e: FormEvent) {
         e.preventDefault();
-        const opts = { preserveScroll: true };
+        const opts = { preserveScroll: true, onSuccess: onCancelEdit };
         const payload = {
-            ...form.data,
+            name: form.data.name,
+            description: form.data.description,
+            sort_order: form.data.sort_order,
+            is_active: form.data.is_active,
             parent_id: form.data.parent_id === 'none' ? null : Number(form.data.parent_id)
         };
+        
         if (editCat) {
-            form.transform(() => ({ ...payload, _method: 'PUT' })).post(`/menu/categories/${editCat.id}`, { ...opts, onSuccess: onCancelEdit });
+            router.put(`/menu/categories/${editCat.id}`, payload, opts);
         } else {
-            form.transform(() => payload).post('/menu/categories', { ...opts, onSuccess: () => form.reset() });
+            router.post('/menu/categories', payload, opts);
         }
     }
 
