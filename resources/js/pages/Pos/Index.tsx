@@ -1958,7 +1958,7 @@ export default function PosIndex({
                     {/* Menu items */}
                     {selectedCategory ? (
                         selectedCategory.active_items.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-3">
+                            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-4 2xl:grid-cols-5">
                                 {selectedCategory.active_items.map((item) => {
                                     const cartItem = cart.find((c) => c.menu_item_id === item.id);
                                     return (
@@ -1968,16 +1968,16 @@ export default function PosIndex({
                                             onClick={() => handleMenuClick(item)}
                                             className={`border-border relative overflow-hidden rounded-xl border text-left transition-all active:scale-95 ${cartItem ? 'bg-primary/5 ring-primary/60 ring-2' : 'hover:ring-primary/30 hover:ring-1'}`}
                                         >
-                                            <div className="bg-muted aspect-[4/3]">
+                                            <div className="bg-muted aspect-video w-full">
                                                 {item.image_url ? (
                                                     <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
                                                 ) : (
                                                     <div className="text-muted-foreground flex h-full items-center justify-center">
-                                                        <Package className="size-8" />
+                                                        <Package className="size-6 sm:size-8" />
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="p-3">
+                                            <div className="p-2 sm:p-3">
                                                 <span className="block text-sm leading-tight font-semibold">{item.name}</span>
                                                 <span className="text-primary mt-1.5 block text-sm font-bold">Rp {money(item.price)}</span>
                                                 <span className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
