@@ -68,7 +68,7 @@ function timeAgo(dateStr: string | null): string {
     return `${Math.floor(diff / 3600)} jam`;
 }
 
-export default function Orders({ tables, orders }: Props) {
+export default function Orders({ tables, orders, zoneIds }: Props) {
     const [activeTab, setActiveTab] = useState<'orders' | 'tables'>('orders');
     const [delivering, setDelivering] = useState<number | null>(null);
 
@@ -77,8 +77,27 @@ export default function Orders({ tables, orders }: Props) {
             if (document.hidden) return;
             router.reload({ only: ['orders', 'tables'] });
         }, 5000);
-        return () => window.clearInterval(interval);
-    }, []);
+
+        const channels = zoneIds
+            .map((zoneId) => {
+                if (typeof window !== 'undefined' && window.Echo) {
+                    return window.Echo.private(`waiter.zone.${zoneId}`).listen('.OrderReadyForDelivery', () => {
+                        router.reload({ only: ['orders'] });
+                    });
+                }
+                return null;
+            })
+            .filter(Boolean);
+
+        return () => {
+            window.clearInterval(interval);
+            channels.forEach((_, index) => {
+                if (typeof window !== 'undefined' && window.Echo) {
+                    window.Echo.leave(`waiter.zone.${zoneIds[index]}`);
+                }
+            });
+        };
+    }, [zoneIds]);
 
     function handleDeliver(order: WaiterOrder) {
         setDelivering(order.order.id);
@@ -215,7 +234,7 @@ export default function Orders({ tables, orders }: Props) {
                                                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50"
                                             >
                                                 <Check className="h-4 w-4" />
-                                                {delivering === order.order.id ? 'Memproses...' : 'Sudah Diantar'}
+                                                {delivering === order.order.id ? 'Selesai...' : 'Selesai / Sudah Diantar'}
                                             </button>
                                         </div>
                                     </div>
