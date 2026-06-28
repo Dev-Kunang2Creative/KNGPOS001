@@ -34,4 +34,32 @@ class KitchenDisplayController extends Controller
             'stationName' => $user->kitchenStation?->name ?? 'Kitchen',
         ]);
     }
+
+    public function markAsInProgress(Request $request, KitchenOrder $order)
+    {
+        $order->update([
+            'status' => 'in_progress',
+            'started_at' => now(),
+            'printed_at' => now(), // Simulated printing for now
+        ]);
+
+        return back()->with('success', 'Tiket dicetak, pesanan sedang dibuat.');
+    }
+
+    public function markAsReady(Request $request, KitchenOrder $order)
+    {
+        $order->update([
+            'status' => 'ready',
+        ]);
+
+        // Load order relations to get zone ID
+        $order->loadMissing('order.table');
+        $zoneId = $order->order->table->zone_id;
+
+        if ($zoneId) {
+            \App\Events\OrderReadyForDelivery::dispatch($order->order, $zoneId);
+        }
+
+        return back()->with('success', 'Pesanan siap diantar.');
+    }
 }

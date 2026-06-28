@@ -83,10 +83,14 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     // Kitchen / Bar / Waiter
     Route::middleware(['permission:kitchen.view'])->group(function () {
         Route::get('kitchen', [KitchenDisplayController::class, 'index'])->name('kitchen.index');
+        Route::patch('kitchen/orders/{order}/progress', [KitchenDisplayController::class, 'markAsInProgress'])->name('kitchen.orders.progress');
+        Route::patch('kitchen/orders/{order}/ready', [KitchenDisplayController::class, 'markAsReady'])->name('kitchen.orders.ready');
     });
 
     Route::middleware(['permission:bar.view'])->group(function () {
         Route::get('bar', [BarDisplayController::class, 'index'])->name('bar.index');
+        Route::patch('bar/orders/{order}/progress', [BarDisplayController::class, 'markAsInProgress'])->name('bar.orders.progress');
+        Route::patch('bar/orders/{order}/ready', [BarDisplayController::class, 'markAsReady'])->name('bar.orders.ready');
     });
 
     Route::middleware(['permission:waiter.view'])->group(function () {

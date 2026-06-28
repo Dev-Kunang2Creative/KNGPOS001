@@ -139,6 +139,31 @@ export default function Display({ orders, stationName }: Props) {
                                         <strong>Catatan:</strong> {order.order.notes}
                                     </div>
                                 )}
+
+                                {/* Actions */}
+                                <div className="border-border/50 border-t bg-muted/20 px-4 py-3">
+                                    {order.status === 'queued' && (
+                                        <button
+                                            onClick={() => router.patch(`/kitchen/orders/${order.id}/progress`)}
+                                            className="w-full rounded-lg bg-orange-500 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-600 active:bg-orange-700"
+                                        >
+                                            Cetak Tiket (Proses)
+                                        </button>
+                                    )}
+                                    {order.status === 'in_progress' && (
+                                        <button
+                                            onClick={() => router.patch(`/kitchen/orders/${order.id}/ready`)}
+                                            className="w-full rounded-lg bg-green-500 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-600 active:bg-green-700"
+                                        >
+                                            Siap Diantar
+                                        </button>
+                                    )}
+                                    {order.status === 'ready' && (
+                                        <div className="text-center text-sm font-semibold text-green-600 dark:text-green-500">
+                                            Menunggu Waiter...
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
