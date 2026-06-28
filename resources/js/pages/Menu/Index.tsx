@@ -10,7 +10,7 @@ import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { ChefHat, Edit2, GlassWater, Package, Percent, Plus, Printer, Save, Search, Tag, Trash2, X } from 'lucide-react';
 import { FormEvent, useMemo, useRef, useState } from 'react';
 
-type Category = { id: number; name: string; description?: string | null; sort_order: number; is_active: boolean; active_items_count: number };
+type Category = { id: number; name: string; description?: string | null; sort_order: number; is_active: boolean; active_items_count: number; parent_id?: number | null; parent?: { id: number; name: string } };
 type Addon = { id: number | null; name: string; price: number | string; is_active: boolean };
 type Item = {
     id: number;
@@ -339,7 +339,7 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
                     <SelectContent>
                         {categories.map((c) => (
                             <SelectItem key={c.id} value={String(c.id)}>
-                                {c.name}
+                                {c.parent ? `${c.parent.name} - ${c.name}` : c.name}
                             </SelectItem>
                         ))}
                     </SelectContent>
@@ -566,7 +566,7 @@ function CategoriesTab({ categories, canManage }: { categories: Category[]; canM
                         </p>
                     </div>
                     <div className="p-5">
-                        <CategoryForm editCat={editCat} onCancelEdit={() => setEditCat(null)} />
+                        <CategoryForm editCat={editCat} categories={categories} onCancelEdit={() => setEditCat(null)} />
                     </div>
                 </div>
             )}
@@ -598,6 +598,7 @@ function CategoriesTab({ categories, canManage }: { categories: Category[]; canM
                                 </div>
                                 <p className="text-muted-foreground text-sm">
                                     {cat.active_items_count} item aktif · urutan {cat.sort_order}
+                                    {cat.parent && ` · Sub-kategori dari ${cat.parent.name}`}
                                 </p>
                                 {cat.description && <p className="text-muted-foreground mt-0.5 truncate text-xs">{cat.description}</p>}
                             </div>
@@ -629,8 +630,9 @@ function CategoriesTab({ categories, canManage }: { categories: Category[]; canM
     );
 }
 
-function CategoryForm({ editCat, onCancelEdit }: { editCat: Category | null; onCancelEdit: () => void }) {
+function CategoryForm({ editCat, categories, onCancelEdit }: { editCat: Category | null; categories: Category[]; onCancelEdit: () => void }) {
     const form = useForm({
+        parent_id: editCat?.parent_id ? String(editCat.parent_id) : 'none',
         name: editCat?.name ?? '',
         description: editCat?.description ?? '',
         sort_order: editCat?.sort_order ?? 0,
@@ -640,7 +642,7 @@ function CategoryForm({ editCat, onCancelEdit }: { editCat: Category | null; onC
     const [lastEditId, setLastEditId] = useState<number | null>(null);
     if (editCat && editCat.id !== lastEditId) {
         setLastEditId(editCat.id);
-        form.setData({ name: editCat.name, description: editCat.description ?? '', sort_order: editCat.sort_order, is_active: editCat.is_active });
+        form.setData({ parent_id: editCat.parent_id ? String(editCat.parent_id) : 'none', name: editCat.name, description: editCat.description ?? '', sort_order: editCat.sort_order, is_active: editCat.is_active });
     }
     if (!editCat && lastEditId !== null) {
         setLastEditId(null);
@@ -650,15 +652,37 @@ function CategoryForm({ editCat, onCancelEdit }: { editCat: Category | null; onC
     function submit(e: FormEvent) {
         e.preventDefault();
         const opts = { preserveScroll: true };
+        const payload = {
+            ...form.data,
+            parent_id: form.data.parent_id === 'none' ? null : Number(form.data.parent_id)
+        };
         if (editCat) {
-            form.post(`/menu/categories/${editCat.id}?_method=PUT`, { ...opts, onSuccess: onCancelEdit });
+            form.transform(() => ({ ...payload, _method: 'PUT' })).post(`/menu/categories/${editCat.id}`, { ...opts, onSuccess: onCancelEdit });
         } else {
-            form.post('/menu/categories', { ...opts, onSuccess: () => form.reset() });
+            form.transform(() => payload).post('/menu/categories', { ...opts, onSuccess: () => form.reset() });
         }
     }
 
     return (
         <form onSubmit={submit} className="space-y-4">
+            <div className="space-y-1.5">
+                <Label>Kategori Induk (Opsional)</Label>
+                <Select value={form.data.parent_id} onValueChange={(v) => form.setData('parent_id', v)}>
+                    <SelectTrigger>
+                        <SelectValue placeholder="Tidak ada (Kategori Utama)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="none">Tidak ada (Kategori Utama)</SelectItem>
+                        {categories.filter(c => c.parent_id === null && c.id !== editCat?.id).map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>
+                                {c.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                <p className="text-muted-foreground text-xs">Pilih induk jika ini adalah sub-kategori.</p>
+            </div>
+
             <div className="space-y-1.5">
                 <Label>
                     Nama Kategori <span className="text-destructive">*</span>

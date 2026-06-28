@@ -14,6 +14,7 @@ class MenuCategoryRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'parent_id' => ['nullable', 'exists:menu_categories,id'],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'sort_order' => ['required', 'integer', 'min:0'],

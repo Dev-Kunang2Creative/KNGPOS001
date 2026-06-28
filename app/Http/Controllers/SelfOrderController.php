@@ -219,11 +219,24 @@ class SelfOrderController extends Controller
     private function menuCategories()
     {
         return MenuCategory::query()
-            ->with(['activeItems' => fn ($query) => $query
-                ->with(['addons' => fn ($q) => $q->orderBy('id')])
-                ->where('is_available', true)
-                ->orderBy('sort_order')
-                ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id'])])
+            ->whereNull('parent_id')
+            ->with([
+                'activeItems' => fn ($query) => $query
+                    ->with(['addons' => fn ($q) => $q->orderBy('id')])
+                    ->where('is_available', true)
+                    ->orderBy('sort_order')
+                    ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id']),
+                'children' => fn ($query) => $query
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->with(['activeItems' => fn ($q) => $q
+                        ->with(['addons' => fn ($a) => $a->orderBy('id')])
+                        ->where('is_available', true)
+                        ->orderBy('sort_order')
+                        ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id'])
+                    ])
+                    ->select(['id', 'parent_id', 'name', 'description', 'restaurant_id']),
+            ])
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->get(['id', 'name', 'description', 'restaurant_id']);

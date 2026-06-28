@@ -49,7 +49,7 @@ type MenuItem = {
     image_url?: string | null;
     addons?: MenuItemAddon[];
 };
-type Category = { id: number; name: string; active_items: MenuItem[] };
+type Category = { id: number; name: string; parent_id?: number | null; children?: Category[]; active_items: MenuItem[] };
 type ActiveOrderItem = {
     id: number;
     quantity: number;
@@ -218,6 +218,7 @@ export default function PosIndex({
     const [cart, setCart] = useState<CartItem[]>([]);
     const [itemNotice, setItemNotice] = useState('');
     const [selectedCategoryId, setSelectedCategoryId] = useState(categories[0] ? String(categories[0].id) : '');
+    const [selectedSubCategoryId, setSelectedSubCategoryId] = useState<string | null>(null);
     const [selfOrders, setSelfOrders] = useState<PendingSelfOrder[]>(pendingSelfOrders);
     const [approvingAll, setApprovingAll] = useState(false);
     const [drawerOpen, setDrawerOpen] = useState(false);
@@ -251,6 +252,7 @@ export default function PosIndex({
     );
     const orderableTables = useMemo(() => tables.filter((t) => ['available', 'occupied'].includes(t.status)), [tables]);
     const selectedCategory = categories.find((c) => String(c.id) === selectedCategoryId) ?? categories[0];
+    const displayCategory = (selectedSubCategoryId ? selectedCategory?.children?.find((c) => String(c.id) === selectedSubCategoryId) : null) || selectedCategory;
     const selectedTable = tables.find((t) => String(t.id) === selectedTableId);
     const activeOrderTotal = activeOrder ? Number(activeOrder.total_amount ?? activeOrder.subtotal) : 0;
     const pendingActiveItems = activeOrder?.items.filter((i) => i.status === 'pending') ?? [];
@@ -1948,18 +1950,44 @@ export default function PosIndex({
                                 key={cat.id}
                                 type="button"
                                 className={`min-h-[36px] shrink-0 rounded-full px-4 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${selectedCategoryId === String(cat.id) ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
-                                onClick={() => setSelectedCategoryId(String(cat.id))}
+                                onClick={() => {
+                                    setSelectedCategoryId(String(cat.id));
+                                    setSelectedSubCategoryId(null);
+                                }}
                             >
                                 {cat.name}
                             </button>
                         ))}
                     </div>
 
+                    {/* Sub-Category tabs */}
+                    {selectedCategory?.children && selectedCategory.children.length > 0 && (
+                        <div className="flex gap-2 overflow-x-auto pb-2 pt-1">
+                            <button
+                                type="button"
+                                className={`min-h-[32px] shrink-0 rounded-full px-4 py-1 text-xs font-medium whitespace-nowrap transition-colors ${selectedSubCategoryId === null ? 'bg-secondary text-secondary-foreground' : 'bg-secondary/30 hover:bg-secondary/50'}`}
+                                onClick={() => setSelectedSubCategoryId(null)}
+                            >
+                                Semua {selectedCategory.name}
+                            </button>
+                            {selectedCategory.children.map((sub) => (
+                                <button
+                                    key={sub.id}
+                                    type="button"
+                                    className={`min-h-[32px] shrink-0 rounded-full px-4 py-1 text-xs font-medium whitespace-nowrap transition-colors ${selectedSubCategoryId === String(sub.id) ? 'bg-secondary text-secondary-foreground' : 'bg-secondary/30 hover:bg-secondary/50'}`}
+                                    onClick={() => setSelectedSubCategoryId(String(sub.id))}
+                                >
+                                    {sub.name}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Menu items */}
-                    {selectedCategory ? (
-                        selectedCategory.active_items.length > 0 ? (
-                            <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-4 2xl:grid-cols-5">
-                                {selectedCategory.active_items.map((item) => {
+                    {displayCategory ? (
+                        displayCategory.active_items.length > 0 ? (
+                            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-5 2xl:grid-cols-6 3xl:grid-cols-7">
+                                {displayCategory.active_items.map((item) => {
                                     const cartItem = cart.find((c) => c.menu_item_id === item.id);
                                     return (
                                         <button
@@ -1973,15 +2001,15 @@ export default function PosIndex({
                                                     <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
                                                 ) : (
                                                     <div className="text-muted-foreground flex h-full items-center justify-center">
-                                                        <Package className="size-6 sm:size-8" />
+                                                        <Package className="size-5 sm:size-6" />
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="p-2 sm:p-3">
-                                                <span className="block text-sm leading-tight font-semibold">{item.name}</span>
-                                                <span className="text-primary mt-1.5 block text-sm font-bold">Rp {money(item.price)}</span>
-                                                <span className="text-muted-foreground mt-1 flex items-center gap-1 text-xs">
-                                                    <Printer className="size-3" />
+                                            <div className="p-1.5 sm:p-2">
+                                                <span className="block text-xs leading-tight font-semibold line-clamp-2">{item.name}</span>
+                                                <span className="text-primary mt-1 block text-xs font-bold">Rp {money(item.price)}</span>
+                                                <span className="text-muted-foreground mt-0.5 flex items-center gap-1 text-[10px]">
+                                                    <Printer className="size-2.5" />
                                                     {printTargetLabels[item.print_to] ?? item.print_to}
                                                 </span>
                                             </div>

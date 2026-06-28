@@ -20,7 +20,7 @@ class MenuController extends Controller
     public function index(): Response
     {
         return Inertia::render('Menu/Index', [
-            'categories' => MenuCategory::query()->withCount('activeItems')->orderBy('sort_order')->get(),
+            'categories' => MenuCategory::query()->with('parent:id,name')->withCount('activeItems')->orderBy('sort_order')->get(),
             'items' => MenuItem::query()->with(['category:id,name', 'addons'])->orderBy('sort_order')->get(),
             'promotions' => MenuPromotion::query()->latest('valid_from')->get(),
         ]);

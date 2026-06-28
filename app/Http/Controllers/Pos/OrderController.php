@@ -54,11 +54,24 @@ class OrderController extends Controller
                 ->latest()
                 ->get(['id', 'table_id', 'status', 'total_amount', 'created_at']),
             'categories' => MenuCategory::query()
-                ->with(['activeItems' => fn ($query) => $query
-                    ->with(['addons' => fn ($q) => $q->where('is_active', true)])
-                    ->where('is_available', true)
-                    ->orderBy('sort_order')
-                    ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path'])])
+                ->whereNull('parent_id')
+                ->with([
+                    'activeItems' => fn ($query) => $query
+                        ->with(['addons' => fn ($q) => $q->where('is_active', true)])
+                        ->where('is_available', true)
+                        ->orderBy('sort_order')
+                        ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path']),
+                    'children' => fn ($query) => $query
+                        ->where('is_active', true)
+                        ->orderBy('sort_order')
+                        ->with(['activeItems' => fn ($q) => $q
+                            ->with(['addons' => fn ($a) => $a->where('is_active', true)])
+                            ->where('is_available', true)
+                            ->orderBy('sort_order')
+                            ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path'])
+                        ])
+                        ->select(['id', 'parent_id', 'name']),
+                ])
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->get(['id', 'name']),
