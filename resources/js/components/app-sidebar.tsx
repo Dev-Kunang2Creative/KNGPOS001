@@ -17,7 +17,6 @@ import {
     MenuSquare,
     Plus,
     ScrollText,
-    Settings,
     Timer,
     Users,
     Utensils,
@@ -37,7 +36,7 @@ export function AppSidebar() {
         { title: 'POS', url: '/pos', icon: Utensils, permission: 'pos.view' },
         { title: 'Kitchen', url: '/kitchen', icon: ChefHat, permission: 'kitchen.view' },
         { title: 'Bar', url: '/bar', icon: BarChart3, permission: 'bar.view' },
-        { title: 'Orders', url: '/orders', icon: ClipboardList, permission: 'waiter.view' },
+        { title: 'Waiter', url: '/orders', icon: ClipboardList, permission: 'waiter.view' },
         { title: 'Zona & Meja', url: '/zones', icon: MapPinned, permission: 'zones.manage' },
         { title: 'Menu', url: '/menu', icon: MenuSquare, permission: 'menu.view' },
         { title: 'Reports', url: '/reports/kasir', icon: FileText, permission: 'reports.view' },
@@ -45,7 +44,6 @@ export function AppSidebar() {
         { title: 'Audit Logs', url: '/audit-logs', icon: ScrollText, permission: 'audit.view' },
         { title: 'Shifts', url: '/shifts', icon: Timer, permission: 'shift.view' },
         { title: 'Restoran', url: '/restaurant/edit', icon: Building2, permission: 'settings.view' },
-        { title: 'Settings', url: '/settings/system', icon: Settings, permission: 'settings.view' },
     ];
 
     const mainNavItems = candidates.filter((item) => {

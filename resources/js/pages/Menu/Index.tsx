@@ -112,6 +112,30 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
         return matchSearch && matchCat;
     });
 
+    const groups = useMemo(() => {
+        const byCat = new Map<number, Item[]>();
+        for (const item of filtered) {
+            const list = byCat.get(item.category_id) ?? [];
+            list.push(item);
+            byCat.set(item.category_id, list);
+        }
+        const ordered = [...categories]
+            .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+            .filter((cat) => byCat.has(cat.id))
+            .map((cat) => ({ category: cat, items: (byCat.get(cat.id) ?? []).sort((a, b) => a.sort_order - b.sort_order) }));
+
+        // Items whose category is missing from the categories list
+        const known = new Set(categories.map((c) => c.id));
+        const orphans = filtered.filter((i) => !known.has(i.category_id));
+        if (orphans.length > 0) {
+            ordered.push({
+                category: { id: -1, name: 'Tanpa Kategori', sort_order: 999, is_active: true, active_items_count: orphans.length },
+                items: orphans,
+            });
+        }
+        return ordered;
+    }, [filtered, categories]);
+
     function startEdit(item: Item) {
         setEditItem(item);
         window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
@@ -157,44 +181,43 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
                     </Select>
                 </div>
 
-                {/* Cards grid */}
+                {/* List grouped by category */}
                 {filtered.length === 0 ? (
                     <div className="rounded-xl border-2 border-dashed p-12 text-center">
                         <Package className="text-muted-foreground/40 mx-auto size-10" />
                         <p className="text-muted-foreground mt-3 font-medium">Tidak ada item ditemukan</p>
                     </div>
                 ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {filtered.map((item) => {
-                            const pt = printTargetLabels[item.print_to] ?? printTargetLabels.kasir;
-                            const PtIcon = pt.icon;
-                            return (
-                                <div
-                                    key={item.id}
-                                    className={`group bg-card relative overflow-hidden rounded-xl border transition-all hover:shadow-sm ${!item.is_available ? 'opacity-60' : ''}`}
-                                >
-                                    <div className="absolute top-3 left-3 z-10 sm:right-3 sm:left-auto">
-                                        <span className={`block size-2 rounded-full ${item.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                                    </div>
+                    <div className="flex flex-col gap-5">
+                        {groups.map(({ category, items: catItems }) => (
+                            <div key={category.id}>
+                                <div className="mb-2 flex items-center gap-2 px-1">
+                                    <Tag className="text-muted-foreground size-4" />
+                                    <h3 className="text-sm font-semibold">{category.name}</h3>
+                                    <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-medium">
+                                        {catItems.length}
+                                    </span>
+                                </div>
+                                <div className="bg-card divide-y overflow-hidden rounded-xl border">
+                                    {catItems.map((item) => {
+                                        const pt = printTargetLabels[item.print_to] ?? printTargetLabels.kasir;
+                                        const PtIcon = pt.icon;
+                                        return (
+                                            <div
+                                                key={item.id}
+                                                className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors hover:bg-muted/50 ${!item.is_available ? 'opacity-60' : ''}`}
+                                            >
+                                                <span
+                                                    className={`size-2 shrink-0 rounded-full ${item.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                                />
 
-                                    <div className="grid grid-cols-[104px_1fr] sm:block">
-                                        <div className="bg-muted aspect-square sm:aspect-[4/3]">
-                                            {item.image_url ? (
-                                                <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
-                                            ) : (
-                                                <div className="text-muted-foreground flex h-full items-center justify-center">
-                                                    <Package className="size-9" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate leading-tight font-medium">{item.name}</p>
+                                                    {item.description && (
+                                                        <p className="text-muted-foreground truncate text-xs">{item.description}</p>
+                                                    )}
                                                 </div>
-                                            )}
-                                        </div>
 
-                                        <div className="min-w-0 p-3 sm:p-4">
-                                            <p className="pr-4 leading-tight font-semibold">{item.name}</p>
-                                            <p className="text-muted-foreground mt-0.5 text-xs">{item.category?.name ?? '-'}</p>
-
-                                            <p className="text-primary mt-2 text-lg font-bold">Rp {money(item.price)}</p>
-
-                                            <div className="mt-2 flex items-center gap-1.5">
                                                 <span
                                                     className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${pt.color}`}
                                                 >
@@ -205,54 +228,57 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
                                                         Habis
                                                     </span>
                                                 )}
-                                            </div>
 
-                                            {canManage && (
-                                                <div className="mt-3 grid grid-cols-2 gap-1.5 sm:flex">
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-9 flex-1 text-xs"
-                                                        onClick={() => startEdit(item)}
-                                                    >
-                                                        <Edit2 className="size-3" /> Edit
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant={item.is_available ? 'outline' : 'default'}
-                                                        className="h-9 flex-1 text-xs"
-                                                        onClick={() =>
-                                                            router.patch(
-                                                                `/menu/items/${item.id}/availability`,
-                                                                { is_available: !item.is_available },
-                                                                { preserveScroll: true },
-                                                            )
-                                                        }
-                                                    >
-                                                        {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-muted-foreground hover:text-destructive col-span-2 h-9 shrink-0 sm:col-span-1 sm:w-9"
-                                                        onClick={() => {
-                                                            if (confirm(`Hapus "${item.name}"?`)) {
-                                                                router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
+                                                <p className="text-primary w-24 text-right font-bold">Rp {money(item.price)}</p>
+
+                                                {canManage && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-8 px-2 text-xs"
+                                                            onClick={() => startEdit(item)}
+                                                        >
+                                                            <Edit2 className="size-3.5" />
+                                                            <span className="hidden sm:inline">Edit</span>
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant={item.is_available ? 'outline' : 'default'}
+                                                            className="h-8 px-2 text-xs"
+                                                            onClick={() =>
+                                                                router.patch(
+                                                                    `/menu/items/${item.id}/availability`,
+                                                                    { is_available: !item.is_available },
+                                                                    { preserveScroll: true },
+                                                                )
                                                             }
-                                                        }}
-                                                    >
-                                                        <Trash2 className="size-3.5" />
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                                        >
+                                                            {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="text-muted-foreground hover:text-destructive size-8 shrink-0 px-0"
+                                                            onClick={() => {
+                                                                if (confirm(`Hapus "${item.name}"?`)) {
+                                                                    router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Trash2 className="size-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            );
-                        })}
+                            </div>
+                        ))}
                     </div>
                 )}
 

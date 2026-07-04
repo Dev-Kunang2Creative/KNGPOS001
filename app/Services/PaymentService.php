@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\SendSelfOrderReceiptEmail;
 use App\Models\Order;
+use App\Models\Restaurant;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\XenditPayment;
@@ -268,37 +269,6 @@ class PaymentService
         });
     }
 
-    /**
-     * @return array<string, mixed>
-     *
-     * @throws RequestException
-     */
-    public function simulateQrisPayment(XenditPayment $payment): array
-    {
-        $secretKey = config('services.xendit.secret_key');
-
-        if (! $secretKey || ! config('services.xendit.enabled')) {
-            throw new RuntimeException('Xendit belum dikonfigurasi.');
-        }
-
-        if (! str_starts_with((string) $secretKey, 'xnd_development_')) {
-            throw new RuntimeException('Simulasi pembayaran hanya tersedia untuk Xendit Test Mode.');
-        }
-
-        $qrCodeIdentifier = $payment->xendit_invoice_id ?: $payment->external_id;
-
-        return Http::withBasicAuth($secretKey, '')
-            ->withHeaders([
-                'api-version' => '2022-07-31',
-                'Content-Type' => 'application/json',
-            ])
-            ->post("https://api.xendit.co/qr_codes/{$qrCodeIdentifier}/payments/simulate", [
-                'amount' => (int) round((float) $payment->amount),
-            ])
-            ->throw()
-            ->json();
-    }
-
     public function calculateOrderTotals(Order $order): array
     {
         $order->loadMissing(['items', 'table']);
@@ -307,16 +277,16 @@ class PaymentService
             ->where('status', '!=', 'cancelled')
             ->sum(fn ($item) => (float) $item->subtotal);
 
-        $restaurant = \App\Models\Restaurant::find($order->table->restaurant_id);
-        
+        $restaurant = Restaurant::find($order->table->restaurant_id);
+
         $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
             ? $subtotal * ($restaurant->service_charge_percentage / 100)
             : 0;
-            
+
         $taxAmount = $restaurant && $restaurant->tax_is_active
             ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
             : 0;
-            
+
         $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
 
         return [

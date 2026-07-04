@@ -4,8 +4,9 @@ namespace App\Services;
 
 use App\Models\BarStation;
 use App\Models\KitchenStation;
+use App\Models\MenuItem;
 use App\Models\Order;
-use App\Models\RestaurantUser;
+use App\Models\OrderItem;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -16,12 +17,24 @@ class ReportService
     {
         $today = today();
 
+        $todayRevenue = (float) Transaction::query()
+            ->where('status', 'paid')
+            ->whereDate('paid_at', $today)
+            ->sum('amount_paid');
+
+        $todayTransactions = Transaction::query()
+            ->where('status', 'paid')
+            ->whereDate('paid_at', $today)
+            ->count();
+
         return [
             'totalOrders' => Order::query()->whereDate('created_at', $today)->count(),
-            'todayRevenue' => (float) Transaction::query()
-                ->where('status', 'paid')
-                ->whereDate('paid_at', $today)
-                ->sum('amount_paid'),
+            'todayRevenue' => $todayRevenue,
+            'todayTransactions' => $todayTransactions,
+            'avgOrderValue' => $todayTransactions > 0 ? round($todayRevenue / $todayTransactions) : 0.0,
+            'revenueTrend' => $this->revenueTrend(),
+            'topMenuItems' => $this->topMenuItems(),
+            'paymentMethods' => $this->paymentMethodBreakdown($today),
             'kitchenStations' => KitchenStation::query()
                 ->withCount(['activeOrders as queue_count' => fn ($query) => $query->where('status', 'queued')])
                 ->orderBy('name')
@@ -32,6 +45,90 @@ class ReportService
                 ->get(['id', 'name', 'status']),
             'cashierBreakdown' => $this->cashierReport($today, $today)['rows'],
         ];
+    }
+
+    /**
+     * Paid revenue per day for the last 7 days (oldest first).
+     *
+     * @return list<array{date: string, label: string, revenue: float}>
+     */
+    private function revenueTrend(int $days = 7): array
+    {
+        $start = today()->subDays($days - 1)->startOfDay();
+
+        $byDate = Transaction::query()
+            ->where('status', 'paid')
+            ->whereBetween('paid_at', [$start, today()->endOfDay()])
+            ->get(['amount_paid', 'paid_at'])
+            ->groupBy(fn (Transaction $transaction) => Carbon::parse($transaction->paid_at)->toDateString());
+
+        return collect(range($days - 1, 0))
+            ->map(function (int $daysAgo) use ($byDate): array {
+                $date = today()->subDays($daysAgo);
+                $key = $date->toDateString();
+
+                return [
+                    'date' => $key,
+                    'label' => $date->isoFormat('dd D/M'),
+                    'revenue' => (float) ($byDate->get($key)?->sum('amount_paid') ?? 0),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * Best-selling menu items over the last 7 days by quantity sold.
+     *
+     * @return list<array{name: string, quantity: int, revenue: float}>
+     */
+    private function topMenuItems(int $limit = 5, int $days = 7): array
+    {
+        $start = today()->subDays($days - 1)->startOfDay();
+
+        $aggregated = OrderItem::query()
+            ->whereHas('order', fn ($query) => $query
+                ->where('status', 'paid')
+                ->whereBetween('created_at', [$start, today()->endOfDay()]))
+            ->where('status', '!=', 'cancelled')
+            ->selectRaw('menu_item_id, SUM(quantity) as quantity, SUM(subtotal) as revenue')
+            ->groupBy('menu_item_id')
+            ->orderByDesc('quantity')
+            ->limit($limit)
+            ->get();
+
+        $names = MenuItem::query()
+            ->whereIn('id', $aggregated->pluck('menu_item_id'))
+            ->pluck('name', 'id');
+
+        return $aggregated
+            ->map(fn ($row): array => [
+                'name' => $names[$row->menu_item_id] ?? 'Item #'.$row->menu_item_id,
+                'quantity' => (int) $row->quantity,
+                'revenue' => (float) $row->revenue,
+            ])
+            ->all();
+    }
+
+    /**
+     * Paid revenue grouped by payment method for the given day.
+     *
+     * @return list<array{method: string, amount: float, count: int}>
+     */
+    private function paymentMethodBreakdown(Carbon $day): array
+    {
+        return Transaction::query()
+            ->where('status', 'paid')
+            ->whereDate('paid_at', $day)
+            ->get(['payment_method', 'amount_paid'])
+            ->groupBy('payment_method')
+            ->map(fn ($group, $method): array => [
+                'method' => (string) $method,
+                'amount' => (float) $group->sum('amount_paid'),
+                'count' => $group->count(),
+            ])
+            ->sortByDesc('amount')
+            ->values()
+            ->all();
     }
 
     public function cashierReport(?string $from = null, ?string $to = null, ?int $cashierId = null, ?int $shiftId = null): array

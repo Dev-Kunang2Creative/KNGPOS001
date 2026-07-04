@@ -29,20 +29,18 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment, restauran
     const isOnlinePending = selfOrder.payment_preference === 'online' && selfOrder.status === 'converted_to_order' && !isPaid;
     const shouldPoll = selfOrder.status === 'pending' || isQrisPending || isOnlinePending;
 
-    function simulatePayment() {
-        if (!payment) return;
-        router.post(
-            `/s/${qrToken}/status/${selfOrder.id}/payments/${payment.id}/simulate`,
-            {},
-            {
-                preserveScroll: true,
-            },
-        );
-    }
-
     function refreshPayment() {
         router.post(`/s/${qrToken}/status/${selfOrder.id}/refresh`, {}, { preserveScroll: true, preserveState: true });
     }
+
+    // Confirm immediately when the customer is redirected back from Xendit,
+    // so the order routes to Kitchen/Bar without waiting for the poll/webhook.
+    useEffect(() => {
+        if (isOnlinePending) {
+            router.post(`/s/${qrToken}/status/${selfOrder.id}/refresh`, {}, { preserveScroll: true, preserveState: true });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         if (!shouldPoll) return;
@@ -144,12 +142,7 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment, restauran
                                 </div>
                             )}
 
-                            <button
-                                onClick={simulatePayment}
-                                className="bg-primary h-12 w-full rounded-full text-sm font-bold font-semibold text-white shadow-sm transition-transform active:scale-[0.98]"
-                            >
-                                Simulasi Bayar QRIS
-                            </button>
+                            <p className="text-on-surface-variant text-xs">Status akan terbarui otomatis setelah pembayaran berhasil.</p>
                         </div>
                     </section>
                 )}

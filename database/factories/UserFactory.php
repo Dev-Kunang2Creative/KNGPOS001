@@ -36,6 +36,18 @@ class UserFactory extends Factory
     }
 
     /**
+     * The `role` column was removed from `users` (roles now live on the
+     * `restaurant_users` pivot). Tests still pass `['role' => ...]` for
+     * readability, so drop it before persisting instead of failing the insert.
+     */
+    public function configure(): static
+    {
+        return $this->afterMaking(function (User $user): void {
+            unset($user->role);
+        });
+    }
+
+    /**
      * Indicate that the model's email address should be unverified.
      */
     public function unverified(): static

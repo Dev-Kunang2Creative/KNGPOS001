@@ -130,6 +130,16 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
     }, []);
 
     useEffect(() => {
+        if (!isWaitingForPayment) return;
+        const interval = window.setInterval(() => {
+            if (document.hidden) return;
+            router.reload({ only: ['xenditPayment', 'receiptId'] });
+        }, 5000);
+
+        return () => window.clearInterval(interval);
+    }, [isWaitingForPayment]);
+
+    useEffect(() => {
         if (isWaitingForPayment) return;
         function advancePrintQueue() {
             if (hasAdvancedPrintQueue.current) {
@@ -214,14 +224,10 @@ export default function StationTicket({ order, kitchenOrders, barOrders, xenditP
                             <p className="rounded-lg bg-amber-50 px-3 py-2 text-center text-xs text-amber-700">QR string belum tersedia.</p>
                         )}
                         <p className="text-muted-foreground text-center text-xs">Tampilkan kode QR ini ke pelanggan untuk dibayar via QRIS.</p>
-                        <Button
-                            type="button"
-                            className="w-full"
-                            onClick={() => router.post(`/pos/orders/${order.id}/xendit/${xenditPayment.id}/simulate`, { back_to_station: true })}
-                        >
-                            <CreditCard className="size-4" />
-                            Simulasi Pembayaran
-                        </Button>
+                        <p className="text-muted-foreground flex items-center justify-center gap-2 text-center text-xs">
+                            <CreditCard className="size-4 animate-pulse" />
+                            Menunggu pembayaran — status terbarui otomatis.
+                        </p>
                     </div>
                 )}
 

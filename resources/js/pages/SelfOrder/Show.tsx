@@ -115,7 +115,7 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
         setOrderNotes(notes);
     };
 
-    const handlePay = (paymentMethod: 'qris' | 'cashier' | 'online') => {
+    const handlePay = (paymentMethod: 'cashier' | 'online') => {
         setIsProcessing(true);
         router.post(
             `/s/${qrToken}/orders`,

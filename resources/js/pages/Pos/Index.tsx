@@ -761,21 +761,9 @@ export default function PosIndex({
                                                 </Button>
                                             )}
                                             {!isXenditPaid && (
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    className="min-h-[44px] w-full"
-                                                    variant="secondary"
-                                                    onClick={() =>
-                                                        router.post(
-                                                            `/pos/orders/${activeOrder.id}/xendit/${xenditPayment.id}/simulate`,
-                                                            {},
-                                                            { preserveScroll: true },
-                                                        )
-                                                    }
-                                                >
-                                                    Simulasi Pembayaran
-                                                </Button>
+                                                <p className="text-muted-foreground text-center text-xs">
+                                                    Menunggu pembayaran pelanggan. Status akan terbarui otomatis.
+                                                </p>
                                             )}
                                         </div>
                                     )}

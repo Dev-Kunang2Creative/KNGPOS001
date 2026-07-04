@@ -3,8 +3,9 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, usePage } from '@inertiajs/react';
-import { ArrowLeft, CreditCard, QrCode } from 'lucide-react';
+import { ArrowLeft, QrCode, RefreshCw } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import { useEffect } from 'react';
 
 type Order = {
     id: number;
@@ -44,6 +45,17 @@ export default function PaymentPending({ payment, transaction, order }: Props) {
     const { flash } = usePage<SharedData>().props;
     const qrString = typeof payment.xendit_raw_response?.qr_string === 'string' ? payment.xendit_raw_response.qr_string : '';
 
+    // Poll for webhook-confirmed payment; the controller redirects to the
+    // success page once the payment is marked paid.
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            if (document.hidden) return;
+            router.reload({ only: ['payment', 'transaction', 'order'] });
+        }, 5000);
+
+        return () => window.clearInterval(interval);
+    }, []);
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Pembayaran QRIS" />
@@ -64,13 +76,10 @@ export default function PaymentPending({ payment, transaction, order }: Props) {
                             <div className="mt-6 rounded-md border border-warning/40 bg-warning/10 p-4 text-sm text-warning">QR string tidak tersedia dari Xendit.</div>
                         )}
 
-                        <Button
-                            type="button"
-                            className="mt-5 w-full"
-                            onClick={() => router.post(`/pos/orders/${order.id}/xendit/${payment.id}/simulate`)}
-                        >
-                            <CreditCard />
-                            Simulasi Bayar QRIS
+                        <p className="mt-5 text-xs text-muted-foreground">Status pembayaran diperbarui otomatis setelah pelanggan membayar.</p>
+                        <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => router.reload({ only: ['payment', 'transaction', 'order'] })}>
+                            <RefreshCw />
+                            Cek Status Pembayaran
                         </Button>
                     </div>
                 </section>

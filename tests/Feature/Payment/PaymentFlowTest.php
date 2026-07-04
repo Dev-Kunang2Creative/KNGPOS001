@@ -16,8 +16,8 @@ use App\Models\User;
 use App\Models\XenditPayment;
 use App\Models\Zone;
 use App\Models\ZoneStationAssignment;
-use App\Services\PaymentService;
 use App\Services\OrderRoutingService;
+use App\Services\PaymentService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Spatie\Permission\Models\Permission;
@@ -597,120 +597,6 @@ class PaymentFlowTest extends TestCase
         Http::assertSent(fn ($request) => $request->hasHeader('Authorization')
             && $request['amount'] === 15000
             && $request['currency'] === 'IDR');
-    }
-
-    public function test_cashier_can_simulate_xendit_qris_payment_in_test_mode(): void
-    {
-        Permission::query()->firstOrCreate(['name' => 'pos.checkout', 'guard_name' => 'web']);
-        Permission::query()->firstOrCreate(['name' => 'shift.view', 'guard_name' => 'web']);
-
-        Http::fake([
-            'api.xendit.co/qr_codes/qr_test/payments/simulate' => Http::response([
-                'id' => 'qrpy_test',
-                'status' => 'SUCCEEDED',
-                'reference_id' => 'karcisqu-test-2',
-            ]),
-        ]);
-
-        config([
-            'services.xendit.secret_key' => 'xnd_development_test',
-            'services.xendit.enabled' => true,
-        ]);
-
-        $cashier = User::factory()->create(['role' => 'kasir']);
-        $cashier->givePermissionTo(['pos.checkout', 'shift.view']);
-        Shift::query()->create([
-            'kasir_id' => $cashier->id,
-            'opening_cash' => 100000,
-            'status' => 'open',
-            'opened_at' => now(),
-        ]);
-
-        $order = $this->orderWithItemTotal($cashier, 20000);
-        $transaction = Transaction::query()->create([
-            'order_id' => $order->id,
-            'kasir_id' => $cashier->id,
-            'payment_method' => 'qris',
-            'amount_paid' => 20000,
-            'change_amount' => 0,
-            'status' => 'pending',
-        ]);
-        $payment = XenditPayment::query()->create([
-            'transaction_id' => $transaction->id,
-            'external_id' => 'karcisqu-test-2',
-            'xendit_invoice_id' => 'qr_test',
-            'payment_method' => 'qris',
-            'amount' => 20000,
-            'status' => 'ACTIVE',
-        ]);
-
-        $this->actingAs($cashier)
-            ->post(route('pos.orders.xendit.simulate', [$order, $payment]))
-            ->assertRedirect(route('pos.xendit.success', $payment));
-
-        $this->assertDatabaseHas('xendit_payments', ['id' => $payment->id, 'status' => 'paid']);
-        $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid']);
-        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
-        $this->actingAs($cashier)
-            ->get(route('pos.xendit.success', $payment))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Pos/PaymentSuccess')
-                ->where('payment.id', $payment->id)
-                ->where('transaction.id', $transaction->id)
-                ->where('redirectSeconds', 3));
-        Http::assertSent(fn ($request) => $request->url() === 'https://api.xendit.co/qr_codes/qr_test/payments/simulate'
-            && $request['amount'] === 20000);
-    }
-
-    public function test_xendit_qris_simulation_rejects_live_secret_key(): void
-    {
-        Permission::query()->firstOrCreate(['name' => 'pos.checkout', 'guard_name' => 'web']);
-        Permission::query()->firstOrCreate(['name' => 'shift.view', 'guard_name' => 'web']);
-
-        Http::fake();
-
-        config([
-            'services.xendit.secret_key' => 'xnd_production_test',
-            'services.xendit.enabled' => true,
-        ]);
-
-        $cashier = User::factory()->create(['role' => 'kasir']);
-        $cashier->givePermissionTo(['pos.checkout', 'shift.view']);
-        Shift::query()->create([
-            'kasir_id' => $cashier->id,
-            'opening_cash' => 100000,
-            'status' => 'open',
-            'opened_at' => now(),
-        ]);
-
-        $order = $this->orderWithItemTotal($cashier, 20000);
-        $transaction = Transaction::query()->create([
-            'order_id' => $order->id,
-            'kasir_id' => $cashier->id,
-            'payment_method' => 'qris',
-            'amount_paid' => 20000,
-            'change_amount' => 0,
-            'status' => 'pending',
-        ]);
-        $payment = XenditPayment::query()->create([
-            'transaction_id' => $transaction->id,
-            'external_id' => 'karcisqu-test-3',
-            'xendit_invoice_id' => 'qr_test',
-            'payment_method' => 'qris',
-            'amount' => 20000,
-            'status' => 'ACTIVE',
-        ]);
-
-        $this->actingAs($cashier)
-            ->from(route('pos.index', ['order' => $order->id, 'payment' => $payment->id]))
-            ->post(route('pos.orders.xendit.simulate', [$order, $payment]))
-            ->assertRedirect(route('pos.index', ['order' => $order->id, 'payment' => $payment->id]))
-            ->assertSessionHas('error', 'Simulasi pembayaran hanya tersedia untuk Xendit Test Mode.');
-
-        $this->assertDatabaseHas('xendit_payments', ['id' => $payment->id, 'status' => 'ACTIVE']);
-        $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'pending']);
-        Http::assertNothingSent();
     }
 
     public function test_pos_index_auto_loads_pending_xendit_payment_for_active_order(): void

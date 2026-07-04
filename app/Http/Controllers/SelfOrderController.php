@@ -120,45 +120,6 @@ class SelfOrderController extends Controller
         ]);
     }
 
-    public function simulatePayment(
-        string $qrToken,
-        SelfOrder $selfOrder,
-        XenditPayment $payment,
-        PaymentService $paymentService,
-        OrderRoutingService $routingService,
-    ): RedirectResponse {
-        $qrCode = $this->activeQrCode($qrToken);
-        $this->setRestaurantFromQr($qrCode);
-
-        abort_unless($selfOrder->table_qrcode_id === $qrCode->id, 404);
-        abort_unless($selfOrder->order_id && $payment->transaction?->order_id === $selfOrder->order_id, 404);
-
-        try {
-            $response = $paymentService->simulateQrisPayment($payment);
-
-            $payload = array_merge($response, [
-                'reference_id' => $payment->external_id,
-                'status' => $response['status'] ?? 'SUCCEEDED',
-            ]);
-
-            $paymentService->markXenditPaymentPaid($payment->external_id, $payload, $routingService);
-        } catch (RequestException $exception) {
-            Log::error('Self-order Xendit QRIS Simulation Error', [
-                'response' => $exception->response->json(),
-                'status' => $exception->response->status(),
-            ]);
-            $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API simulasi Xendit';
-
-            return back()->with('error', 'Gagal simulasi pembayaran QRIS: '.(is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
-        } catch (RuntimeException $exception) {
-            return back()->with('error', $exception->getMessage());
-        }
-
-        return redirect()
-            ->route('self-order.status', ['qr_token' => $qrToken, 'selfOrder' => $selfOrder->id])
-            ->with('success', 'Simulasi pembayaran QRIS berhasil.');
-    }
-
     /**
      * Confirm an online (Xendit Invoice) payment by querying Xendit.
      * Used by the status page poll / "Cek status" button so payment is
@@ -233,7 +194,7 @@ class SelfOrderController extends Controller
                         ->with(['addons' => fn ($a) => $a->orderBy('id')])
                         ->where('is_available', true)
                         ->orderBy('sort_order')
-                        ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id'])
+                        ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id']),
                     ])
                     ->select(['id', 'parent_id', 'name', 'description', 'restaurant_id']),
             ])

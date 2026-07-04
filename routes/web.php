@@ -27,7 +27,6 @@ Route::get('s/{qr_token}', [SelfOrderController::class, 'show'])->name('self-ord
 Route::get('s/{qr_token}/menu', [SelfOrderController::class, 'menu'])->name('self-order.menu');
 Route::post('s/{qr_token}/orders', [SelfOrderController::class, 'checkout'])->name('self-order.checkout');
 Route::get('s/{qr_token}/status/{selfOrder}', [SelfOrderController::class, 'status'])->name('self-order.status');
-Route::post('s/{qr_token}/status/{selfOrder}/payments/{payment}/simulate', [SelfOrderController::class, 'simulatePayment'])->name('self-order.payment.simulate');
 Route::post('s/{qr_token}/status/{selfOrder}/refresh', [SelfOrderController::class, 'refreshPayment'])->name('self-order.payment.refresh');
 
 // ─── Restaurant Selection (auth but no restaurant required) ──
@@ -74,7 +73,6 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     Route::middleware(['permission:pos.checkout', 'active.shift'])->group(function () {
         Route::post('pos/orders/{order}/pay', [PaymentController::class, 'cash'])->name('pos.orders.pay');
         Route::post('pos/orders/{order}/xendit', [PaymentController::class, 'xendit'])->name('pos.orders.xendit');
-        Route::post('pos/orders/{order}/xendit/{payment}/simulate', [PaymentController::class, 'simulateXendit'])->name('pos.orders.xendit.simulate');
         Route::get('pos/xendit/{payment}', [PaymentController::class, 'show'])->name('pos.xendit.show');
         Route::get('pos/xendit/{payment}/success', [PaymentController::class, 'success'])->name('pos.xendit.success');
         Route::get('pos/transactions/{transaction}/receipt', [OrderController::class, 'receipt'])->name('pos.transactions.receipt');
