@@ -136,7 +136,7 @@ class UserManagementController extends Controller
     {
         AuditLog::query()->create([
             'user_id' => $request->user()->id,
-            'role' => $request->user()->role,
+            'role' => $request->user()->roleInRestaurant(session('active_restaurant_id')),
             'action' => $action,
             'resource_type' => $resourceType,
             'resource_id' => $resourceId,

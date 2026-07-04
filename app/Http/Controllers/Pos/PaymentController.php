@@ -7,6 +7,7 @@ use App\Http\Requests\Pos\CashPaymentRequest;
 use App\Http\Requests\Pos\XenditPaymentRequest;
 use App\Models\Order;
 use App\Models\XenditPayment;
+use App\Services\AuditLogger;
 use App\Services\PaymentService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -17,6 +18,8 @@ use RuntimeException;
 
 class PaymentController extends Controller
 {
+    public function __construct(private AuditLogger $auditLogger) {}
+
     public function cash(CashPaymentRequest $request, Order $order, PaymentService $paymentService): RedirectResponse
     {
         abort_unless($order->kasir_id === $request->user()->id && $order->status === 'submitted', 403);
@@ -35,6 +38,11 @@ class PaymentController extends Controller
         } catch (RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
+
+        $this->auditLogger->log('pos.payment.cash', 'Transaction', $transaction->id, null, [
+            'order_id' => $order->id,
+            'amount_paid' => (float) $transaction->amount_paid,
+        ]);
 
         return redirect()
             ->route('pos.transactions.receipt', $transaction)
@@ -62,6 +70,11 @@ class PaymentController extends Controller
         } catch (RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
+
+        $this->auditLogger->log('pos.payment.qris', 'Transaction', $result['transaction']->id, null, [
+            'order_id' => $order->id,
+            'amount' => (float) $result['transaction']->amount_paid,
+        ]);
 
         return redirect()
             ->route('pos.index', ['order' => $order->id, 'payment' => $result['payment']->id])

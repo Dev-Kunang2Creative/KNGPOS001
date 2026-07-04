@@ -9,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { ChefHat, Edit2, GlassWater, Package, Percent, Plus, Printer, Save, Search, Tag, Trash2, X } from 'lucide-react';
-import { FormEvent, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ChefHat, Edit2, GlassWater, Package, Percent, Plus, Printer, Save, Search, Tag, Trash2, X } from 'lucide-react';
+import { FormEvent, useMemo, useState } from 'react';
 
 type Category = { id: number; name: string; description?: string | null; sort_order: number; is_active: boolean; active_items_count: number; parent_id?: number | null; parent?: { id: number; name: string } };
 type Addon = { id: number | null; name: string; price: number | string; is_active: boolean };
@@ -102,9 +102,9 @@ export default function MenuIndex({ categories, items, promotions }: Props) {
 
 function ItemsTab({ categories, items, canManage }: { categories: Category[]; items: Item[]; canManage: boolean }) {
     const [editItem, setEditItem] = useState<Item | null>(null);
+    const [formOpen, setFormOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [filterCat, setFilterCat] = useState('all');
-    const formRef = useRef<HTMLDivElement>(null);
 
     const filtered = items.filter((item) => {
         const matchSearch = item.name.toLowerCase().includes(search.toLowerCase());
@@ -136,52 +136,72 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
         return ordered;
     }, [filtered, categories]);
 
-    function startEdit(item: Item) {
-        setEditItem(item);
-        window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    function startCreate() {
+        setEditItem(null);
+        setFormOpen(true);
     }
 
-    return (
-        <div className={`grid gap-4 xl:gap-6 ${canManage ? 'xl:grid-cols-[400px_1fr]' : ''}`}>
-            {/* Form */}
-            {canManage && (
-                <div ref={formRef} className="bg-card rounded-xl border">
-                    <div className="border-b px-4 py-3 sm:px-5 sm:py-4">
+    function startEdit(item: Item) {
+        setEditItem(item);
+        setFormOpen(true);
+    }
+
+    function closeForm() {
+        setFormOpen(false);
+        setEditItem(null);
+    }
+
+    // Separate "page" for the add/edit form — replaces the list instead of sitting beside it.
+    if (canManage && formOpen) {
+        return (
+            <div className="bg-card rounded-xl border">
+                <div className="flex items-center gap-3 border-b px-4 py-3 sm:px-5 sm:py-4">
+                    <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={closeForm} title="Kembali">
+                        <ArrowLeft className="size-4" />
+                    </Button>
+                    <div>
                         <h2 className="font-semibold">{editItem ? 'Edit Item' : 'Tambah Item Baru'}</h2>
                         <p className="text-muted-foreground mt-0.5 text-xs">
                             {editItem ? `Mengedit: ${editItem.name}` : 'Isi detail menu item baru'}
                         </p>
                     </div>
-                    <div className="p-4 sm:p-5">
-                        <ItemForm categories={categories} editItem={editItem} onCancelEdit={() => setEditItem(null)} />
-                    </div>
                 </div>
-            )}
-
-            {/* List */}
-            <div className="flex flex-col gap-4">
-                {/* Toolbar */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <div className="relative flex-1">
-                        <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari nama menu..." className="pl-9" />
-                    </div>
-                    <Select value={filterCat} onValueChange={setFilterCat}>
-                        <SelectTrigger className="w-full sm:w-48">
-                            <SelectValue placeholder="Semua kategori" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Semua Kategori</SelectItem>
-                            {categories.map((c) => (
-                                <SelectItem key={c.id} value={String(c.id)}>
-                                    {c.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                <div className="p-4 sm:p-5">
+                    <ItemForm categories={categories} editItem={editItem} onDone={closeForm} />
                 </div>
+            </div>
+        );
+    }
 
-                {/* List grouped by category */}
+    return (
+        <div className="flex flex-col gap-4">
+            {/* Toolbar */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                    <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                    <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari nama menu..." className="pl-9" />
+                </div>
+                <Select value={filterCat} onValueChange={setFilterCat}>
+                    <SelectTrigger className="w-full sm:w-48">
+                        <SelectValue placeholder="Semua kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Semua Kategori</SelectItem>
+                        {categories.map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>
+                                {c.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {canManage && (
+                    <Button type="button" onClick={startCreate} className="shrink-0">
+                        <Plus className="size-4" /> Tambah Item
+                    </Button>
+                )}
+            </div>
+
+            {/* List grouped by category */}
                 {filtered.length === 0 ? (
                     <div className="rounded-xl border-2 border-dashed p-12 text-center">
                         <Package className="text-muted-foreground/40 mx-auto size-10" />
@@ -286,11 +306,10 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
                     {filtered.length} dari {items.length} item
                 </p>
             </div>
-        </div>
     );
 }
 
-function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category[]; editItem: Item | null; onCancelEdit: () => void }) {
+function ItemForm({ categories, editItem, onDone }: { categories: Category[]; editItem: Item | null; onDone: () => void }) {
     const form = useForm({
         category_id: editItem ? String(editItem.category_id) : '',
         name: editItem?.name ?? '',
@@ -341,9 +360,15 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
         }));
 
         if (editItem) {
-            form.post(`/menu/items/${editItem.id}`, { ...opts, onSuccess: onCancelEdit });
+            form.post(`/menu/items/${editItem.id}`, { ...opts, onSuccess: onDone });
         } else {
-            form.post('/menu/items', { ...opts, onSuccess: () => form.reset() });
+            form.post('/menu/items', {
+                ...opts,
+                onSuccess: () => {
+                    form.reset();
+                    onDone();
+                },
+            });
         }
     }
 
@@ -566,12 +591,10 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
                         </>
                     )}
                 </Button>
-                {editItem && (
-                    <Button type="button" variant="outline" className="min-h-[44px] sm:w-12" onClick={onCancelEdit}>
-                        <X className="size-4" />
-                        <span className="sm:hidden">Batal Edit</span>
-                    </Button>
-                )}
+                <Button type="button" variant="outline" className="min-h-[44px] sm:w-12" onClick={onDone}>
+                    <X className="size-4" />
+                    <span className="sm:hidden">Batal</span>
+                </Button>
             </div>
         </form>
     );

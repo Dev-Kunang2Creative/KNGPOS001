@@ -9,6 +9,7 @@ use App\Http\Requests\Manager\MenuPromotionRequest;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\MenuPromotion;
+use App\Services\AuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -17,6 +18,8 @@ use Inertia\Response;
 
 class MenuController extends Controller
 {
+    public function __construct(private AuditLogger $auditLogger) {}
+
     public function index(): Response
     {
         return Inertia::render('Menu/Index', [
@@ -28,14 +31,19 @@ class MenuController extends Controller
 
     public function storeCategory(MenuCategoryRequest $request): RedirectResponse
     {
-        MenuCategory::query()->create($this->categoryData($request));
+        $category = MenuCategory::query()->create($this->categoryData($request));
+
+        $this->auditLogger->log('menu.category.create', 'MenuCategory', $category->id, null, $category->only(['name', 'parent_id', 'is_active']));
 
         return back()->with('success', 'Kategori menu berhasil dibuat.');
     }
 
     public function updateCategory(MenuCategoryRequest $request, MenuCategory $category): RedirectResponse
     {
+        $before = $category->only(['name', 'parent_id', 'is_active']);
         $category->update($this->categoryData($request, $category));
+
+        $this->auditLogger->log('menu.category.update', 'MenuCategory', $category->id, $before, $category->only(['name', 'parent_id', 'is_active']));
 
         return back()->with('success', 'Kategori menu berhasil diperbarui.');
     }
@@ -46,7 +54,11 @@ class MenuController extends Controller
             return back()->with('error', 'Kategori tidak bisa dihapus karena masih memiliki menu aktif.');
         }
 
+        $snapshot = $category->only(['name', 'parent_id']);
+        $categoryId = $category->id;
         $category->delete();
+
+        $this->auditLogger->log('menu.category.delete', 'MenuCategory', $categoryId, $snapshot, null);
 
         return back()->with('success', 'Kategori menu berhasil dihapus.');
     }
@@ -54,28 +66,37 @@ class MenuController extends Controller
     public function storeItem(MenuItemRequest $request): RedirectResponse
     {
         $item = MenuItem::query()->create($this->itemData($request));
-        
+
         if ($request->has('addons')) {
             $this->syncAddons($item, $request->input('addons'));
         }
+
+        $this->auditLogger->log('menu.item.create', 'MenuItem', $item->id, null, $item->only(['name', 'price', 'category_id', 'is_available']));
 
         return back()->with('success', 'Menu item berhasil dibuat.');
     }
 
     public function updateItem(MenuItemRequest $request, MenuItem $item): RedirectResponse
     {
+        $before = $item->only(['name', 'price', 'category_id', 'is_available']);
         $item->update($this->itemData($request, $item));
 
         if ($request->has('addons')) {
             $this->syncAddons($item, $request->input('addons'));
         }
 
+        $this->auditLogger->log('menu.item.update', 'MenuItem', $item->id, $before, $item->only(['name', 'price', 'category_id', 'is_available']));
+
         return back()->with('success', 'Menu item berhasil diperbarui.');
     }
 
     public function destroyItem(MenuItem $item): RedirectResponse
     {
+        $snapshot = $item->only(['name', 'price', 'category_id']);
+        $itemId = $item->id;
         $item->delete();
+
+        $this->auditLogger->log('menu.item.delete', 'MenuItem', $itemId, $snapshot, null);
 
         return back()->with('success', 'Menu item berhasil dihapus.');
     }
@@ -83,21 +104,29 @@ class MenuController extends Controller
     public function updateAvailability(Request $request, MenuItem $item): RedirectResponse
     {
         $validated = $request->validate(['is_available' => ['required', 'boolean']]);
+        $before = ['is_available' => $item->is_available];
         $item->update($validated);
+
+        $this->auditLogger->log('menu.item.availability', 'MenuItem', $item->id, $before, ['is_available' => $item->is_available]);
 
         return back()->with('success', 'Ketersediaan menu diperbarui.');
     }
 
     public function storePromotion(MenuPromotionRequest $request): RedirectResponse
     {
-        MenuPromotion::query()->create($request->validated());
+        $promotion = MenuPromotion::query()->create($request->validated());
+
+        $this->auditLogger->log('menu.promotion.create', 'MenuPromotion', $promotion->id, null, $promotion->only(['name', 'type', 'value', 'is_active']));
 
         return back()->with('success', 'Promo berhasil dibuat.');
     }
 
     public function updatePromotion(MenuPromotionRequest $request, MenuPromotion $promotion): RedirectResponse
     {
+        $before = $promotion->only(['name', 'type', 'value', 'is_active']);
         $promotion->update($request->validated());
+
+        $this->auditLogger->log('menu.promotion.update', 'MenuPromotion', $promotion->id, $before, $promotion->only(['name', 'type', 'value', 'is_active']));
 
         return back()->with('success', 'Promo berhasil diperbarui.');
     }
