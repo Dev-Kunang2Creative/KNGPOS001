@@ -13,6 +13,7 @@ import {
     ClipboardList,
     FileText,
     LayoutDashboard,
+    LayoutGrid,
     MapPinned,
     MenuSquare,
     Plus,
@@ -32,9 +33,13 @@ export function AppSidebar() {
     const permissions = new Set(auth.permissions ?? []);
     const role = auth.activeRole;
 
-    const candidates: (NavItem & { permission?: string; roles?: string[] })[] = [
+    const hasWaiter = restaurant?.has_waiter ?? true;
+
+    const candidates: (NavItem & { permission?: string; roles?: string[]; show?: boolean })[] = [
         { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, permission: 'dashboard.view' },
         { title: 'POS', url: '/pos', icon: Utensils, permission: 'pos.view' },
+        // Cashier-managed tables — only when the restaurant has no waiter.
+        { title: 'Meja', url: '/pos/tables', icon: LayoutGrid, permission: 'tables.view', show: !hasWaiter },
         { title: 'Kitchen', url: '/kitchen', icon: ChefHat, permission: 'kitchen.view' },
         { title: 'Bar', url: '/bar', icon: BarChart3, permission: 'bar.view' },
         { title: 'Waiter', url: '/orders', icon: ClipboardList, permission: 'waiter.view' },
@@ -49,6 +54,10 @@ export function AppSidebar() {
     ];
 
     const mainNavItems = candidates.filter((item) => {
+        if (item.show === false) {
+            return false;
+        }
+
         if (item.roles && role && item.roles.includes(role)) {
             return true;
         }

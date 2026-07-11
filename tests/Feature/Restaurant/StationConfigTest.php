@@ -83,7 +83,7 @@ class StationConfigTest extends TestCase
     public function test_manager_can_toggle_station_config(): void
     {
         $restaurant = $this->activeRestaurant();
-        $manager = $this->managerFor($restaurant, ['restaurant.manage']);
+        $manager = $this->managerFor($restaurant, ['settings.manage']);
 
         session(['active_restaurant_id' => $restaurant->id]);
 
@@ -91,7 +91,9 @@ class StationConfigTest extends TestCase
             ->put('/restaurant', [
                 'name' => 'Warung Kasir',
                 'tax_is_active' => false,
+                'tax_type' => 'percentage',
                 'service_charge_is_active' => false,
+                'service_charge_type' => 'percentage',
                 'has_kitchen' => false,
                 'has_bar' => false,
                 'has_waiter' => false,
@@ -106,6 +108,61 @@ class StationConfigTest extends TestCase
             'has_waiter' => false,
             'self_order_enabled' => false,
         ]);
+    }
+
+    public function test_manager_can_save_nominal_charge_types(): void
+    {
+        $restaurant = $this->activeRestaurant();
+        $manager = $this->managerFor($restaurant, ['settings.manage']);
+
+        session(['active_restaurant_id' => $restaurant->id]);
+
+        $this->actingAs($manager)
+            ->put('/restaurant', [
+                'name' => 'Warung Nominal',
+                'tax_is_active' => true,
+                'tax_type' => 'nominal',
+                'tax_percentage' => 3000,
+                'service_charge_is_active' => true,
+                'service_charge_type' => 'nominal',
+                'service_charge_percentage' => 5000,
+                'has_kitchen' => true,
+                'has_bar' => true,
+                'has_waiter' => true,
+                'self_order_enabled' => true,
+            ])
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('restaurants', [
+            'id' => $restaurant->id,
+            'tax_type' => 'nominal',
+            'tax_percentage' => 3000,
+            'service_charge_type' => 'nominal',
+            'service_charge_percentage' => 5000,
+        ]);
+    }
+
+    public function test_staff_without_settings_permission_cannot_open_or_save_settings(): void
+    {
+        $restaurant = $this->activeRestaurant();
+        // A kitchen/cashier-style user: has access to the restaurant but no settings.manage.
+        $staff = $this->managerFor($restaurant, ['kitchen.view']);
+
+        session(['active_restaurant_id' => $restaurant->id]);
+
+        $this->actingAs($staff)->get('/restaurant/edit')->assertForbidden();
+
+        $this->actingAs($staff)
+            ->put('/restaurant', [
+                'name' => 'Hack',
+                'tax_is_active' => false,
+                'service_charge_is_active' => false,
+                'has_kitchen' => false,
+                'has_bar' => false,
+                'has_waiter' => false,
+                'self_order_enabled' => false,
+            ])
+            ->assertForbidden();
     }
 
     public function test_self_order_page_blocked_when_disabled(): void

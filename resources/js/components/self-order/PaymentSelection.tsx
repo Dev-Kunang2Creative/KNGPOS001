@@ -1,3 +1,4 @@
+import { chargeAmount, chargeLabel, type ChargeType } from '@/lib/utils';
 import { useState } from 'react';
 
 type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string };
@@ -8,7 +9,15 @@ type Props = {
     cart: CartItem[];
     billType: 'open' | 'close';
     isProcessing: boolean;
-    restaurant: { tax_percentage: number; tax_is_active: boolean; service_charge_percentage: number; service_charge_is_active: boolean; name: string };
+    restaurant: {
+        tax_percentage: number;
+        tax_is_active: boolean;
+        tax_type?: ChargeType;
+        service_charge_percentage: number;
+        service_charge_is_active: boolean;
+        service_charge_type?: ChargeType;
+        name: string;
+    };
     onBack: () => void;
     onPay: (paymentMethod: 'cashier' | 'online') => void;
 };
@@ -17,8 +26,8 @@ export default function PaymentSelection({ table, cart, billType, isProcessing, 
     const [selectedMethod, setSelectedMethod] = useState<'cashier' | 'online'>(billType === 'open' ? 'cashier' : 'online');
 
     const cartSubtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const cartServiceCharge = restaurant.service_charge_is_active ? cartSubtotal * (Number(restaurant.service_charge_percentage) / 100) : 0;
-    const cartTax = restaurant.tax_is_active ? (cartSubtotal + cartServiceCharge) * (Number(restaurant.tax_percentage) / 100) : 0;
+    const cartServiceCharge = chargeAmount(restaurant.service_charge_is_active, restaurant.service_charge_type, restaurant.service_charge_percentage, cartSubtotal);
+    const cartTax = chargeAmount(restaurant.tax_is_active, restaurant.tax_type, restaurant.tax_percentage, cartSubtotal + cartServiceCharge);
     const total = cartSubtotal + cartServiceCharge + cartTax;
 
     const handlePay = () => {
@@ -78,13 +87,13 @@ export default function PaymentSelection({ table, cart, billType, isProcessing, 
                         )}
                         {cartServiceCharge > 0 && (
                             <div className="flex items-center justify-between">
-                                <span className="text-on-surface text-sm">Service Charge ({restaurant.service_charge_percentage}%)</span>
+                                <span className="text-on-surface text-sm">Service Charge ({chargeLabel(restaurant.service_charge_type, restaurant.service_charge_percentage)})</span>
                                 <span className="text-on-surface text-sm">Rp {cartServiceCharge.toLocaleString('id-ID')}</span>
                             </div>
                         )}
                         {cartTax > 0 && (
                             <div className="flex items-center justify-between">
-                                <span className="text-on-surface text-sm">PB1 ({restaurant.tax_percentage}%)</span>
+                                <span className="text-on-surface text-sm">PB1 ({chargeLabel(restaurant.tax_type, restaurant.tax_percentage)})</span>
                                 <span className="text-on-surface text-sm">Rp {cartTax.toLocaleString('id-ID')}</span>
                             </div>
                         )}

@@ -286,15 +286,10 @@ class PaymentService
 
         $restaurant = Restaurant::find($order->table->restaurant_id);
 
-        $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-            ? $subtotal * ($restaurant->service_charge_percentage / 100)
-            : 0;
-
-        $taxAmount = $restaurant && $restaurant->tax_is_active
-            ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
-            : 0;
-
-        $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+        $charges = $restaurant?->chargesFor($subtotal) ?? ['service_charge' => 0, 'tax' => 0, 'total' => $subtotal];
+        $serviceChargeAmount = $charges['service_charge'];
+        $taxAmount = $charges['tax'];
+        $totalAmount = $charges['total'];
 
         return [
             'subtotal' => $subtotal,

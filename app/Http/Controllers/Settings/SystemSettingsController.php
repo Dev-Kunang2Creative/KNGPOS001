@@ -8,7 +8,6 @@ use App\Models\BarStation;
 use App\Models\KitchenStation;
 use App\Models\Printer;
 use App\Models\Restaurant;
-use App\Models\SystemSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -31,8 +30,10 @@ class SystemSettingsController extends Controller
                 'receipt_footer' => $restaurant?->receipt_footer,
                 'tax_percentage' => $restaurant?->tax_percentage ?? '0',
                 'tax_is_active' => $restaurant?->tax_is_active ? '1' : '0',
+                'tax_type' => $restaurant?->tax_type ?? 'percentage',
                 'service_charge_percentage' => $restaurant?->service_charge_percentage ?? '0',
                 'service_charge_is_active' => $restaurant?->service_charge_is_active ? '1' : '0',
+                'service_charge_type' => $restaurant?->service_charge_type ?? 'percentage',
                 // Global settings (Xendit) - still from config
                 'xendit_enabled' => config('services.xendit.enabled') ? '1' : '0',
                 'xendit_active_methods' => json_encode(config('services.xendit.active_methods', ['qris'])),
@@ -53,10 +54,12 @@ class SystemSettingsController extends Controller
             'restaurant_phone' => ['nullable', 'string', 'max:50'],
             'receipt_header' => ['nullable', 'string', 'max:1000'],
             'receipt_footer' => ['nullable', 'string', 'max:1000'],
-            'tax_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax_percentage' => ['nullable', 'numeric', 'min:0'],
             'tax_is_active' => ['required', 'boolean'],
-            'service_charge_percentage' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'tax_type' => ['nullable', 'in:percentage,nominal'],
+            'service_charge_percentage' => ['nullable', 'numeric', 'min:0'],
             'service_charge_is_active' => ['required', 'boolean'],
+            'service_charge_type' => ['nullable', 'in:percentage,nominal'],
         ]);
 
         $restaurantId = session('active_restaurant_id');
@@ -82,8 +85,10 @@ class SystemSettingsController extends Controller
             'receipt_footer' => $validated['receipt_footer'],
             'tax_percentage' => $validated['tax_percentage'] ?? 0,
             'tax_is_active' => $validated['tax_is_active'],
+            'tax_type' => $validated['tax_type'] ?? 'percentage',
             'service_charge_percentage' => $validated['service_charge_percentage'] ?? 0,
             'service_charge_is_active' => $validated['service_charge_is_active'],
+            'service_charge_type' => $validated['service_charge_type'] ?? 'percentage',
         ]);
 
         $this->audit($request, 'settings.system.updated', Restaurant::class, $restaurant->id, $oldValue, $validated);
