@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\DisburseAfterPayment;
 use App\Jobs\SendSelfOrderReceiptEmail;
 use App\Models\Order;
 use App\Models\Restaurant;
@@ -11,6 +12,7 @@ use App\Models\XenditPayment;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -65,33 +67,33 @@ class PaymentService
             throw new RuntimeException('Xendit belum dikonfigurasi.');
         }
 
-        $total = $this->calculateOrderTotal($order);
+        $total      = $this->calculateOrderTotal($order);
         $externalId = 'karcisqu-'.$order->id.'-'.now()->timestamp.'-'.Str::lower(Str::random(6));
 
         return DB::transaction(function () use ($order, $cashier, $total, $externalId, $secretKey, $notes): array {
             $transaction = Transaction::query()->create([
-                'order_id' => $order->id,
-                'kasir_id' => $cashier?->id,
+                'order_id'       => $order->id,
+                'kasir_id'       => $cashier?->id,
                 'payment_method' => 'qris',
-                'amount_paid' => $total,
-                'change_amount' => 0,
-                'status' => 'pending',
-                'notes' => $notes ?? 'Xendit QRIS',
+                'amount_paid'    => $total,
+                'change_amount'  => 0,
+                'status'         => 'pending',
+                'notes'          => $notes ?? 'Xendit QRIS',
             ]);
 
             $response = Http::withBasicAuth($secretKey, '')
                 ->withHeaders([
-                    'api-version' => '2022-07-31',
+                    'api-version'  => '2022-07-31',
                     'Content-Type' => 'application/json',
                 ])
                 ->post('https://api.xendit.co/qr_codes', [
                     'reference_id' => $externalId,
-                    'type' => 'DYNAMIC',
-                    'currency' => 'IDR',
-                    'amount' => (int) round($total),
-                    'expires_at' => now()->addHours(2)->toIso8601String(),
-                    'metadata' => [
-                        'order_id' => $order->id,
+                    'type'         => 'DYNAMIC',
+                    'currency'     => 'IDR',
+                    'amount'       => (int) round($total),
+                    'expires_at'   => now()->addHours(2)->toIso8601String(),
+                    'metadata'     => [
+                        'order_id'       => $order->id,
                         'transaction_id' => $transaction->id,
                     ],
                 ])
@@ -99,19 +101,19 @@ class PaymentService
                 ->json();
 
             $payment = XenditPayment::query()->create([
-                'transaction_id' => $transaction->id,
-                'external_id' => $externalId,
-                'xendit_invoice_id' => $response['id'] ?? null,
-                'payment_method' => 'qris',
-                'amount' => $total,
-                'status' => $response['status'] ?? 'pending',
+                'transaction_id'      => $transaction->id,
+                'external_id'         => $externalId,
+                'xendit_invoice_id'   => $response['id'] ?? null,
+                'payment_method'      => 'qris',
+                'amount'              => $total,
+                'status'              => $response['status'] ?? 'pending',
                 'xendit_raw_response' => $response,
             ]);
 
             return [
                 'transaction' => $transaction,
-                'payment' => $payment,
-                'response' => $response,
+                'payment'     => $payment,
+                'response'    => $response,
             ];
         });
     }
@@ -134,31 +136,31 @@ class PaymentService
             throw new RuntimeException('Xendit belum dikonfigurasi.');
         }
 
-        $total = $this->calculateOrderTotal($order);
+        $total      = $this->calculateOrderTotal($order);
         $externalId = 'karcisqu-'.$order->id.'-'.now()->timestamp.'-'.Str::lower(Str::random(6));
 
         return DB::transaction(function () use ($order, $cashier, $total, $externalId, $secretKey, $notes, $successRedirectUrl, $payerEmail): array {
             $transaction = Transaction::query()->create([
-                'order_id' => $order->id,
-                'kasir_id' => $cashier?->id,
+                'order_id'       => $order->id,
+                'kasir_id'       => $cashier?->id,
                 'payment_method' => 'xendit',
-                'amount_paid' => $total,
-                'change_amount' => 0,
-                'status' => 'pending',
-                'notes' => $notes ?? 'Xendit Invoice',
+                'amount_paid'    => $total,
+                'change_amount'  => 0,
+                'status'         => 'pending',
+                'notes'          => $notes ?? 'Xendit Invoice',
             ]);
 
             $response = Http::withBasicAuth($secretKey, '')
                 ->post('https://api.xendit.co/v2/invoices', [
-                    'external_id' => $externalId,
-                    'amount' => (int) round($total),
-                    'currency' => 'IDR',
-                    'description' => 'Self-order #'.$order->id,
-                    'payer_email' => $payerEmail ?: 'guest@karcisqu.test',
+                    'external_id'          => $externalId,
+                    'amount'               => (int) round($total),
+                    'currency'             => 'IDR',
+                    'description'          => 'Self-order #'.$order->id,
+                    'payer_email'          => $payerEmail ?: 'guest@karcisqu.test',
                     'success_redirect_url' => $successRedirectUrl,
-                    'invoice_duration' => 7200,
-                    'metadata' => [
-                        'order_id' => $order->id,
+                    'invoice_duration'     => 7200,
+                    'metadata'             => [
+                        'order_id'       => $order->id,
                         'transaction_id' => $transaction->id,
                     ],
                 ])
@@ -166,19 +168,19 @@ class PaymentService
                 ->json();
 
             $payment = XenditPayment::query()->create([
-                'transaction_id' => $transaction->id,
-                'external_id' => $externalId,
-                'xendit_invoice_id' => $response['id'] ?? null,
-                'payment_method' => 'invoice',
-                'amount' => $total,
-                'status' => $response['status'] ?? 'pending',
+                'transaction_id'      => $transaction->id,
+                'external_id'         => $externalId,
+                'xendit_invoice_id'   => $response['id'] ?? null,
+                'payment_method'      => 'invoice',
+                'amount'              => $total,
+                'status'              => $response['status'] ?? 'pending',
                 'xendit_raw_response' => $response,
             ]);
 
             return [
                 'transaction' => $transaction,
-                'payment' => $payment,
-                'response' => $response,
+                'payment'     => $payment,
+                'response'    => $response,
                 'invoice_url' => $response['invoice_url'] ?? '',
             ];
         });
@@ -263,7 +265,12 @@ class PaymentService
                 $routingService->routeOrder($order->fresh(['table', 'items.menuItem']));
             }
 
-            DB::afterCommit(fn () => SendSelfOrderReceiptEmail::dispatch($order->id));
+            DB::afterCommit(function () use ($order, $transaction) {
+                SendSelfOrderReceiptEmail::dispatch($order->id);
+
+                // Trigger split payment disbursements via Xendit Payouts API
+                DisburseAfterPayment::dispatch($transaction->id);
+            });
 
             return $payment;
         });
