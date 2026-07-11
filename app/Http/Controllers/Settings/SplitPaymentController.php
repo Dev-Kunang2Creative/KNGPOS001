@@ -116,4 +116,17 @@ class SplitPaymentController extends Controller
 
         return back()->with('success', "Split payment berhasil {$status}.");
     }
+
+    /**
+     * Manually disburse accumulated pending balance for an account.
+     */
+    public function disburse(SplitPaymentAccount $splitAccount): RedirectResponse
+    {
+        try {
+            $this->splitPaymentService->processManualDisbursement($splitAccount);
+            return back()->with('success', "Pencairan dana untuk {$splitAccount->name} berhasil diproses.");
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
 }

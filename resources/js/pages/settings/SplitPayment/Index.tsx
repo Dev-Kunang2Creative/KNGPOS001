@@ -23,6 +23,7 @@ type SplitAccount = {
     account_number: string | null;
     account_holder: string | null;
     percent_amount: string;
+    pending_balance: string;
     is_active: boolean;
     sort_order: number;
 };
@@ -111,6 +112,11 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
     const deleteAccount = (account: SplitAccount) => {
         if (!confirm(`Hapus akun "${account.name}"?`)) return;
         router.delete(route('settings.split-payment.destroy', account.id), { preserveScroll: true });
+    };
+
+    const disburseAccount = (account: SplitAccount) => {
+        if (!confirm(`Cairkan dana sebesar Rp ${parseInt(account.pending_balance).toLocaleString('id-ID')} untuk akun "${account.name}"?`)) return;
+        router.post(route('settings.split-payment.disburse', account.id), {}, { preserveScroll: true });
     };
 
     const toggleSplit = () => {
@@ -239,14 +245,29 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                             </div>
                                         </div>
 
-                                        {/* Percentage */}
-                                        <div className="flex items-center gap-1 text-lg font-bold tabular-nums">
-                                            <BadgePercent className="text-muted-foreground h-4 w-4" />
-                                            {parseFloat(account.percent_amount).toFixed(2)}
+                                        {/* Percentage & Balance */}
+                                        <div className="flex flex-col items-end gap-1 mr-2">
+                                            <div className="flex items-center gap-1 text-lg font-bold tabular-nums leading-none">
+                                                <BadgePercent className="text-muted-foreground h-4 w-4" />
+                                                {parseFloat(account.percent_amount).toFixed(2)}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground whitespace-nowrap">
+                                                Saldo: <span className="font-semibold text-foreground">Rp {parseInt(account.pending_balance).toLocaleString('id-ID')}</span>
+                                            </div>
                                         </div>
 
                                         {/* Actions */}
-                                        <div className="flex gap-1">
+                                        <div className="flex gap-1 items-center">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="mr-1 h-8 px-3 text-xs border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900"
+                                                disabled={parseFloat(account.pending_balance) < 10000}
+                                                onClick={() => disburseAccount(account)}
+                                                title={parseFloat(account.pending_balance) < 10000 ? "Minimum pencairan Rp 10.000" : "Cairkan saldo ini"}
+                                            >
+                                                Cairkan
+                                            </Button>
                                             <Button variant="ghost" size="icon" onClick={() => openEditModal(account)} title="Edit">
                                                 <Pencil className="h-4 w-4" />
                                             </Button>
@@ -329,12 +350,14 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                 </li>
                                 <li>Aktifkan toggle Split Payment.</li>
                                 <li>
-                                    Setiap pembayaran QRIS/Invoice yang berhasil (PAID) akan otomatis memicu Disbursement (Transfer) ke masing-masing
-                                    rekening sesuai persentase.
+                                    Setiap pembayaran (PAID) akan mencatat akumulasi <strong>Saldo Mengendap</strong> pada akun tujuan sesuai persentase.
+                                </li>
+                                <li>
+                                    Anda dapat menekan tombol <strong>Cairkan</strong> untuk mentransfer saldo mengendap tersebut ke rekening bank tujuan (Minimum penarikan Rp 10.000).
                                 </li>
                             </ol>
                             <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                                ⚠️ Biaya transfer antar bank mungkin berlaku dan akan dipotong dari saldo Xendit Anda.
+                                ⚠️ Biaya transfer antar bank sebesar Rp 2.775/transaksi akan dipotong dari saldo utama Xendit Anda saat melakukan pencairan.
                             </p>
                         </div>
                     </div>
