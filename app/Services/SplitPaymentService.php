@@ -206,7 +206,10 @@ class SplitPaymentService
 
         try {
             $response = Http::withBasicAuth($secretKey, '')
-                ->withHeaders(['Content-Type' => 'application/json'])
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'Idempotency-key' => $referenceId,
+                ])
                 ->post('https://api.xendit.co/v2/payouts', [
                     'reference_id'      => $referenceId,
                     'channel_code'      => $account->bank_code,
