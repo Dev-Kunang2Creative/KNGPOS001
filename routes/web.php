@@ -202,6 +202,7 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::put('settings/split-payment/{splitAccount}', [SplitPaymentController::class, 'update'])->name('settings.split-payment.update');
         Route::delete('settings/split-payment/{splitAccount}', [SplitPaymentController::class, 'destroy'])->name('settings.split-payment.destroy');
         Route::post('settings/split-payment/toggle', [SplitPaymentController::class, 'toggle'])->name('settings.split-payment.toggle');
+        Route::post('settings/split-payment/{splitAccount}/disburse', [SplitPaymentController::class, 'disburse'])->name('settings.split-payment.disburse');
     });
 
     // Audit Logs

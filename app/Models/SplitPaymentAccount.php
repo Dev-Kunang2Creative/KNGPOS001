@@ -13,8 +13,9 @@ class SplitPaymentAccount extends Model
     protected function casts(): array
     {
         return [
-            'percent_amount' => 'decimal:2',
-            'is_active'      => 'boolean',
+            'percent_amount'  => 'decimal:2',
+            'pending_balance' => 'decimal:2',
+            'is_active'       => 'boolean',
         ];
     }
 

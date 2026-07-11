@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Jobs\DisburseAfterPayment;
 use App\Jobs\SendSelfOrderReceiptEmail;
 use App\Models\Order;
 use App\Models\Restaurant;
@@ -268,8 +267,8 @@ class PaymentService
             DB::afterCommit(function () use ($order, $transaction) {
                 SendSelfOrderReceiptEmail::dispatch($order->id);
 
-                // Trigger split payment disbursements via Xendit Payouts API
-                DisburseAfterPayment::dispatch($transaction->id);
+                // Record split payment balances instead of dispatching Xendit payouts directly
+                app(SplitPaymentService::class)->recordPendingSplit($transaction);
             });
 
             return $payment;
