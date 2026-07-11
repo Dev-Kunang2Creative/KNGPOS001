@@ -21,7 +21,7 @@ class RestaurantCreationTest extends TestCase
     public function test_manager_can_create_a_new_restaurant(): void
     {
         $restaurant = $this->activeRestaurant();
-        $user = $this->managerFor($restaurant, []);
+        $user = $this->managerFor($restaurant, ['settings.manage']);
 
         $this->actingAs($user)
             ->withSession(['active_restaurant_id' => $restaurant->id])

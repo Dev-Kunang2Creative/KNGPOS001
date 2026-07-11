@@ -22,8 +22,10 @@ export default function Create() {
         address: '',
         tax_percentage: 11,
         tax_is_active: false as boolean,
+        tax_type: 'percentage' as 'percentage' | 'nominal',
         service_charge_percentage: 0,
         service_charge_is_active: false as boolean,
+        service_charge_type: 'percentage' as 'percentage' | 'nominal',
         currency: 'IDR',
         receipt_header: '',
         receipt_footer: '',
@@ -138,13 +140,24 @@ export default function Create() {
                             <h2 className="border-b pb-2 text-base font-medium">Pajak & Service Charge</h2>
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div className="grid gap-2">
-                                    <Label>Tax (%)</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={form.data.tax_percentage}
-                                        onChange={(e) => form.setData('tax_percentage', Number(e.target.value))}
-                                    />
+                                    <Label>Tax ({form.data.tax_type === 'nominal' ? 'Rp' : '%'})</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="number"
+                                            step={form.data.tax_type === 'nominal' ? '100' : '0.01'}
+                                            className="flex-1"
+                                            value={form.data.tax_percentage}
+                                            onChange={(e) => form.setData('tax_percentage', Number(e.target.value))}
+                                        />
+                                        <select
+                                            className="border-input bg-background rounded-md border px-2 text-sm"
+                                            value={form.data.tax_type}
+                                            onChange={(e) => form.setData('tax_type', e.target.value as 'percentage' | 'nominal')}
+                                        >
+                                            <option value="percentage">%</option>
+                                            <option value="nominal">Rp</option>
+                                        </select>
+                                    </div>
                                     <label className="flex items-center gap-2 text-sm">
                                         <Checkbox
                                             checked={form.data.tax_is_active}
@@ -154,13 +167,24 @@ export default function Create() {
                                     </label>
                                 </div>
                                 <div className="grid gap-2">
-                                    <Label>Service Charge (%)</Label>
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={form.data.service_charge_percentage}
-                                        onChange={(e) => form.setData('service_charge_percentage', Number(e.target.value))}
-                                    />
+                                    <Label>Service Charge ({form.data.service_charge_type === 'nominal' ? 'Rp' : '%'})</Label>
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="number"
+                                            step={form.data.service_charge_type === 'nominal' ? '100' : '0.01'}
+                                            className="flex-1"
+                                            value={form.data.service_charge_percentage}
+                                            onChange={(e) => form.setData('service_charge_percentage', Number(e.target.value))}
+                                        />
+                                        <select
+                                            className="border-input bg-background rounded-md border px-2 text-sm"
+                                            value={form.data.service_charge_type}
+                                            onChange={(e) => form.setData('service_charge_type', e.target.value as 'percentage' | 'nominal')}
+                                        >
+                                            <option value="percentage">%</option>
+                                            <option value="nominal">Rp</option>
+                                        </select>
+                                    </div>
                                     <label className="flex items-center gap-2 text-sm">
                                         <Checkbox
                                             checked={form.data.service_charge_is_active}

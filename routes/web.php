@@ -9,6 +9,7 @@ use App\Http\Controllers\Manager\MenuController;
 use App\Http\Controllers\Manager\ReportController;
 use App\Http\Controllers\Manager\TableQrController;
 use App\Http\Controllers\Manager\ZoneStationController;
+use App\Http\Controllers\Pos\CashierTableController;
 use App\Http\Controllers\Pos\OrderController;
 use App\Http\Controllers\Pos\PaymentController;
 use App\Http\Controllers\Restaurant\RestaurantController;
@@ -39,11 +40,13 @@ Route::middleware(['auth'])->group(function () {
 // ─── All Restaurant-Scoped Routes ────────────────────────────
 Route::middleware(['auth', 'restaurant'])->group(function () {
 
-    // Restaurant CRUD (inside dashboard)
-    Route::get('restaurants/create', [RestaurantController::class, 'create'])->name('restaurants.create');
-    Route::post('restaurants', [RestaurantController::class, 'store'])->name('restaurants.store');
-    Route::get('restaurant/edit', [RestaurantController::class, 'edit'])->name('restaurants.edit');
-    Route::put('restaurant', [RestaurantController::class, 'update'])->name('restaurants.update');
+    // Restaurant CRUD & settings (inside dashboard) — managers & super admins only
+    Route::middleware(['permission:settings.manage'])->group(function () {
+        Route::get('restaurants/create', [RestaurantController::class, 'create'])->name('restaurants.create');
+        Route::post('restaurants', [RestaurantController::class, 'store'])->name('restaurants.store');
+        Route::get('restaurant/edit', [RestaurantController::class, 'edit'])->name('restaurants.edit');
+        Route::put('restaurant', [RestaurantController::class, 'update'])->name('restaurants.update');
+    });
 
     // Dashboard
     Route::middleware(['permission:dashboard.view'])->group(function () {
@@ -53,6 +56,12 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     // POS
     Route::middleware(['permission:pos.view', 'active.shift'])->group(function () {
         Route::get('pos', [OrderController::class, 'index'])->name('pos.index');
+    });
+
+    // Cashier table management (used when the restaurant has no waiter).
+    Route::middleware(['permission:tables.view'])->group(function () {
+        Route::get('pos/tables', [CashierTableController::class, 'index'])->name('pos.tables.index');
+        Route::patch('pos/tables/{table}/status', [CashierTableController::class, 'updateStatus'])->name('pos.tables.status');
     });
 
     Route::middleware(['permission:pos.create', 'active.shift'])->group(function () {

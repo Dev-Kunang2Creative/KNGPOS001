@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use App\Models\Restaurant;
 use App\Models\Shift;
-use App\Services\RestaurantContext;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -67,9 +66,12 @@ class HandleInertiaRequests extends Middleware
                 'receipt_footer' => $activeRestaurant->receipt_footer,
                 'tax_percentage' => $activeRestaurant->tax_percentage,
                 'tax_is_active' => $activeRestaurant->tax_is_active,
+                'tax_type' => $activeRestaurant->tax_type,
                 'service_charge_percentage' => $activeRestaurant->service_charge_percentage,
                 'service_charge_is_active' => $activeRestaurant->service_charge_is_active,
+                'service_charge_type' => $activeRestaurant->service_charge_type,
                 'currency' => $activeRestaurant->currency,
+                'has_waiter' => $activeRestaurant->has_waiter,
             ] : null,
             'restaurants' => $user ? $this->userRestaurants($user) : [],
             'activeShift' => $user
