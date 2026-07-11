@@ -22,7 +22,9 @@ type SplitAccount = {
     bank_name: string | null;
     account_number: string | null;
     account_holder: string | null;
+    split_type: 'percentage' | 'nominal';
     percent_amount: string;
+    nominal_amount: string;
     pending_balance: string;
     is_active: boolean;
     sort_order: number;
@@ -56,7 +58,9 @@ const emptyForm = {
     bank_name: '',
     account_number: '',
     account_holder: '',
+    split_type: 'percentage',
     percent_amount: '',
+    nominal_amount: '',
     is_active: true,
     sort_order: 0,
 };
@@ -83,7 +87,9 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
             bank_name: account.bank_name ?? '',
             account_number: account.account_number ?? '',
             account_holder: account.account_holder ?? '',
+            split_type: account.split_type ?? 'percentage',
             percent_amount: account.percent_amount,
+            nominal_amount: account.nominal_amount ?? '',
             is_active: account.is_active,
             sort_order: account.sort_order,
         });
@@ -116,7 +122,7 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
     };
 
     const disburseAccount = (account: SplitAccount) => {
-        if (!confirm(`Cairkan dana sebesar Rp ${parseInt(account.pending_balance).toLocaleString('id-ID')} untuk akun "${account.name}"?`)) return;
+        if (!confirm(`Cairkan dana sebesar Rp ${parseInt((account.pending_balance || '0').toString(), 10).toLocaleString('id-ID')} untuk akun "${account.name}"?`)) return;
         router.post(route('settings.split-payment.disburse', account.id), {}, { preserveScroll: true });
     };
 
@@ -132,12 +138,11 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
         );
     };
 
-    // Build pie chart data
-    const activeAccounts = accounts.filter((a) => a.is_active);
-    const remainder = Math.max(0, 100 - activeAccounts.reduce((s, a) => s + parseFloat(a.percent_amount), 0));
+    const activeAccounts = accounts.filter((a) => a.is_active && a.split_type === 'percentage');
+    const remainder = Math.max(0, 100 - activeAccounts.reduce((s, a) => s + parseFloat((a.percent_amount || '0').toString()), 0));
 
     const chartData = [
-        ...activeAccounts.map((a) => ({ name: a.name, value: parseFloat(a.percent_amount) })),
+        ...activeAccounts.map((a) => ({ name: a.name, value: parseFloat((a.percent_amount || '0').toString()) })),
         ...(remainder > 0 ? [{ name: 'Sisa', value: remainder }] : []),
     ];
 
@@ -246,14 +251,20 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                             </div>
                                         </div>
 
-                                        {/* Percentage & Balance */}
+                                        {/* Percentage/Nominal & Balance */}
                                         <div className="flex flex-col items-end gap-1 mr-2">
                                             <div className="flex items-center gap-1 text-lg font-bold tabular-nums leading-none">
-                                                <BadgePercent className="text-muted-foreground h-4 w-4" />
-                                                {parseFloat(account.percent_amount).toFixed(2)}
+                                                {account.split_type === 'nominal' ? (
+                                                    <span className="text-base text-indigo-600">Rp {parseInt((account.nominal_amount || '0').toString(), 10).toLocaleString('id-ID')}</span>
+                                                ) : (
+                                                    <>
+                                                        <BadgePercent className="text-muted-foreground h-4 w-4" />
+                                                        {parseFloat((account.percent_amount || '0').toString()).toFixed(2)}
+                                                    </>
+                                                )}
                                             </div>
                                             <div className="text-xs text-muted-foreground whitespace-nowrap">
-                                                Saldo: <span className="font-semibold text-foreground">Rp {parseInt(account.pending_balance).toLocaleString('id-ID')}</span>
+                                                Saldo: <span className="font-semibold text-foreground">Rp {parseInt((account.pending_balance || '0').toString(), 10).toLocaleString('id-ID')}</span>
                                             </div>
                                         </div>
 
@@ -263,9 +274,9 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                                 variant="outline"
                                                 size="sm"
                                                 className="mr-1 h-8 px-3 text-xs border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900"
-                                                disabled={parseFloat(account.pending_balance) < 10000}
+                                                disabled={parseFloat((account.pending_balance || '0').toString()) < 10000}
                                                 onClick={() => disburseAccount(account)}
-                                                title={parseFloat(account.pending_balance) < 10000 ? "Minimum pencairan Rp 10.000" : "Cairkan saldo ini"}
+                                                title={parseFloat((account.pending_balance || '0').toString()) < 10000 ? "Minimum pencairan Rp 10.000" : "Cairkan saldo ini"}
                                             >
                                                 Cairkan
                                             </Button>
@@ -451,24 +462,58 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                 {form.errors.name && <p className="mt-1 text-xs text-red-600">{form.errors.name}</p>}
                             </div>
 
-                            {/* Percent */}
-                            <div>
-                                <Label>
-                                    Persentase (%) <span className="text-red-500">*</span>
-                                </Label>
-                                <div className="relative mt-1">
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        max="100"
-                                        placeholder="e.g. 30"
-                                        value={form.data.percent_amount}
-                                        onChange={(e) => form.setData('percent_amount', e.target.value)}
-                                    />
-                                    <BadgePercent className="text-muted-foreground absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2" />
+                            {/* Split Type Selector */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <Label>Tipe Potongan <span className="text-red-500">*</span></Label>
+                                    <Select
+                                        value={form.data.split_type}
+                                        onValueChange={(val: 'percentage' | 'nominal') => form.setData('split_type', val)}
+                                    >
+                                        <SelectTrigger className="mt-1">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="percentage">Persentase (%)</SelectItem>
+                                            <SelectItem value="nominal">Nominal (Rp)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                                {form.errors.percent_amount && <p className="mt-1 text-xs text-red-600">{form.errors.percent_amount}</p>}
+                                
+                                {/* Amount Input */}
+                                <div>
+                                    <Label>
+                                        {form.data.split_type === 'percentage' ? 'Persentase (%)' : 'Nominal (Rp)'} <span className="text-red-500">*</span>
+                                    </Label>
+                                    {form.data.split_type === 'percentage' ? (
+                                        <div className="relative mt-1">
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                max="100"
+                                                placeholder="e.g. 30"
+                                                value={form.data.percent_amount}
+                                                onChange={(e) => form.setData('percent_amount', e.target.value)}
+                                            />
+                                            <BadgePercent className="text-muted-foreground absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2" />
+                                        </div>
+                                    ) : (
+                                        <div className="relative mt-1">
+                                            <span className="text-muted-foreground absolute top-1/2 left-3 text-sm -translate-y-1/2">Rp</span>
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                placeholder="e.g. 5000"
+                                                className="pl-9"
+                                                value={form.data.nominal_amount}
+                                                onChange={(e) => form.setData('nominal_amount', e.target.value)}
+                                            />
+                                        </div>
+                                    )}
+                                    {form.errors.percent_amount && form.data.split_type === 'percentage' && <p className="mt-1 text-xs text-red-600">{form.errors.percent_amount}</p>}
+                                    {form.errors.nominal_amount && form.data.split_type === 'nominal' && <p className="mt-1 text-xs text-red-600">{form.errors.nominal_amount}</p>}
+                                </div>
                             </div>
 
                             {/* Bank info */}
