@@ -24,6 +24,7 @@ class SelfOrderController extends Controller
     {
         $qrCode = $this->activeQrCode($qrToken);
         $this->setRestaurantFromQr($qrCode);
+        $this->abortIfSelfOrderDisabled();
 
         return Inertia::render('SelfOrder/Show', [
             'qrToken' => $qrToken,
@@ -43,6 +44,7 @@ class SelfOrderController extends Controller
     {
         $qrCode = $this->activeQrCode($qrToken);
         $this->setRestaurantFromQr($qrCode);
+        $this->abortIfSelfOrderDisabled();
 
         return ['categories' => $this->menuCategories()];
     }
@@ -51,6 +53,7 @@ class SelfOrderController extends Controller
     {
         $qrCode = $this->activeQrCode($qrToken);
         $this->setRestaurantFromQr($qrCode);
+        $this->abortIfSelfOrderDisabled();
 
         $validated = $request->validated();
 
@@ -166,6 +169,19 @@ class SelfOrderController extends Controller
         if ($restaurantId) {
             app(RestaurantContext::class)->set($restaurantId);
         }
+    }
+
+    /**
+     * Block the customer-facing ordering flow when the restaurant has turned
+     * off self-order (QR ordering).
+     */
+    private function abortIfSelfOrderDisabled(): void
+    {
+        abort_unless(
+            app(RestaurantContext::class)->restaurant()?->self_order_enabled ?? true,
+            403,
+            'Pemesanan mandiri (self-order) tidak tersedia di restoran ini.'
+        );
     }
 
     private function activeQrCode(string $qrToken): TableQrcode

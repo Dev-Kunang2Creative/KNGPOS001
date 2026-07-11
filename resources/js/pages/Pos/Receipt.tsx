@@ -35,9 +35,17 @@ type ReceiptTransaction = {
     };
 };
 
+type PrepItem = {
+    id: number;
+    name: string;
+    quantity: number;
+    notes?: string | null;
+};
+
 type Props = {
     transaction: ReceiptTransaction;
     stationTicketUrls?: { type: string; label: string; url: string }[];
+    prepItems?: PrepItem[];
 };
 
 type ReceiptLine = ReceiptItem & {
@@ -51,7 +59,7 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const money = (value?: string | number | null) => Number(value ?? 0).toLocaleString('id-ID');
 
-export default function Receipt({ transaction, stationTicketUrls = [] }: Props) {
+export default function Receipt({ transaction, stationTicketUrls = [], prepItems = [] }: Props) {
     const { restaurant } = usePage<SharedData>().props;
     const order = transaction.order;
     const hasAdvancedPrintQueue = useRef(false);
@@ -133,6 +141,8 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                         box-shadow: none !important;
                         border: 0 !important;
                     }
+                    #receipt-print-area .receipt-doc { box-shadow: none !important; border: 0 !important; }
+                    .prep-sheet { break-before: page; page-break-before: always; }
                     .no-print { display: none !important; }
                 }
             `}</style>
@@ -163,7 +173,8 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                     </div>
                 )}
 
-                <section id="receipt-print-area" className="w-full max-w-sm rounded-md border bg-white p-5 font-mono text-sm text-black shadow-sm">
+                <div id="receipt-print-area" className="w-full max-w-sm">
+                <section className="receipt-doc w-full rounded-md border bg-white p-5 font-mono text-sm text-black shadow-sm">
                     <div className="flex flex-col items-center text-center">
                         {restaurant?.logo_url && <img src={restaurant.logo_url} alt="Logo" className="mb-2 h-14 w-14 object-contain" />}
                         <h1 className="text-base font-bold uppercase">{restaurant?.name ?? 'Restaurant'}</h1>
@@ -270,6 +281,50 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                         <p className="whitespace-pre-line">{restaurant?.receipt_footer ?? 'Terima kasih.'}</p>
                     </div>
                 </section>
+
+                {prepItems.length > 0 && (
+                    <section className="prep-sheet mt-4 w-full rounded-md border border-dashed bg-white p-5 font-mono text-sm text-black shadow-sm">
+                        <div className="text-center">
+                            <h1 className="text-base font-bold uppercase">{restaurant?.name ?? 'Restaurant'}</h1>
+                            <p className="text-xs font-semibold">*** SIAPKAN PESANAN ***</p>
+                        </div>
+
+                        <div className="my-3 border-t border-dashed border-black" />
+
+                        <div className="space-y-1 text-xs">
+                            <div className="flex justify-between gap-3">
+                                <span>Order</span>
+                                <span>#{order.id}</span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                                <span>Meja</span>
+                                <span>{order.table?.name ?? '-'}</span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                                <span>Waktu</span>
+                                <span>{new Date(transaction.paid_at).toLocaleString('id-ID')}</span>
+                            </div>
+                        </div>
+
+                        <div className="my-3 border-t border-dashed border-black" />
+
+                        <div className="space-y-3">
+                            {prepItems.map((item) => (
+                                <div key={`prep-${item.id}`}>
+                                    <div className="flex justify-between gap-3 font-semibold">
+                                        <span>{item.name}</span>
+                                        <span>x{item.quantity}</span>
+                                    </div>
+                                    {item.notes && <div className="text-xs">Catatan: {item.notes}</div>}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="my-3 border-t border-dashed border-black" />
+                        <p className="text-center text-xs">*** TANPA STATION — SIAPKAN DI KASIR ***</p>
+                    </section>
+                )}
+                </div>
             </main>
         </AppLayout>
     );

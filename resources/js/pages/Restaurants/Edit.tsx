@@ -1,3 +1,4 @@
+import FlashToast, { type ToastOverride } from '@/components/flash-toast';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -6,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
-import { Building2, ImageUp, Percent, Plus, Receipt, Store } from 'lucide-react';
+import { Building2, ChefHat, ConciergeBell, GlassWater, ImageUp, Percent, Plus, QrCode, Receipt, Store, Utensils } from 'lucide-react';
 import { FormEvent, useRef, useState } from 'react';
 
 interface Restaurant {
@@ -23,6 +24,10 @@ interface Restaurant {
     service_charge_percentage: string;
     service_charge_is_active: boolean;
     currency: string;
+    has_kitchen: boolean;
+    has_bar: boolean;
+    has_waiter: boolean;
+    self_order_enabled: boolean;
     receipt_header: string | null;
     receipt_footer: string | null;
 }
@@ -44,12 +49,17 @@ export default function Edit({ restaurantData }: Props) {
         service_charge_percentage: Number(restaurantData.service_charge_percentage ?? 0),
         service_charge_is_active: restaurantData.service_charge_is_active ?? false,
         currency: restaurantData.currency ?? 'IDR',
+        has_kitchen: restaurantData.has_kitchen ?? true,
+        has_bar: restaurantData.has_bar ?? true,
+        has_waiter: restaurantData.has_waiter ?? true,
+        self_order_enabled: restaurantData.self_order_enabled ?? true,
         receipt_header: restaurantData.receipt_header ?? '',
         receipt_footer: restaurantData.receipt_footer ?? '',
         logo: null as File | null,
     });
 
     const [logoPreview, setLogoPreview] = useState<string | null>(restaurantData.logo_url);
+    const [errorToast, setErrorToast] = useState<ToastOverride | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,12 +72,28 @@ export default function Edit({ restaurantData }: Props) {
 
     function submit(event: FormEvent) {
         event.preventDefault();
-        router.post('/restaurant', { ...form.data, _method: 'PUT' }, { preserveScroll: true });
+        router.post(
+            '/restaurant',
+            { ...form.data, _method: 'PUT' },
+            {
+                preserveScroll: true,
+                onError: (errors) => {
+                    const first = Object.values(errors)[0];
+                    setErrorToast({
+                        type: 'error',
+                        message: first ?? 'Gagal menyimpan pengaturan restoran. Periksa kembali isian Anda.',
+                        nonce: Date.now(),
+                    });
+                },
+            },
+        );
     }
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Pengaturan Restoran" />
+
+            <FlashToast override={errorToast} />
 
             <form onSubmit={submit} className="flex flex-1 flex-col">
                 <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-6 p-4 pb-24 md:p-6">
@@ -169,6 +195,44 @@ export default function Edit({ restaurantData }: Props) {
                                 active={form.data.service_charge_is_active}
                                 onPercentageChange={(v) => form.setData('service_charge_percentage', v)}
                                 onActiveChange={(v) => form.setData('service_charge_is_active', v)}
+                            />
+                        </div>
+                    </SectionCard>
+
+                    {/* Station & Operasional */}
+                    <SectionCard
+                        icon={Utensils}
+                        title="Station & Operasional"
+                        description="Sesuaikan dengan resto Anda. Station yang nonaktif: itemnya tidak dikirim ke sana — kasir yang menyiapkan & mencetaknya di lembar tersendiri."
+                    >
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <StationToggle
+                                icon={ChefHat}
+                                label="Dapur (Kitchen)"
+                                description="Item dapur dikirim ke layar Kitchen."
+                                active={form.data.has_kitchen}
+                                onChange={(v) => form.setData('has_kitchen', v)}
+                            />
+                            <StationToggle
+                                icon={GlassWater}
+                                label="Bar"
+                                description="Item minuman dikirim ke layar Bar."
+                                active={form.data.has_bar}
+                                onChange={(v) => form.setData('has_bar', v)}
+                            />
+                            <StationToggle
+                                icon={ConciergeBell}
+                                label="Waiter"
+                                description="Pesanan siap masuk antrean waiter. Nonaktif = kasir yang mengantar."
+                                active={form.data.has_waiter}
+                                onChange={(v) => form.setData('has_waiter', v)}
+                            />
+                            <StationToggle
+                                icon={QrCode}
+                                label="Self-Order (QR)"
+                                description="Pelanggan pesan sendiri via scan QR. Nonaktif = QR tidak bisa memesan."
+                                active={form.data.self_order_enabled}
+                                onChange={(v) => form.setData('self_order_enabled', v)}
                             />
                         </div>
                     </SectionCard>
@@ -296,6 +360,38 @@ function Field({
             {children}
             {error && <p className="text-destructive text-xs">{error}</p>}
         </div>
+    );
+}
+
+function StationToggle({
+    icon: Icon,
+    label,
+    description,
+    active,
+    onChange,
+}: {
+    icon: typeof Store;
+    label: string;
+    description: string;
+    active: boolean;
+    onChange: (v: boolean) => void;
+}) {
+    return (
+        <label
+            className={`flex cursor-pointer flex-col gap-2 rounded-lg border p-4 transition-colors ${active ? 'border-primary/40 bg-primary/5' : 'bg-muted/30'}`}
+        >
+            <div className="flex items-center justify-between gap-2">
+                <span className={`flex size-9 items-center justify-center rounded-lg ${active ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                    <Icon className="size-4.5" />
+                </span>
+                <Checkbox checked={active} onCheckedChange={(v) => onChange(Boolean(v))} />
+            </div>
+            <div>
+                <p className="font-medium">{label}</p>
+                <p className="text-muted-foreground mt-0.5 text-xs">{description}</p>
+            </div>
+            <span className={`text-xs font-medium ${active ? 'text-primary' : 'text-muted-foreground'}`}>{active ? 'Aktif' : 'Nonaktif'}</span>
+        </label>
     );
 }
 
