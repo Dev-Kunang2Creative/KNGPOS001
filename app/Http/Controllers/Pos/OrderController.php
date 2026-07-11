@@ -572,12 +572,12 @@ class OrderController extends Controller
 
             $restaurant = \App\Models\Restaurant::find($table->restaurant_id);
             $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-                ? $subtotal * ($restaurant->service_charge_percentage / 100)
+                ? round($subtotal * ($restaurant->service_charge_percentage / 100), 2)
                 : 0;
             $taxAmount = $restaurant && $restaurant->tax_is_active
-                ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
+                ? round(($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100), 2)
                 : 0;
-            $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+            $totalAmount = round($subtotal + $serviceChargeAmount + $taxAmount, 2);
 
             $paymentMethod = $validated['payment_method'] ?? 'cash';
 
@@ -637,12 +637,12 @@ class OrderController extends Controller
 
             $restaurant = \App\Models\Restaurant::find($order->table->restaurant_id);
             $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-                ? $subtotal * ($restaurant->service_charge_percentage / 100)
+                ? round($subtotal * ($restaurant->service_charge_percentage / 100), 2)
                 : 0;
             $taxAmount = $restaurant && $restaurant->tax_is_active
-                ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
+                ? round(($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100), 2)
                 : 0;
-            $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+            $totalAmount = round($subtotal + $serviceChargeAmount + $taxAmount, 2);
 
             $order->update([
                 'subtotal' => $subtotal,
