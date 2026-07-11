@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
-import { BadgePercent, Building2, Info, Pencil, Plus, RefreshCw, Split, Trash2, X, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { BadgePercent, Building2, CheckCircle2, Clock, Info, Pencil, Plus, RefreshCw, Split, Trash2, X, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -33,10 +33,16 @@ type SplitAccount = {
 type Disbursement = {
     id: number;
     split_account_id: number;
-    transaction_id: number;
+    transaction_id: number | null;
     channel_code: string;
+    account_number: string;
+    account_holder_name: string | null;
+    percent_amount: string;
     amount: string;
+    reference_id: string;
+    xendit_payout_id: string | null;
     status: string;
+    error_message: string | null;
     disbursed_at: string | null;
     created_at: string;
     split_account: SplitAccount;
@@ -122,7 +128,12 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
     };
 
     const disburseAccount = (account: SplitAccount) => {
-        if (!confirm(`Cairkan dana sebesar Rp ${parseInt((account.pending_balance || '0').toString(), 10).toLocaleString('id-ID')} untuk akun "${account.name}"?`)) return;
+        if (
+            !confirm(
+                `Cairkan dana sebesar Rp ${parseInt((account.pending_balance || '0').toString(), 10).toLocaleString('id-ID')} untuk akun "${account.name}"?`,
+            )
+        )
+            return;
         router.post(route('settings.split-payment.disburse', account.id), {}, { preserveScroll: true });
     };
 
@@ -140,6 +151,17 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
 
     const activeAccounts = accounts.filter((a) => a.is_active && a.split_type === 'percentage');
     const remainder = Math.max(0, 100 - activeAccounts.reduce((s, a) => s + parseFloat((a.percent_amount || '0').toString()), 0));
+
+    const translateErrorMessage = (msg: string | null) => {
+        if (!msg) return '';
+        if (msg.includes('INSUFFICIENT_BALANCE')) return 'Saldo Xendit (Available Balance) tidak mencukupi untuk nominal ini + biaya admin.';
+        if (msg.includes('INVALID_DESTINATION')) return 'Rekening tujuan tidak valid atau tidak ditemukan.';
+        if (msg.includes('ACCOUNT_CLOSED')) return 'Rekening tujuan sudah ditutup atau diblokir.';
+        if (msg.includes('BANK_DECLINED')) return 'Pencairan ditolak oleh bank tujuan.';
+        if (msg.includes('API_VALIDATION_ERROR')) return 'Gagal divalidasi oleh sistem (Periksa konfigurasi akun).';
+        if (msg.includes('EXCEEDS_TRANSFER_LIMIT')) return 'Melebihi limit transfer harian/per transaksi.';
+        return msg; // Fallback ke pesan aslinya jika tidak dikenali
+    };
 
     const chartData = [
         ...activeAccounts.map((a) => ({ name: a.name, value: parseFloat((a.percent_amount || '0').toString()) })),
@@ -252,10 +274,12 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                         </div>
 
                                         {/* Percentage/Nominal & Balance */}
-                                        <div className="flex flex-col items-end gap-1 mr-2">
-                                            <div className="flex items-center gap-1 text-lg font-bold tabular-nums leading-none">
+                                        <div className="mr-2 flex flex-col items-end gap-1">
+                                            <div className="flex items-center gap-1 text-lg leading-none font-bold tabular-nums">
                                                 {account.split_type === 'nominal' ? (
-                                                    <span className="text-base text-indigo-600">Rp {parseInt((account.nominal_amount || '0').toString(), 10).toLocaleString('id-ID')}</span>
+                                                    <span className="text-base text-indigo-600">
+                                                        Rp {parseInt((account.nominal_amount || '0').toString(), 10).toLocaleString('id-ID')}
+                                                    </span>
                                                 ) : (
                                                     <>
                                                         <BadgePercent className="text-muted-foreground h-4 w-4" />
@@ -263,20 +287,27 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                                     </>
                                                 )}
                                             </div>
-                                            <div className="text-xs text-muted-foreground whitespace-nowrap">
-                                                Saldo: <span className="font-semibold text-foreground">Rp {parseInt((account.pending_balance || '0').toString(), 10).toLocaleString('id-ID')}</span>
+                                            <div className="text-muted-foreground text-xs whitespace-nowrap">
+                                                Saldo:{' '}
+                                                <span className="text-foreground font-semibold">
+                                                    Rp {parseInt((account.pending_balance || '0').toString(), 10).toLocaleString('id-ID')}
+                                                </span>
                                             </div>
                                         </div>
 
                                         {/* Actions */}
-                                        <div className="flex gap-1 items-center">
+                                        <div className="flex items-center gap-1">
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="mr-1 h-8 px-3 text-xs border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900"
+                                                className="mr-1 h-8 border-emerald-200 bg-emerald-50 px-3 text-xs text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400"
                                                 disabled={parseFloat((account.pending_balance || '0').toString()) < 10000}
                                                 onClick={() => disburseAccount(account)}
-                                                title={parseFloat((account.pending_balance || '0').toString()) < 10000 ? "Minimum pencairan Rp 10.000" : "Cairkan saldo ini"}
+                                                title={
+                                                    parseFloat((account.pending_balance || '0').toString()) < 10000
+                                                        ? 'Minimum pencairan Rp 10.000'
+                                                        : 'Cairkan saldo ini'
+                                                }
                                             >
                                                 Cairkan
                                             </Button>
@@ -362,28 +393,31 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                 </li>
                                 <li>Aktifkan toggle Split Payment.</li>
                                 <li>
-                                    Setiap pembayaran (PAID) akan mencatat akumulasi <strong>Saldo Mengendap</strong> pada akun tujuan sesuai persentase.
+                                    Setiap pembayaran (PAID) akan mencatat akumulasi <strong>Saldo Mengendap</strong> pada akun tujuan sesuai
+                                    persentase.
                                 </li>
                                 <li>
-                                    Anda dapat menekan tombol <strong>Cairkan</strong> untuk mentransfer saldo mengendap tersebut ke rekening bank tujuan (Minimum penarikan Rp 10.000).
+                                    Anda dapat menekan tombol <strong>Cairkan</strong> untuk mentransfer saldo mengendap tersebut ke rekening bank
+                                    tujuan (Minimum penarikan Rp 10.000).
                                 </li>
                             </ol>
                             <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                                ⚠️ Biaya transfer antar bank sebesar Rp 2.775/transaksi akan dipotong dari saldo utama Xendit Anda saat melakukan pencairan.
+                                ⚠️ Biaya transfer antar bank sebesar Rp 2.775/transaksi akan dipotong dari saldo utama Xendit Anda saat melakukan
+                                pencairan.
                             </p>
                         </div>
                     </div>
                 </div>
 
                 {/* Disbursement History */}
-                <div className="mt-4 rounded-xl border shadow-sm bg-white dark:bg-gray-900 overflow-hidden">
+                <div className="mt-4 overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-gray-900">
                     <div className="border-b p-4">
                         <h2 className="text-lg font-semibold">Riwayat Pencairan Terakhir</h2>
-                        <p className="text-sm text-muted-foreground">Menampilkan hingga 50 transaksi pencairan terakhir.</p>
+                        <p className="text-muted-foreground text-sm">Menampilkan hingga 50 transaksi pencairan terakhir.</p>
                     </div>
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-muted-foreground bg-gray-50 dark:bg-gray-800 uppercase">
+                        <table className="w-full text-left text-sm">
+                            <thead className="text-muted-foreground bg-gray-50 text-xs uppercase dark:bg-gray-800">
                                 <tr>
                                     <th className="px-4 py-3">Waktu</th>
                                     <th className="px-4 py-3">Akun</th>
@@ -395,37 +429,58 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                             <tbody>
                                 {recentDisbursements.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Belum ada riwayat pencairan.</td>
+                                        <td colSpan={5} className="text-muted-foreground px-4 py-8 text-center">
+                                            Belum ada riwayat pencairan.
+                                        </td>
                                     </tr>
                                 ) : (
                                     recentDisbursements.map((disbursement) => (
                                         <tr key={disbursement.id} className="border-b last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                             <td className="px-4 py-3 whitespace-nowrap">
-                                                {new Date(disbursement.created_at || disbursement.disbursed_at || Date.now()).toLocaleString('id-ID', {
-                                                    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                                                })}
+                                                {new Date(disbursement.created_at || disbursement.disbursed_at || Date.now()).toLocaleString(
+                                                    'id-ID',
+                                                    {
+                                                        day: '2-digit',
+                                                        month: 'short',
+                                                        year: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    },
+                                                )}
                                             </td>
-                                            <td className="px-4 py-3 font-medium">
-                                                {disbursement.split_account?.name || '-'}
-                                            </td>
+                                            <td className="px-4 py-3 font-medium">{disbursement.split_account?.name || '-'}</td>
                                             <td className="px-4 py-3">
                                                 <div className="flex items-center gap-1.5">
-                                                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    {bankChannels[disbursement.channel_code] || disbursement.channel_code} 
+                                                    <Building2 className="text-muted-foreground h-3.5 w-3.5" />
+                                                    {bankChannels[disbursement.channel_code] || disbursement.channel_code}
                                                     <span className="text-muted-foreground">· {disbursement.account_number}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-4 py-3 font-semibold">
-                                                Rp {parseInt(disbursement.amount).toLocaleString('id-ID')}
-                                            </td>
+                                            <td className="px-4 py-3 font-semibold">Rp {parseInt(disbursement.amount).toLocaleString('id-ID')}</td>
                                             <td className="px-4 py-3">
-                                                {disbursement.status === 'succeeded' ? (
-                                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 hover:bg-emerald-100"><CheckCircle2 className="w-3 h-3 mr-1" /> Berhasil</Badge>
-                                                ) : disbursement.status === 'failed' ? (
-                                                    <Badge className="bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 hover:bg-red-100"><XCircle className="w-3 h-3 mr-1" /> Gagal</Badge>
-                                                ) : (
-                                                    <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:bg-amber-950/30"><Clock className="w-3 h-3 mr-1" /> Diproses</Badge>
-                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    {disbursement.status === 'succeeded' ? (
+                                                        <Badge className="border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                                            <CheckCircle2 className="mr-1 h-3 w-3" /> Berhasil
+                                                        </Badge>
+                                                    ) : disbursement.status === 'failed' ? (
+                                                        <Badge className="border-red-200 bg-red-100 text-red-800 hover:bg-red-100 dark:border-red-800 dark:bg-red-900/30 dark:text-red-400">
+                                                            <XCircle className="mr-1 h-3 w-3" /> Gagal
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
+                                                        >
+                                                            <Clock className="mr-1 h-3 w-3" /> Diproses
+                                                        </Badge>
+                                                    )}
+                                                    {disbursement.status === 'failed' && disbursement.error_message && (
+                                                        <span className="max-w-xs text-xs break-words text-red-600 dark:text-red-400">
+                                                            {translateErrorMessage(disbursement.error_message)}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
@@ -465,7 +520,9 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                             {/* Split Type Selector */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <Label>Tipe Potongan <span className="text-red-500">*</span></Label>
+                                    <Label>
+                                        Tipe Potongan <span className="text-red-500">*</span>
+                                    </Label>
                                     <Select
                                         value={form.data.split_type}
                                         onValueChange={(val: 'percentage' | 'nominal') => form.setData('split_type', val)}
@@ -479,11 +536,12 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                
+
                                 {/* Amount Input */}
                                 <div>
                                     <Label>
-                                        {form.data.split_type === 'percentage' ? 'Persentase (%)' : 'Nominal (Rp)'} <span className="text-red-500">*</span>
+                                        {form.data.split_type === 'percentage' ? 'Persentase (%)' : 'Nominal (Rp)'}{' '}
+                                        <span className="text-red-500">*</span>
                                     </Label>
                                     {form.data.split_type === 'percentage' ? (
                                         <div className="relative mt-1">
@@ -500,7 +558,7 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                         </div>
                                     ) : (
                                         <div className="relative mt-1">
-                                            <span className="text-muted-foreground absolute top-1/2 left-3 text-sm -translate-y-1/2">Rp</span>
+                                            <span className="text-muted-foreground absolute top-1/2 left-3 -translate-y-1/2 text-sm">Rp</span>
                                             <Input
                                                 type="number"
                                                 min="0"
@@ -511,8 +569,12 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                             />
                                         </div>
                                     )}
-                                    {form.errors.percent_amount && form.data.split_type === 'percentage' && <p className="mt-1 text-xs text-red-600">{form.errors.percent_amount}</p>}
-                                    {form.errors.nominal_amount && form.data.split_type === 'nominal' && <p className="mt-1 text-xs text-red-600">{form.errors.nominal_amount}</p>}
+                                    {form.errors.percent_amount && form.data.split_type === 'percentage' && (
+                                        <p className="mt-1 text-xs text-red-600">{form.errors.percent_amount}</p>
+                                    )}
+                                    {form.errors.nominal_amount && form.data.split_type === 'nominal' && (
+                                        <p className="mt-1 text-xs text-red-600">{form.errors.nominal_amount}</p>
+                                    )}
                                 </div>
                             </div>
 
