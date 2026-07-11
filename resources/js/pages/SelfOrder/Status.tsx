@@ -317,13 +317,6 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment, restauran
                 </section>
             </main>
 
-            <div className="pointer-events-none fixed right-0 bottom-[112px] left-0 z-40 mx-auto flex max-w-md justify-end px-4">
-                <button className="bg-secondary-container text-on-secondary-container pointer-events-auto flex items-center rounded-xl px-4 py-3 shadow-[0px_8px_24px_rgba(0,0,0,0.15)] transition-transform duration-200 active:scale-95">
-                    <span className="material-symbols-outlined icon-fill mr-2">notifications_active</span>
-                    <span className="text-sm font-bold font-semibold">Panggil Pelayan</span>
-                </button>
-            </div>
-
             <BottomNav
                 activeTab="status"
                 onMenuClick={() => router.visit(`/s/${qrToken}`)}

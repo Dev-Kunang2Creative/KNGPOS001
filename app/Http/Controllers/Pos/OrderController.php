@@ -13,7 +13,9 @@ use App\Models\BarOrder;
 use App\Models\KitchenOrder;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
+use App\Models\MenuItemAddon;
 use App\Models\Order;
+use App\Models\Restaurant;
 use App\Models\SelfOrder;
 use App\Models\Table;
 use App\Models\Transaction;
@@ -68,7 +70,7 @@ class OrderController extends Controller
                             ->with(['addons' => fn ($a) => $a->where('is_active', true)])
                             ->where('is_available', true)
                             ->orderBy('sort_order')
-                            ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path'])
+                            ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path']),
                         ])
                         ->select(['id', 'parent_id', 'name']),
                 ])
@@ -109,7 +111,7 @@ class OrderController extends Controller
         ]);
     }
 
-    public function receipt(Transaction $transaction): Response
+    public function receipt(Transaction $transaction, OrderRoutingService $routingService): Response
     {
         $transaction->loadMissing('order:id,order_type');
 
@@ -138,9 +140,22 @@ class OrderController extends Controller
         // Append order notes (not a relation, needs explicit select)
         $transaction->order?->makeVisible('notes');
 
+        // Items destined for a disabled station print on a cashier prep sheet.
+        $prepItems = $transaction->order
+            ? $routingService->cashierPrepItems($transaction->order)
+                ->map(fn ($item) => [
+                    'id' => $item->id,
+                    'name' => $item->menuItem?->name ?? 'Item',
+                    'quantity' => $item->quantity,
+                    'notes' => $item->notes,
+                ])
+                ->all()
+            : [];
+
         return Inertia::render('Pos/Receipt', [
             'transaction' => $transaction,
             'stationTicketUrls' => $this->stationTicketUrlsForOrder($transaction->order),
+            'prepItems' => $prepItems,
         ]);
     }
 
@@ -315,7 +330,9 @@ class OrderController extends Controller
         try {
             $validated = $request->validated();
             $order = $this->createOrder($request, $validated);
-            $routingService->ensureZoneAssigned($order);
+            if ($routingService->orderNeedsStationRouting($order)) {
+                $routingService->ensureZoneAssigned($order);
+            }
             $paymentMethod = $validated['payment_method'] ?? 'cash';
 
             if ($paymentMethod === 'qris') {
@@ -558,19 +575,19 @@ class OrderController extends Controller
             $subtotal = collect($validated['items'])->sum(function (array $item) use ($menuItems): float {
                 $basePrice = (float) $menuItems[$item['menu_item_id']]->price;
                 $addonPrice = 0;
-                
-                if (!empty($item['addons'])) {
-                    $addonPrice = \App\Models\MenuItemAddon::query()
+
+                if (! empty($item['addons'])) {
+                    $addonPrice = MenuItemAddon::query()
                         ->whereIn('id', $item['addons'])
                         ->where('menu_item_id', $item['menu_item_id'])
                         ->where('is_active', true)
                         ->sum('price');
                 }
-                
+
                 return ($basePrice + $addonPrice) * (int) $item['quantity'];
             });
 
-            $restaurant = \App\Models\Restaurant::find($table->restaurant_id);
+            $restaurant = Restaurant::find($table->restaurant_id);
             $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
                 ? $subtotal * ($restaurant->service_charge_percentage / 100)
                 : 0;
@@ -635,7 +652,7 @@ class OrderController extends Controller
                 ->where('status', '!=', 'cancelled')
                 ->sum('subtotal');
 
-            $restaurant = \App\Models\Restaurant::find($order->table->restaurant_id);
+            $restaurant = Restaurant::find($order->table->restaurant_id);
             $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
                 ? $subtotal * ($restaurant->service_charge_percentage / 100)
                 : 0;
@@ -658,25 +675,25 @@ class OrderController extends Controller
     private function createOrderItem(Order $order, MenuItem $menuItem, array $item): void
     {
         $quantity = (int) $item['quantity'];
-        
+
         $addonPrice = 0;
         $addonsData = null;
-        
-        if (!empty($item['addons'])) {
-            $selectedAddons = \App\Models\MenuItemAddon::query()
+
+        if (! empty($item['addons'])) {
+            $selectedAddons = MenuItemAddon::query()
                 ->whereIn('id', $item['addons'])
                 ->where('menu_item_id', $menuItem->id)
                 ->where('is_active', true)
                 ->get(['id', 'name', 'price']);
-                
+
             $addonPrice = $selectedAddons->sum('price');
-            $addonsData = $selectedAddons->map(fn($a) => [
+            $addonsData = $selectedAddons->map(fn ($a) => [
                 'id' => $a->id,
                 'name' => $a->name,
-                'price' => (float) $a->price
+                'price' => (float) $a->price,
             ])->toArray();
         }
-        
+
         $unitPrice = (float) $menuItem->price + $addonPrice;
 
         $order->items()->create([

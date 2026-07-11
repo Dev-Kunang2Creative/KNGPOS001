@@ -26,6 +26,10 @@ class Restaurant extends Model
             'tax_is_active' => 'boolean',
             'service_charge_percentage' => 'decimal:2',
             'service_charge_is_active' => 'boolean',
+            'has_kitchen' => 'boolean',
+            'has_bar' => 'boolean',
+            'has_waiter' => 'boolean',
+            'self_order_enabled' => 'boolean',
         ];
     }
 
