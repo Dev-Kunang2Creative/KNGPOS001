@@ -76,10 +76,15 @@ class SplitPaymentService
      *
      * @throws RuntimeException
      */
-    public function validateTotalPercentage(float $incomingPercent, ?int $excludeId = null): void
+    public function validateTotalPercentage(string $incomingType, float $incomingPercent, ?int $excludeId = null): void
     {
+        if ($incomingType !== 'percentage') {
+            return;
+        }
+
         $existingTotal = SplitPaymentAccount::query()
             ->active()
+            ->where('split_type', 'percentage')
             ->when($excludeId, fn ($q) => $q->where('id', '!=', $excludeId))
             ->sum('percent_amount');
 
@@ -97,12 +102,6 @@ class SplitPaymentService
     // Disbursement (Xendit Payouts API)
     // ──────────────────────────────────────────────
 
-    /**
-     * Record the pending split payment balances for each configured split account.
-     * Called by PaymentService after a payment is confirmed.
-     *
-     * @return void
-     */
     public function recordPendingSplit(Transaction $transaction): void
     {
         $accounts = SplitPaymentAccount::query()
@@ -119,22 +118,50 @@ class SplitPaymentService
         }
 
         $totalAmount = (float) $transaction->amount_paid;
+        $remainingAmount = $totalAmount;
 
-        foreach ($accounts as $account) {
-            $amount = round($totalAmount * ((float) $account->percent_amount / 100), 0);
+        // 1. Process Nominal Accounts First
+        $nominalAccounts = $accounts->where('split_type', 'nominal');
+        foreach ($nominalAccounts as $account) {
+            if ($remainingAmount <= 0) break;
 
-            if ($amount < 1) {
-                continue;
+            $amount = (float) $account->nominal_amount;
+            
+            // Cap at remaining amount
+            if ($amount > $remainingAmount) {
+                $amount = $remainingAmount;
             }
 
-            // Increment the pending balance
-            $account->increment('pending_balance', $amount);
+            if ($amount < 1) continue;
 
-            Log::info('recordPendingSplit: recorded pending balance', [
+            $account->increment('pending_balance', $amount);
+            $remainingAmount -= $amount;
+
+            Log::info('recordPendingSplit: recorded nominal balance', [
                 'account'        => $account->name,
                 'amount'         => $amount,
                 'transaction_id' => $transaction->id,
             ]);
+        }
+
+        // 2. Process Percentage Accounts with the Remaining Amount
+        if ($remainingAmount > 0) {
+            $percentageAccounts = $accounts->where('split_type', 'percentage');
+            foreach ($percentageAccounts as $account) {
+                $amount = round($remainingAmount * ((float) $account->percent_amount / 100), 0);
+
+                if ($amount < 1) {
+                    continue;
+                }
+
+                $account->increment('pending_balance', $amount);
+
+                Log::info('recordPendingSplit: recorded percentage balance', [
+                    'account'        => $account->name,
+                    'amount'         => $amount,
+                    'transaction_id' => $transaction->id,
+                ]);
+            }
         }
     }
 

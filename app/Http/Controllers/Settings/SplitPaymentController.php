@@ -26,7 +26,9 @@ class SplitPaymentController extends Controller
             ->orderBy('id')
             ->get();
 
-        $totalPercent = $accounts->where('is_active', true)->sum('percent_amount');
+        $totalPercent = $accounts->where('is_active', true)
+                                 ->where('split_type', 'percentage')
+                                 ->sum('percent_amount');
 
         // Recent disbursements (last 50)
         $recentDisbursements = SplitPaymentDisbursement::query()
@@ -50,7 +52,8 @@ class SplitPaymentController extends Controller
 
         try {
             $this->splitPaymentService->validateTotalPercentage(
-                (float) $validated['percent_amount'],
+                incomingType: $validated['split_type'],
+                incomingPercent: (float) $validated['percent_amount'],
             );
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
@@ -62,7 +65,9 @@ class SplitPaymentController extends Controller
             'bank_name'      => $validated['bank_name'] ?? null,
             'account_number' => $validated['account_number'] ?? null,
             'account_holder' => $validated['account_holder'] ?? null,
+            'split_type'     => $validated['split_type'],
             'percent_amount' => $validated['percent_amount'],
+            'nominal_amount' => $validated['nominal_amount'],
             'is_active'      => $validated['is_active'] ?? true,
             'sort_order'     => $validated['sort_order'] ?? 0,
         ]);
@@ -76,6 +81,7 @@ class SplitPaymentController extends Controller
 
         try {
             $this->splitPaymentService->validateTotalPercentage(
+                incomingType: $validated['split_type'],
                 incomingPercent: (float) $validated['percent_amount'],
                 excludeId: $splitAccount->id,
             );
@@ -89,7 +95,9 @@ class SplitPaymentController extends Controller
             'bank_name'      => $validated['bank_name'] ?? null,
             'account_number' => $validated['account_number'] ?? null,
             'account_holder' => $validated['account_holder'] ?? null,
+            'split_type'     => $validated['split_type'],
             'percent_amount' => $validated['percent_amount'],
+            'nominal_amount' => $validated['nominal_amount'],
             'is_active'      => $validated['is_active'] ?? $splitAccount->is_active,
             'sort_order'     => $validated['sort_order'] ?? $splitAccount->sort_order,
         ]);

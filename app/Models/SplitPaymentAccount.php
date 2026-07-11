@@ -14,6 +14,7 @@ class SplitPaymentAccount extends Model
     {
         return [
             'percent_amount'  => 'decimal:2',
+            'nominal_amount'  => 'decimal:2',
             'pending_balance' => 'decimal:2',
             'is_active'       => 'boolean',
         ];
