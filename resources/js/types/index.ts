@@ -41,6 +41,7 @@ export interface SharedData {
         logo_url?: string | null;
         receipt_header?: string | null;
         receipt_footer?: string | null;
+        has_waiter?: boolean;
     } | null;
     restaurants: Restaurant[];
     activeShift: { id: number; opened_at: string; opening_cash: string } | null;

@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Exceptions\ZoneStationAssignmentMissingException;
 use App\Models\AuditLog;
 use App\Models\MenuItem;
+use App\Models\MenuItemAddon;
 use App\Models\Order;
+use App\Models\Restaurant;
 use App\Models\SelfOrder;
 use App\Models\Table;
 use App\Models\TableQrcode;
@@ -42,26 +44,23 @@ class SelfOrderService
             $subtotal = collect($validated['items'])->sum(function (array $item) use ($menuItems): float {
                 $basePrice = (float) $menuItems[$item['menu_item_id']]->price;
                 $addonPrice = 0;
-                
-                if (!empty($item['addons'])) {
-                    $addonPrice = \App\Models\MenuItemAddon::query()
+
+                if (! empty($item['addons'])) {
+                    $addonPrice = MenuItemAddon::query()
                         ->whereIn('id', $item['addons'])
                         ->where('menu_item_id', $item['menu_item_id'])
                         ->where('is_active', true)
                         ->sum('price');
                 }
-                
+
                 return ($basePrice + $addonPrice) * (int) $item['quantity'];
             });
 
-            $restaurant = \App\Models\Restaurant::find($table->restaurant_id);
-            $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-                ? $subtotal * ($restaurant->service_charge_percentage / 100)
-                : 0;
-            $taxAmount = $restaurant && $restaurant->tax_is_active
-                ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
-                : 0;
-            $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+            $restaurant = Restaurant::find($table->restaurant_id);
+            $charges = $restaurant?->chargesFor($subtotal) ?? ['service_charge' => 0, 'tax' => 0, 'total' => $subtotal];
+            $serviceChargeAmount = $charges['service_charge'];
+            $taxAmount = $charges['tax'];
+            $totalAmount = $charges['total'];
 
             $selfOrder = SelfOrder::query()->create([
                 'table_id' => $table->id,
@@ -80,25 +79,25 @@ class SelfOrderService
             foreach ($validated['items'] as $item) {
                 $menuItem = $menuItems[$item['menu_item_id']];
                 $quantity = (int) $item['quantity'];
-                
+
                 $addonPrice = 0;
                 $addonsData = null;
-                
-                if (!empty($item['addons'])) {
-                    $selectedAddons = \App\Models\MenuItemAddon::query()
+
+                if (! empty($item['addons'])) {
+                    $selectedAddons = MenuItemAddon::query()
                         ->whereIn('id', $item['addons'])
                         ->where('menu_item_id', $menuItem->id)
                         ->where('is_active', true)
                         ->get(['id', 'name', 'price']);
-                        
+
                     $addonPrice = $selectedAddons->sum('price');
-                    $addonsData = $selectedAddons->map(fn($a) => [
+                    $addonsData = $selectedAddons->map(fn ($a) => [
                         'id' => $a->id,
                         'name' => $a->name,
-                        'price' => (float) $a->price
+                        'price' => (float) $a->price,
                     ])->toArray();
                 }
-                
+
                 $unitPrice = (float) $menuItem->price + $addonPrice;
 
                 $selfOrder->items()->create([
@@ -314,14 +313,11 @@ class SelfOrderService
             ->where('status', '!=', 'cancelled')
             ->sum('subtotal');
 
-        $restaurant = \App\Models\Restaurant::find($order->table->restaurant_id);
-        $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-            ? $subtotal * ($restaurant->service_charge_percentage / 100)
-            : 0;
-        $taxAmount = $restaurant && $restaurant->tax_is_active
-            ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
-            : 0;
-        $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+        $restaurant = Restaurant::find($order->table->restaurant_id);
+        $charges = $restaurant?->chargesFor($subtotal) ?? ['service_charge' => 0, 'tax' => 0, 'total' => $subtotal];
+        $serviceChargeAmount = $charges['service_charge'];
+        $taxAmount = $charges['tax'];
+        $totalAmount = $charges['total'];
 
         $order->update([
             'subtotal' => $subtotal,

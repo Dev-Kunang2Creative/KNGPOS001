@@ -4,6 +4,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { chargeAmount, chargeLabel, type ChargeType } from '@/lib/utils';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
@@ -211,7 +212,18 @@ export default function PosIndex({
     pendingStationTickets,
     stationTicketHistory,
 }: Props) {
-    const { flash, restaurant } = usePage<SharedData & { restaurant?: { tax_percentage: number; tax_is_active: boolean; service_charge_percentage: number; service_charge_is_active: boolean } }>().props;
+    const { flash, restaurant } = usePage<
+        SharedData & {
+            restaurant?: {
+                tax_percentage: number;
+                tax_is_active: boolean;
+                tax_type?: ChargeType;
+                service_charge_percentage: number;
+                service_charge_is_active: boolean;
+                service_charge_type?: ChargeType;
+            };
+        }
+    >().props;
     const menuRef = useRef<HTMLElement>(null);
     const [selectedTableId, setSelectedTableId] = useState('');
     const [cartTarget, setCartTarget] = useState<CartTarget>('close_bill');
@@ -257,8 +269,8 @@ export default function PosIndex({
     const activeOrderTotal = activeOrder ? Number(activeOrder.total_amount ?? activeOrder.subtotal) : 0;
     const pendingActiveItems = activeOrder?.items.filter((i) => i.status === 'pending') ?? [];
     const cartSubtotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
-    const cartServiceCharge = restaurant && restaurant.service_charge_is_active ? cartSubtotal * (Number(restaurant.service_charge_percentage) / 100) : 0;
-    const cartTax = restaurant && restaurant.tax_is_active ? (cartSubtotal + cartServiceCharge) * (Number(restaurant.tax_percentage) / 100) : 0;
+    const cartServiceCharge = chargeAmount(restaurant?.service_charge_is_active, restaurant?.service_charge_type, restaurant?.service_charge_percentage ?? 0, cartSubtotal);
+    const cartTax = chargeAmount(restaurant?.tax_is_active, restaurant?.tax_type, restaurant?.tax_percentage ?? 0, cartSubtotal + cartServiceCharge);
     const cartTotal = cartSubtotal + cartServiceCharge + cartTax;
     const activeOrderSections = useMemo(() => groupOpenBillItems(activeOrder?.items ?? []), [activeOrder?.items]);
     const selectedCartOrderId = cartTarget.startsWith('bill:') ? Number(cartTarget.replace('bill:', '')) : null;
@@ -918,13 +930,13 @@ export default function PosIndex({
                                     )}
                                     {cartServiceCharge > 0 && (
                                         <div className="flex justify-between pt-1 text-sm text-muted-foreground">
-                                            <span>Service Charge ({restaurant?.service_charge_percentage}%)</span>
+                                            <span>Service Charge ({chargeLabel(restaurant?.service_charge_type, restaurant?.service_charge_percentage ?? 0)})</span>
                                             <span>Rp {money(cartServiceCharge)}</span>
                                         </div>
                                     )}
                                     {cartTax > 0 && (
                                         <div className="flex justify-between pt-1 text-sm text-muted-foreground">
-                                            <span>PB1 ({restaurant?.tax_percentage}%)</span>
+                                            <span>PB1 ({chargeLabel(restaurant?.tax_type, restaurant?.tax_percentage ?? 0)})</span>
                                             <span>Rp {money(cartTax)}</span>
                                         </div>
                                     )}
@@ -1295,13 +1307,13 @@ export default function PosIndex({
                                         )}
                                         {cartServiceCharge > 0 && (
                                             <div className="flex justify-between pt-1 text-xs text-muted-foreground">
-                                                <span>Service Charge ({restaurant?.service_charge_percentage}%)</span>
+                                                <span>Service Charge ({chargeLabel(restaurant?.service_charge_type, restaurant?.service_charge_percentage ?? 0)})</span>
                                                 <span>Rp {money(cartServiceCharge)}</span>
                                             </div>
                                         )}
                                         {cartTax > 0 && (
                                             <div className="flex justify-between pt-1 text-xs text-muted-foreground">
-                                                <span>PB1 ({restaurant?.tax_percentage}%)</span>
+                                                <span>PB1 ({chargeLabel(restaurant?.tax_type, restaurant?.tax_percentage ?? 0)})</span>
                                                 <span>Rp {money(cartTax)}</span>
                                             </div>
                                         )}

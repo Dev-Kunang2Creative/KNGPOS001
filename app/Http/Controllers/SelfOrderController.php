@@ -34,8 +34,10 @@ class SelfOrderController extends Controller
                 'name' => app(RestaurantContext::class)->restaurant()?->name ?? 'Restoran',
                 'tax_percentage' => app(RestaurantContext::class)->restaurant()?->tax_percentage ?? 0,
                 'tax_is_active' => app(RestaurantContext::class)->restaurant()?->tax_is_active ?? false,
+                'tax_type' => app(RestaurantContext::class)->restaurant()?->tax_type ?? 'percentage',
                 'service_charge_percentage' => app(RestaurantContext::class)->restaurant()?->service_charge_percentage ?? 0,
                 'service_charge_is_active' => app(RestaurantContext::class)->restaurant()?->service_charge_is_active ?? false,
+                'service_charge_type' => app(RestaurantContext::class)->restaurant()?->service_charge_type ?? 'percentage',
             ],
         ]);
     }

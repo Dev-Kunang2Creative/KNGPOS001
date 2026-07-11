@@ -152,9 +152,11 @@ class OrderController extends Controller
                 ->all()
             : [];
 
+        // Cashier only prints the customer receipt (+ prep sheet for disabled
+        // stations). Kitchen/Bar tickets are printed on their own screens.
         return Inertia::render('Pos/Receipt', [
             'transaction' => $transaction,
-            'stationTicketUrls' => $this->stationTicketUrlsForOrder($transaction->order),
+            'stationTicketUrls' => [],
             'prepItems' => $prepItems,
         ]);
     }
@@ -246,65 +248,6 @@ class OrderController extends Controller
             ->take(20)
             ->values()
             ->all();
-    }
-
-    /**
-     * @return list<array{type: string, label: string, url: string}>
-     */
-    private function stationTicketUrlsForOrder(?Order $order): array
-    {
-        if (! $order) {
-            return [];
-        }
-
-        $kitchenOrder = $order->kitchenOrders()
-            ->whereNull('printed_at')
-            ->latest('sent_at')
-            ->first(['id']);
-
-        $barOrder = $order->barOrders()
-            ->whereNull('printed_at')
-            ->latest('sent_at')
-            ->first(['id']);
-
-        $transactionId = $order->transaction?->id;
-        $urls = [];
-
-        if ($kitchenOrder) {
-            $routeParams = [
-                'order' => $order->id,
-                'kitchen_order' => $kitchenOrder->id,
-            ];
-
-            if ($transactionId) {
-                $routeParams['receipt'] = $transactionId;
-            }
-
-            $urls[] = [
-                'type' => 'kitchen',
-                'label' => 'Cetak Kitchen',
-                'url' => route('pos.orders.station-ticket', $routeParams),
-            ];
-        }
-
-        if ($barOrder) {
-            $routeParams = [
-                'order' => $order->id,
-                'bar_order' => $barOrder->id,
-            ];
-
-            if ($transactionId) {
-                $routeParams['receipt'] = $transactionId;
-            }
-
-            $urls[] = [
-                'type' => 'bar',
-                'label' => 'Cetak Bar',
-                'url' => route('pos.orders.station-ticket', $routeParams),
-            ];
-        }
-
-        return $urls;
     }
 
     public function store(StoreOrderRequest $request): RedirectResponse
@@ -411,77 +354,27 @@ class OrderController extends Controller
     }
 
     /**
+     * After routing an order, return to the POS (or receipt). Station tickets are
+     * printed by the Kitchen/Bar screens themselves, never at the cashier.
+     *
      * @param  array{kitchen_order: mixed, bar_order: mixed}  $result
      */
     private function redirectToStationTicket(Order $order, array $result, ?int $receiptId = null): RedirectResponse
     {
-        if (! $result['kitchen_order'] && ! $result['bar_order']) {
-            $routeParams = ['order' => $order->id];
-
-            if ($receiptId) {
-                return redirect()
-                    ->route('pos.transactions.receipt', $receiptId)
-                    ->with('success', 'Pembayaran berhasil. Tidak ada item Kitchen/Bar.');
-            }
-
-            return redirect()
-                ->route('pos.index', $routeParams)
-                ->with('success', 'Order berhasil disubmit. Tidak ada item baru untuk Kitchen/Bar.');
-        }
-
-        $stationUrls = $this->stationTicketUrlsFromRouting($order, $result, $receiptId);
-
-        return redirect()
-            ->to($stationUrls[0])
-            ->with('success', 'Order berhasil dikirim ke station. Struk Kitchen/Bar siap dicetak terpisah.');
-    }
-
-    /**
-     * @param  array{kitchen_order: mixed, bar_order: mixed}  $result
-     * @return list<string>
-     */
-    private function stationTicketUrlsFromRouting(Order $order, array $result, ?int $receiptId = null): array
-    {
-        $urls = [];
-        $baseParams = ['order' => $order->id];
-
-        if ($result['payment'] ?? null) {
-            $baseParams['payment'] = $result['payment']->id;
-        }
+        $sentToStation = $result['kitchen_order'] || $result['bar_order'];
+        $message = $sentToStation
+            ? 'Order berhasil dikirim ke Dapur/Bar. Tiket dicetak di layar station.'
+            : 'Order berhasil disubmit.';
 
         if ($receiptId) {
-            $baseParams['receipt'] = $receiptId;
+            return redirect()
+                ->route('pos.transactions.receipt', $receiptId)
+                ->with('success', $message);
         }
 
-        if ($result['kitchen_order']) {
-            $urls[] = route('pos.orders.station-ticket', array_merge($baseParams, [
-                'kitchen_order' => $result['kitchen_order']->id,
-            ]));
-        }
-
-        if ($result['bar_order']) {
-            $urls[] = route('pos.orders.station-ticket', array_merge($baseParams, [
-                'bar_order' => $result['bar_order']->id,
-            ]));
-        }
-
-        if (count($urls) < 2) {
-            return $urls;
-        }
-
-        return collect($urls)
-            ->map(function (string $url, int $index) use ($urls): string {
-                $nextUrl = $urls[$index + 1] ?? null;
-
-                if (! $nextUrl) {
-                    return $url;
-                }
-
-                $separator = str_contains($url, '?') ? '&' : '?';
-
-                return $url.$separator.'next_station_ticket='.urlencode($nextUrl);
-            })
-            ->all();
+        return redirect()
+            ->route('pos.index', ['order' => $order->id])
+            ->with('success', $message);
     }
 
     public function addItems(AddOrderItemsRequest $request, Order $order): RedirectResponse
@@ -588,13 +481,10 @@ class OrderController extends Controller
             });
 
             $restaurant = Restaurant::find($table->restaurant_id);
-            $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-                ? round($subtotal * ($restaurant->service_charge_percentage / 100), 2)
-                : 0;
-            $taxAmount = $restaurant && $restaurant->tax_is_active
-                ? round(($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100), 2)
-                : 0;
-            $totalAmount = round($subtotal + $serviceChargeAmount + $taxAmount, 2);
+            $charges = $restaurant?->chargesFor($subtotal) ?? ['service_charge' => 0, 'tax' => 0, 'total' => round($subtotal, 2)];
+            $serviceChargeAmount = $charges['service_charge'];
+            $taxAmount = $charges['tax'];
+            $totalAmount = $charges['total'];
 
             $paymentMethod = $validated['payment_method'] ?? 'cash';
 
@@ -653,13 +543,10 @@ class OrderController extends Controller
                 ->sum('subtotal');
 
             $restaurant = Restaurant::find($order->table->restaurant_id);
-            $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-                ? round($subtotal * ($restaurant->service_charge_percentage / 100), 2)
-                : 0;
-            $taxAmount = $restaurant && $restaurant->tax_is_active
-                ? round(($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100), 2)
-                : 0;
-            $totalAmount = round($subtotal + $serviceChargeAmount + $taxAmount, 2);
+            $charges = $restaurant?->chargesFor($subtotal) ?? ['service_charge' => 0, 'tax' => 0, 'total' => round($subtotal, 2)];
+            $serviceChargeAmount = $charges['service_charge'];
+            $taxAmount = $charges['tax'];
+            $totalAmount = $charges['total'];
 
             $order->update([
                 'subtotal' => $subtotal,

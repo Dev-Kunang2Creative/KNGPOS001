@@ -21,8 +21,10 @@ interface Restaurant {
     address: string | null;
     tax_percentage: string;
     tax_is_active: boolean;
+    tax_type: 'percentage' | 'nominal';
     service_charge_percentage: string;
     service_charge_is_active: boolean;
+    service_charge_type: 'percentage' | 'nominal';
     currency: string;
     has_kitchen: boolean;
     has_bar: boolean;
@@ -46,8 +48,10 @@ export default function Edit({ restaurantData }: Props) {
         address: restaurantData.address ?? '',
         tax_percentage: Number(restaurantData.tax_percentage ?? 0),
         tax_is_active: restaurantData.tax_is_active ?? false,
+        tax_type: restaurantData.tax_type ?? 'percentage',
         service_charge_percentage: Number(restaurantData.service_charge_percentage ?? 0),
         service_charge_is_active: restaurantData.service_charge_is_active ?? false,
+        service_charge_type: restaurantData.service_charge_type ?? 'percentage',
         currency: restaurantData.currency ?? 'IDR',
         has_kitchen: restaurantData.has_kitchen ?? true,
         has_bar: restaurantData.has_bar ?? true,
@@ -186,15 +190,19 @@ export default function Edit({ restaurantData }: Props) {
                                 label="Pajak (Tax)"
                                 percentage={form.data.tax_percentage}
                                 active={form.data.tax_is_active}
+                                type={form.data.tax_type}
                                 onPercentageChange={(v) => form.setData('tax_percentage', v)}
                                 onActiveChange={(v) => form.setData('tax_is_active', v)}
+                                onTypeChange={(v) => form.setData('tax_type', v)}
                             />
                             <ChargeCard
                                 label="Service Charge"
                                 percentage={form.data.service_charge_percentage}
                                 active={form.data.service_charge_is_active}
+                                type={form.data.service_charge_type}
                                 onPercentageChange={(v) => form.setData('service_charge_percentage', v)}
                                 onActiveChange={(v) => form.setData('service_charge_is_active', v)}
+                                onTypeChange={(v) => form.setData('service_charge_type', v)}
                             />
                         </div>
                     </SectionCard>
@@ -399,15 +407,21 @@ function ChargeCard({
     label,
     percentage,
     active,
+    type,
     onPercentageChange,
     onActiveChange,
+    onTypeChange,
 }: {
     label: string;
     percentage: number;
     active: boolean;
+    type: 'percentage' | 'nominal';
     onPercentageChange: (v: number) => void;
     onActiveChange: (v: boolean) => void;
+    onTypeChange: (v: 'percentage' | 'nominal') => void;
 }) {
+    const isNominal = type === 'nominal';
+
     return (
         <div className={`rounded-lg border p-4 transition-colors ${active ? 'border-primary/40 bg-primary/5' : 'bg-muted/30'}`}>
             <label className="flex cursor-pointer items-center justify-between gap-2">
@@ -417,18 +431,45 @@ function ChargeCard({
                     <span className={active ? 'text-primary font-medium' : 'text-muted-foreground'}>{active ? 'Aktif' : 'Nonaktif'}</span>
                 </span>
             </label>
+
+            {/* Type selector: persen atau nominal Rp */}
+            <div className="bg-muted mt-3 inline-flex rounded-lg p-0.5 text-xs font-medium">
+                {(['percentage', 'nominal'] as const).map((opt) => (
+                    <button
+                        key={opt}
+                        type="button"
+                        disabled={!active}
+                        onClick={() => onTypeChange(opt)}
+                        className={`rounded-md px-3 py-1.5 transition-colors disabled:opacity-50 ${
+                            type === opt ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground'
+                        }`}
+                    >
+                        {opt === 'percentage' ? 'Persen (%)' : 'Nominal (Rp)'}
+                    </button>
+                ))}
+            </div>
+
             <div className="relative mt-3">
+                <span className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm">
+                    {isNominal ? 'Rp' : ''}
+                </span>
                 <Input
                     type="number"
-                    step="0.01"
+                    step={isNominal ? '100' : '0.01'}
                     min={0}
-                    className="min-h-[44px] pr-8"
+                    max={isNominal ? undefined : 100}
+                    className={`min-h-[44px] ${isNominal ? 'pl-9' : 'pr-8'}`}
                     value={percentage}
                     onChange={(e) => onPercentageChange(Number(e.target.value))}
                     disabled={!active}
                 />
-                <span className="text-muted-foreground absolute top-1/2 right-3 -translate-y-1/2 text-sm">%</span>
+                {!isNominal && (
+                    <span className="text-muted-foreground absolute top-1/2 right-3 -translate-y-1/2 text-sm">%</span>
+                )}
             </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+                {isNominal ? 'Ditambahkan sebagai nominal tetap per transaksi.' : 'Dihitung sebagai persen dari subtotal.'}
+            </p>
         </div>
     );
 }
