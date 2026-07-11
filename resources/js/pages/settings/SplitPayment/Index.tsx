@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
-import { BadgePercent, Building2, Info, Pencil, Plus, RefreshCw, Split, Trash2, X } from 'lucide-react';
+import { BadgePercent, Building2, Info, Pencil, Plus, RefreshCw, Split, Trash2, X, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -36,6 +36,7 @@ type Disbursement = {
     amount: string;
     status: string;
     disbursed_at: string | null;
+    created_at: string;
     split_account: SplitAccount;
 };
 
@@ -360,6 +361,66 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                 ⚠️ Biaya transfer antar bank sebesar Rp 2.775/transaksi akan dipotong dari saldo utama Xendit Anda saat melakukan pencairan.
                             </p>
                         </div>
+                    </div>
+                </div>
+
+                {/* Disbursement History */}
+                <div className="mt-4 rounded-xl border shadow-sm bg-white dark:bg-gray-900 overflow-hidden">
+                    <div className="border-b p-4">
+                        <h2 className="text-lg font-semibold">Riwayat Pencairan Terakhir</h2>
+                        <p className="text-sm text-muted-foreground">Menampilkan hingga 50 transaksi pencairan terakhir.</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs text-muted-foreground bg-gray-50 dark:bg-gray-800 uppercase">
+                                <tr>
+                                    <th className="px-4 py-3">Waktu</th>
+                                    <th className="px-4 py-3">Akun</th>
+                                    <th className="px-4 py-3">Bank & Rekening</th>
+                                    <th className="px-4 py-3">Nominal</th>
+                                    <th className="px-4 py-3">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {recentDisbursements.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Belum ada riwayat pencairan.</td>
+                                    </tr>
+                                ) : (
+                                    recentDisbursements.map((disbursement) => (
+                                        <tr key={disbursement.id} className="border-b last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                {new Date(disbursement.created_at || disbursement.disbursed_at || Date.now()).toLocaleString('id-ID', {
+                                                    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                                                })}
+                                            </td>
+                                            <td className="px-4 py-3 font-medium">
+                                                {disbursement.split_account?.name || '-'}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                                                    {bankChannels[disbursement.channel_code] || disbursement.channel_code} 
+                                                    <span className="text-muted-foreground">· {disbursement.account_number}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 font-semibold">
+                                                Rp {parseInt(disbursement.amount).toLocaleString('id-ID')}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {disbursement.status === 'succeeded' ? (
+                                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 hover:bg-emerald-100"><CheckCircle2 className="w-3 h-3 mr-1" /> Berhasil</Badge>
+                                                ) : disbursement.status === 'failed' ? (
+                                                    <Badge className="bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800 hover:bg-red-100"><XCircle className="w-3 h-3 mr-1" /> Gagal</Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:bg-amber-950/30"><Clock className="w-3 h-3 mr-1" /> Diproses</Badge>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
