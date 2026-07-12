@@ -13,12 +13,10 @@ import {
     Banknote,
     Bell,
     CheckCircle2,
-    ChefHat,
     ChevronDown,
     ChevronRight,
     ChevronUp,
     CreditCard,
-    GlassWater,
     Minus,
     Package,
     Plus,
@@ -109,19 +107,18 @@ type PaidSelfOrderReceipt = PendingSelfOrder & {
         transaction?: { id: number; payment_method: string; amount_paid: string; status: string; paid_at?: string | null } | null;
     } | null;
 };
-type StationTicketSummary = {
+type OrderHistoryEntry = {
     id: number;
-    type: 'kitchen' | 'bar';
-    order_id: number;
-    station_name?: string | null;
-    table_name?: string | null;
-    zone_name?: string | null;
-    sent_at?: string | null;
-    printed_at?: string | null;
+    order_type: string;
+    status: string;
+    total_amount: string;
+    created_at: string;
+    table?: { id: number; name: string } | null;
+    transaction?: { id: number; order_id: number } | null;
 };
 type BillMode = 'open_bill' | 'close_bill';
 type CartTarget = 'close_bill' | 'open_bill' | `bill:${number}`;
-type CashierPanel = 'cart' | 'bills' | 'self_order' | 'station_print' | 'station_history';
+type CashierPanel = 'cart' | 'bills' | 'self_order' | 'history';
 type CloseBillPaymentMethod = 'cash' | 'qris';
 type Props = {
     tables: Table[];
@@ -131,8 +128,7 @@ type Props = {
     xenditPayment: XenditPayment;
     pendingSelfOrders: PendingSelfOrder[];
     paidSelfOrderReceipts: PaidSelfOrderReceipt[];
-    pendingStationTickets: StationTicketSummary[];
-    stationTicketHistory: StationTicketSummary[];
+    orderHistory: OrderHistoryEntry[];
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'POS', href: '/pos' }];
@@ -209,8 +205,7 @@ export default function PosIndex({
     xenditPayment,
     pendingSelfOrders,
     paidSelfOrderReceipts,
-    pendingStationTickets,
-    stationTicketHistory,
+    orderHistory,
 }: Props) {
     const { flash, restaurant } = usePage<
         SharedData & {
@@ -237,7 +232,7 @@ export default function PosIndex({
     const [drawerMode, setDrawerMode] = useState<'new_order' | 'pay_bill'>('new_order');
     const [billItemsExpanded, setBillItemsExpanded] = useState(false);
     const [expandedCards, setExpandedCards] = useState<Set<string>>(
-        () => new Set(['bills', 'bills_detail', 'paid_receipts', 'self_order', 'station_print', 'station_history']),
+        () => new Set(['bills', 'bills_detail', 'paid_receipts', 'self_order', 'history']),
     );
     function toggleCard(key: string) {
         setExpandedCards((prev) => {
@@ -257,11 +252,8 @@ export default function PosIndex({
     const [billsPage, setBillsPage] = useState(1);
     const [selfOrderPage, setSelfOrderPage] = useState(1);
     const [receiptPage, setReceiptPage] = useState(1);
-    const [stationPage, setStationPage] = useState(1);
     const [historyPage, setHistoryPage] = useState(1);
-    const [activePanel, setActivePanel] = useState<CashierPanel>(
-        activeOrder ? 'bills' : pendingSelfOrders.length > 0 ? 'self_order' : pendingStationTickets.length > 0 ? 'station_print' : 'bills',
-    );
+    const [activePanel, setActivePanel] = useState<CashierPanel>(activeOrder ? 'bills' : pendingSelfOrders.length > 0 ? 'self_order' : 'bills');
     const orderableTables = useMemo(() => tables.filter((t) => ['available', 'occupied'].includes(t.status)), [tables]);
     const selectedCategory = categories.find((c) => String(c.id) === selectedCategoryId) ?? categories[0];
     const displayCategory = (selectedSubCategoryId ? selectedCategory?.children?.find((c) => String(c.id) === selectedSubCategoryId) : null) || selectedCategory;
@@ -298,8 +290,7 @@ export default function PosIndex({
         { key: 'cart', label: 'Pesanan', icon: ShoppingCart, count: cart.length || undefined },
         { key: 'bills', label: 'Tagihan', icon: ReceiptText, count: openOrders.length || undefined },
         { key: 'self_order', label: 'Self Order', icon: Bell, count: selfOrders.length + paidSelfOrderReceipts.length || undefined },
-        { key: 'station_print', label: 'Dapur/Bar', icon: Printer, count: pendingStationTickets.length || undefined },
-        { key: 'station_history', label: 'Riwayat', icon: ReceiptText },
+        { key: 'history', label: 'Riwayat', icon: ReceiptText },
     ];
 
     useEffect(() => {
@@ -315,8 +306,7 @@ export default function PosIndex({
                     'xenditPayment',
                     'pendingSelfOrders',
                     'paidSelfOrderReceipts',
-                    'pendingStationTickets',
-                    'stationTicketHistory',
+                    'orderHistory',
                     'openOrders',
                 ],
             });
@@ -452,8 +442,7 @@ export default function PosIndex({
     const paginatedOpenOrders = openOrders.slice((billsPage - 1) * PAGE_SIZE, billsPage * PAGE_SIZE);
     const paginatedSelfOrders = selfOrders.slice((selfOrderPage - 1) * PAGE_SIZE, selfOrderPage * PAGE_SIZE);
     const paginatedPaidReceipts = paidSelfOrderReceipts.slice((receiptPage - 1) * PAGE_SIZE, receiptPage * PAGE_SIZE);
-    const paginatedPendingTickets = pendingStationTickets.slice((stationPage - 1) * PAGE_SIZE, stationPage * PAGE_SIZE);
-    const paginatedHistory = stationTicketHistory.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
+    const paginatedHistory = orderHistory.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
 
     const quickAmounts = [2000, 5000, 10000, 50000, 100000];
 
@@ -518,23 +507,11 @@ export default function PosIndex({
         router.reload({ only: ['pendingSelfOrders', 'paidSelfOrderReceipts'] });
     }
 
-    function printAllTickets() {
-        pendingStationTickets.forEach((ticket, i) => setTimeout(() => window.open(stationTicketUrl(ticket), '_blank'), i * 400));
-        setTimeout(() => router.reload({ only: ['pendingStationTickets', 'stationTicketHistory'] }), pendingStationTickets.length * 400 + 2500);
-    }
-
     function printAllReceipts() {
         paidSelfOrderReceipts.forEach((so, i) => {
             const tx = so.order?.transaction;
             if (tx) setTimeout(() => window.open(`/pos/transactions/${tx.id}/receipt`, '_blank'), i * 400);
         });
-    }
-
-    function stationTicketUrl(ticket: StationTicketSummary, reprint = false) {
-        const key = ticket.type === 'kitchen' ? 'kitchen_order' : 'bar_order';
-        const params = new URLSearchParams({ [key]: String(ticket.id) });
-        if (reprint) params.set('reprint', '1');
-        return `/pos/orders/${ticket.order_id}/station-ticket?${params.toString()}`;
     }
 
     return (
@@ -1051,7 +1028,7 @@ export default function PosIndex({
                     )}
 
                     {/* Urgent alerts */}
-                    {(selfOrders.length > 0 || paidSelfOrderReceipts.length > 0 || pendingStationTickets.length > 0) && (
+                    {(selfOrders.length > 0 || paidSelfOrderReceipts.length > 0) && (
                         <div className="flex flex-col gap-2">
                             {selfOrders.length > 0 && (
                                 <button
@@ -1075,24 +1052,13 @@ export default function PosIndex({
                                     <ChevronRight className="size-4 shrink-0" />
                                 </button>
                             )}
-                            {pendingStationTickets.length > 0 && (
-                                <button
-                                    type="button"
-                                    className="flex min-h-[44px] items-center gap-3 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-800 transition-colors hover:bg-blue-100"
-                                    onClick={() => setActivePanel('station_print')}
-                                >
-                                    <Printer className="size-4 shrink-0" />
-                                    <span className="flex-1 text-left">{pendingStationTickets.length} tiket dapur/bar belum dicetak</span>
-                                    <ChevronRight className="size-4 shrink-0" />
-                                </button>
-                            )}
                         </div>
                     )}
 
                     {/* Sticky tab navigation */}
                     <div className="bg-background sticky top-0 z-10 pt-0 pb-1">
-                        {/* Mobile: 4 tabs (no Pesanan – accessible via floating bar) */}
-                        <div className="bg-muted grid grid-cols-4 gap-1 rounded-xl p-1 xl:hidden">
+                        {/* Mobile: 3 tabs (no Pesanan – accessible via floating bar) */}
+                        <div className="bg-muted grid grid-cols-3 gap-1 rounded-xl p-1 xl:hidden">
                             {cashierPanels
                                 .filter((p) => p.key !== 'cart')
                                 .map((panel) => {
@@ -1115,8 +1081,8 @@ export default function PosIndex({
                                     );
                                 })}
                         </div>
-                        {/* Desktop: 5 tabs (includes Pesanan) */}
-                        <div className="bg-muted hidden grid-cols-5 gap-1 rounded-xl p-1 xl:grid">
+                        {/* Desktop: 4 tabs (includes Pesanan) */}
+                        <div className="bg-muted hidden grid-cols-4 gap-1 rounded-xl p-1 xl:grid">
                             {cashierPanels.map((panel) => {
                                 const Icon = panel.icon;
                                 return (
@@ -1781,151 +1747,64 @@ export default function PosIndex({
                         </div>
                     )}
 
-                    {/* ── PANEL: CETAK DAPUR/BAR ── */}
-                    {activePanel === 'station_print' && (
+                    {/* ── PANEL: RIWAYAT PEMESANAN ── */}
+                    {activePanel === 'history' && (
                         <div className="bg-card rounded-xl border">
                             <button
                                 type="button"
                                 className="flex w-full items-center gap-2 px-4 py-3 font-semibold"
-                                onClick={() => toggleCard('station_print')}
+                                onClick={() => toggleCard('history')}
                             >
-                                <Printer className="size-4" />
-                                <span className="flex-1 text-left">Cetak Dapur/Bar</span>
-                                {pendingStationTickets.length > 0 && <Badge variant="destructive">{pendingStationTickets.length}</Badge>}
-                                {expandedCards.has('station_print') ? (
+                                <ReceiptText className="size-4" />
+                                <span className="flex-1 text-left">Riwayat Pemesanan</span>
+                                {expandedCards.has('history') ? (
                                     <ChevronUp className="text-muted-foreground size-4" />
                                 ) : (
                                     <ChevronDown className="text-muted-foreground size-4" />
                                 )}
                             </button>
-                            {expandedCards.has('station_print') && (
+                            {expandedCards.has('history') && (
                                 <div className="space-y-3 border-t px-4 py-4">
-                                    {pendingStationTickets.length === 0 ? (
-                                        <div className="rounded-xl border-2 border-dashed p-8 text-center">
-                                            <Printer className="text-muted-foreground/40 mx-auto size-8" />
-                                            <p className="text-muted-foreground mt-2 text-sm">Tidak ada tiket yang menunggu cetak.</p>
-                                        </div>
+                                    {orderHistory.length === 0 ? (
+                                        <p className="text-muted-foreground text-sm">Belum ada riwayat pemesanan.</p>
                                     ) : (
-                                        <>
-                                            <Button type="button" className="min-h-[48px] w-full" onClick={printAllTickets}>
-                                                <Printer className="size-4" />
-                                                Cetak Semua ({pendingStationTickets.length} tiket)
-                                            </Button>
-                                            <p className="text-muted-foreground text-center text-xs">Atau cetak satu per satu di bawah</p>
-                                            {paginatedPendingTickets.map((ticket) => (
-                                                <div key={`${ticket.type}-${ticket.id}`} className="rounded-lg border p-3">
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <div>
-                                                            <p className="flex items-center gap-1.5 font-semibold">
-                                                                {ticket.type === 'kitchen' ? (
-                                                                    <ChefHat className="size-4 text-orange-500" />
-                                                                ) : (
-                                                                    <GlassWater className="size-4 text-blue-500" />
-                                                                )}
-                                                                {ticket.type === 'kitchen' ? 'Kitchen' : 'Bar'} – {ticket.station_name ?? '-'}
-                                                            </p>
-                                                            <p className="text-muted-foreground mt-0.5 text-xs">
-                                                                Order #{ticket.order_id} · {ticket.table_name ?? '-'} · {ticket.zone_name ?? '-'}
-                                                            </p>
-                                                            {ticket.sent_at && (
-                                                                <p className="text-muted-foreground text-xs">
-                                                                    {new Date(ticket.sent_at).toLocaleString('id-ID')}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        <Badge variant="outline" className="border-amber-400 text-amber-600">
-                                                            Belum Cetak
-                                                        </Badge>
+                                        paginatedHistory.map((order) => (
+                                            <div key={`history-${order.id}`} className="rounded-lg border p-3">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <p className="font-semibold">
+                                                            Order #{order.id} · {order.table?.name ?? '-'}
+                                                        </p>
+                                                        <p className="text-muted-foreground mt-0.5 text-xs">
+                                                            {order.order_type === 'self_order' ? 'Self Order' : 'Kasir'} · Rp{' '}
+                                                            {money(order.total_amount)}
+                                                        </p>
+                                                        <p className="text-muted-foreground text-xs">
+                                                            {new Date(order.created_at).toLocaleString('id-ID')}
+                                                        </p>
                                                     </div>
+                                                    <Badge variant="secondary" className="flex items-center gap-1">
+                                                        <CheckCircle2 className="size-3" /> Lunas
+                                                    </Badge>
+                                                </div>
+                                                {order.transaction && (
                                                     <Button
                                                         type="button"
                                                         size="sm"
-                                                        className="mt-3 min-h-[44px] w-full"
                                                         variant="outline"
-                                                        onClick={() => router.visit(stationTicketUrl(ticket))}
+                                                        className="mt-3 min-h-[44px] w-full"
+                                                        onClick={() =>
+                                                            router.visit(`/pos/transactions/${order.transaction?.id}/receipt?reprint=1`)
+                                                        }
                                                     >
-                                                        <Printer className="size-4" /> Cetak Tiket
+                                                        <Printer className="size-4" /> Cetak Ulang Struk
                                                     </Button>
-                                                </div>
-                                            ))}
-                                            <Pagination
-                                                page={stationPage}
-                                                total={pendingStationTickets.length}
-                                                pageSize={PAGE_SIZE}
-                                                onPage={setStationPage}
-                                            />
-                                        </>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {/* ── PANEL: RIWAYAT CETAK ── */}
-                    {activePanel === 'station_history' && (
-                        <div className="bg-card rounded-xl border">
-                            <button
-                                type="button"
-                                className="flex w-full items-center gap-2 px-4 py-3 font-semibold"
-                                onClick={() => toggleCard('station_history')}
-                            >
-                                <ReceiptText className="size-4" />
-                                <span className="flex-1 text-left">Riwayat Cetak</span>
-                                {expandedCards.has('station_history') ? (
-                                    <ChevronUp className="text-muted-foreground size-4" />
-                                ) : (
-                                    <ChevronDown className="text-muted-foreground size-4" />
-                                )}
-                            </button>
-                            {expandedCards.has('station_history') && (
-                                <div className="space-y-3 border-t px-4 py-4">
-                                    {stationTicketHistory.length === 0 ? (
-                                        <p className="text-muted-foreground text-sm">Belum ada riwayat cetak.</p>
-                                    ) : (
-                                        paginatedHistory.map((ticket) => (
-                                            <div key={`history-${ticket.type}-${ticket.id}`} className="rounded-lg border p-3">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <div>
-                                                        <p className="flex items-center gap-1.5 font-semibold">
-                                                            {ticket.type === 'kitchen' ? (
-                                                                <ChefHat className="size-4 text-orange-500" />
-                                                            ) : (
-                                                                <GlassWater className="size-4 text-blue-500" />
-                                                            )}
-                                                            {ticket.type === 'kitchen' ? 'Kitchen' : 'Bar'} – {ticket.station_name ?? '-'}
-                                                        </p>
-                                                        <p className="text-muted-foreground mt-0.5 text-xs">
-                                                            Order #{ticket.order_id} · {ticket.table_name ?? '-'}
-                                                        </p>
-                                                        {ticket.printed_at && (
-                                                            <p className="text-muted-foreground text-xs">
-                                                                Dicetak: {new Date(ticket.printed_at).toLocaleString('id-ID')}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <Badge variant="secondary" className="flex items-center gap-1">
-                                                        <CheckCircle2 className="size-3" /> Tercetak
-                                                    </Badge>
-                                                </div>
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="mt-3 min-h-[44px] w-full"
-                                                    onClick={() => router.visit(stationTicketUrl(ticket, true))}
-                                                >
-                                                    <Printer className="size-4" /> Cetak Ulang
-                                                </Button>
+                                                )}
                                             </div>
                                         ))
                                     )}
-                                    {stationTicketHistory.length > PAGE_SIZE && (
-                                        <Pagination
-                                            page={historyPage}
-                                            total={stationTicketHistory.length}
-                                            pageSize={PAGE_SIZE}
-                                            onPage={setHistoryPage}
-                                        />
+                                    {orderHistory.length > PAGE_SIZE && (
+                                        <Pagination page={historyPage} total={orderHistory.length} pageSize={PAGE_SIZE} onPage={setHistoryPage} />
                                     )}
                                 </div>
                             )}

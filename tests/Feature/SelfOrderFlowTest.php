@@ -294,7 +294,7 @@ class SelfOrderFlowTest extends TestCase
                 ->where('paidSelfOrderReceipts.0.order.transaction.id', $transaction->id));
     }
 
-    public function test_self_order_station_ticket_disappears_after_print_and_moves_to_history(): void
+    public function test_paid_self_order_appears_in_pos_order_history_without_station_tickets(): void
     {
         [$table, $qrCode, $menuItem, $kitchen, $bar] = $this->selfOrderFixture();
         $cashier = $this->cashier();
@@ -360,27 +360,11 @@ class SelfOrderFlowTest extends TestCase
             ->get(route('pos.index'))
             ->assertOk()
             ->assertInertia(fn ($page) => $page
-                ->has('pendingStationTickets', 2)
-                ->has('stationTicketHistory', 0));
-
-        $this->actingAs($cashier)
-            ->get(route('pos.orders.station-ticket', [
-                'order' => $order->id,
-                'kitchen_order' => $kitchenOrder->id,
-            ]))
-            ->assertOk();
-
-        $this->assertNotNull($kitchenOrder->fresh()->printed_at);
-        $this->assertNull($barOrder->fresh()->printed_at);
-
-        $this->actingAs($cashier)
-            ->get(route('pos.index'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->has('pendingStationTickets', 1)
-                ->where('pendingStationTickets.0.type', 'bar')
-                ->has('stationTicketHistory', 1)
-                ->where('stationTicketHistory.0.type', 'kitchen'));
+                ->has('orderHistory', 1)
+                ->where('orderHistory.0.id', $order->id)
+                ->where('orderHistory.0.order_type', 'self_order')
+                ->missing('pendingStationTickets')
+                ->missing('stationTicketHistory'));
     }
 
     public function test_qr_submit_rejects_table_zone_without_station_assignment(): void

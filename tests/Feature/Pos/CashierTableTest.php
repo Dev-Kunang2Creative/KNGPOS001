@@ -95,6 +95,9 @@ class CashierTableTest extends TestCase
             ->withSession(['active_restaurant_id' => $restaurant->id])
             ->get("/pos/transactions/{$transaction->id}/receipt")
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->where('stationTicketUrls', []));
+            ->assertInertia(fn ($page) => $page
+                ->component('Pos/Receipt')
+                ->missing('stationTicketUrls')
+                ->missing('prepItems'));
     }
 }

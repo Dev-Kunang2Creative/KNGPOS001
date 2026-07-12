@@ -69,7 +69,6 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::post('pos/orders/{order}/items', [OrderController::class, 'addItems'])->name('pos.orders.items.store');
         Route::post('pos/orders/{order}/items/submit', [OrderController::class, 'addItemsAndSubmit'])->name('pos.orders.items.submit');
         Route::post('pos/orders/{order}/submit', [OrderController::class, 'submit'])->name('pos.orders.submit');
-        Route::get('pos/orders/{order}/station-ticket', [OrderController::class, 'stationTicket'])->name('pos.orders.station-ticket');
         Route::post('pos/self-orders/{selfOrder}/approve', [OrderController::class, 'approveSelfOrder'])->name('pos.self-orders.approve');
         Route::post('pos/self-orders/{selfOrder}/reject', [OrderController::class, 'rejectSelfOrder'])->name('pos.self-orders.reject');
         Route::post('pos/self-orders/{selfOrder}/receipt-printed', [OrderController::class, 'markSelfOrderReceiptPrinted'])->name('pos.self-orders.receipt-printed');

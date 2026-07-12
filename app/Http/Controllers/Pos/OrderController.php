@@ -9,8 +9,6 @@ use App\Http\Requests\Pos\ApproveSelfOrderRequest;
 use App\Http\Requests\Pos\RejectSelfOrderRequest;
 use App\Http\Requests\Pos\StoreOrderRequest;
 use App\Http\Requests\Pos\SubmitOrderRequest;
-use App\Models\BarOrder;
-use App\Models\KitchenOrder;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\MenuItemAddon;
@@ -25,7 +23,6 @@ use App\Services\PaymentService;
 use App\Services\SelfOrderService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -106,12 +103,19 @@ class OrderController extends Controller
                 ->latest()
                 ->limit(20)
                 ->get(),
-            'pendingStationTickets' => $this->stationTicketsQuery(false),
-            'stationTicketHistory' => $this->stationTicketsQuery(true),
+            'orderHistory' => Order::query()
+                ->with(['table:id,name', 'transaction:id,order_id'])
+                ->where('status', 'paid')
+                ->where(fn ($query) => $query
+                    ->where('kasir_id', auth()->id())
+                    ->orWhere('order_type', 'self_order'))
+                ->latest()
+                ->limit(20)
+                ->get(['id', 'table_id', 'order_type', 'status', 'total_amount', 'created_at']),
         ]);
     }
 
-    public function receipt(Transaction $transaction, OrderRoutingService $routingService): Response
+    public function receipt(Transaction $transaction): Response
     {
         $transaction->loadMissing('order:id,order_type');
 
@@ -140,114 +144,11 @@ class OrderController extends Controller
         // Append order notes (not a relation, needs explicit select)
         $transaction->order?->makeVisible('notes');
 
-        // Items destined for a disabled station print on a cashier prep sheet.
-        $prepItems = $transaction->order
-            ? $routingService->cashierPrepItems($transaction->order)
-                ->map(fn ($item) => [
-                    'id' => $item->id,
-                    'name' => $item->menuItem?->name ?? 'Item',
-                    'quantity' => $item->quantity,
-                    'notes' => $item->notes,
-                ])
-                ->all()
-            : [];
-
-        // Cashier only prints the customer receipt (+ prep sheet for disabled
-        // stations). Kitchen/Bar tickets are printed on their own screens.
+        // Cashier prints the customer receipt plus a checker copy (items only).
+        // Kitchen/Bar tickets are printed on their own screens.
         return Inertia::render('Pos/Receipt', [
             'transaction' => $transaction,
-            'stationTicketUrls' => [],
-            'prepItems' => $prepItems,
         ]);
-    }
-
-    public function stationTicket(Request $request, Order $order): Response
-    {
-        abort_unless(
-            $order->kasir_id === $request->user()->id
-                || ($order->kasir_id === null && $order->order_type === 'self_order'),
-            403
-        );
-
-        $order->load(['table.zone:id,name', 'cashier:id,name', 'transaction:id,order_id']);
-        $kitchenOrderId = $request->integer('kitchen_order');
-        $barOrderId = $request->integer('bar_order');
-        $isBatchTicket = $kitchenOrderId || $barOrderId;
-
-        $kitchenOrders = $order->kitchenOrders()
-            ->with(['station:id,name', 'items.orderItem.menuItem:id,name,print_to'])
-            ->when($kitchenOrderId, fn ($query, int $id) => $query->whereKey($id))
-            ->when($isBatchTicket && ! $kitchenOrderId, fn ($query) => $query->whereRaw('1 = 0'))
-            ->latest()
-            ->get();
-
-        $barOrders = $order->barOrders()
-            ->with(['station:id,name', 'items.orderItem.menuItem:id,name,print_to'])
-            ->when($barOrderId, fn ($query, int $id) => $query->whereKey($id))
-            ->when($isBatchTicket && ! $barOrderId, fn ($query) => $query->whereRaw('1 = 0'))
-            ->latest()
-            ->get();
-
-        abort_if($kitchenOrders->isEmpty() && $barOrders->isEmpty(), 404);
-
-        if (! $request->boolean('reprint')) {
-            $kitchenOrders->whereNull('printed_at')->each->update(['printed_at' => now()]);
-            $barOrders->whereNull('printed_at')->each->update(['printed_at' => now()]);
-        }
-
-        return Inertia::render('Pos/StationTicket', [
-            'order' => $order,
-            'kitchenOrders' => $kitchenOrders,
-            'barOrders' => $barOrders,
-            'xenditPayment' => $request->integer('payment')
-                ? XenditPayment::query()->find($request->integer('payment'))
-                : null,
-            'receiptId' => $request->integer('receipt') ?: null,
-        ]);
-    }
-
-    private function stationTicketsQuery(bool $printed): array
-    {
-        $kitchenTickets = KitchenOrder::query()
-            ->with(['order.table.zone:id,name', 'station:id,name'])
-            ->when($printed, fn ($query) => $query->whereNotNull('printed_at'), fn ($query) => $query->whereNull('printed_at'))
-            ->latest($printed ? 'printed_at' : 'sent_at')
-            ->limit(20)
-            ->get()
-            ->map(fn (KitchenOrder $ticket): array => [
-                'id' => $ticket->id,
-                'type' => 'kitchen',
-                'order_id' => $ticket->order_id,
-                'station_name' => $ticket->station?->name,
-                'table_name' => $ticket->order?->table?->name,
-                'zone_name' => $ticket->order?->table?->zone?->name,
-                'sent_at' => $ticket->sent_at,
-                'printed_at' => $ticket->printed_at,
-            ]);
-
-        $barTickets = BarOrder::query()
-            ->with(['order.table.zone:id,name', 'station:id,name'])
-            ->when($printed, fn ($query) => $query->whereNotNull('printed_at'), fn ($query) => $query->whereNull('printed_at'))
-            ->latest($printed ? 'printed_at' : 'sent_at')
-            ->limit(20)
-            ->get()
-            ->map(fn (BarOrder $ticket): array => [
-                'id' => $ticket->id,
-                'type' => 'bar',
-                'order_id' => $ticket->order_id,
-                'station_name' => $ticket->station?->name,
-                'table_name' => $ticket->order?->table?->name,
-                'zone_name' => $ticket->order?->table?->zone?->name,
-                'sent_at' => $ticket->sent_at,
-                'printed_at' => $ticket->printed_at,
-            ]);
-
-        return $kitchenTickets
-            ->concat($barTickets)
-            ->sortByDesc(fn (array $ticket) => $printed ? $ticket['printed_at'] : $ticket['sent_at'])
-            ->take(20)
-            ->values()
-            ->all();
     }
 
     public function store(StoreOrderRequest $request): RedirectResponse
