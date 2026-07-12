@@ -30,7 +30,7 @@ class StaffSeeder extends Seeder
             'waiter.view', 'waiter.update',
             'tables.view', 'tables.manage',
             'dashboard.view',
-            'reports.view', 'reports.export',
+            'reports.view',
             'zones.manage',
             'menu.view', 'menu.manage',
             'users.view', 'users.manage',
@@ -46,7 +46,7 @@ class StaffSeeder extends Seeder
             'super_admin' => $permissions,
             'manager' => [
                 'shift.view',
-                'dashboard.view', 'reports.view', 'reports.export', 'zones.manage',
+                'dashboard.view', 'reports.view', 'zones.manage',
                 'menu.view', 'menu.manage', 'users.view', 'users.manage',
                 'settings.view', 'settings.manage', 'audit.view',
                 'kitchen.manage', 'tables.view', 'tables.manage',

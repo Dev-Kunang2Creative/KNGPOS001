@@ -144,10 +144,6 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::get('reports/kasir', [ReportController::class, 'cashier'])->name('reports.cashier');
     });
 
-    Route::middleware(['permission:reports.export'])->group(function () {
-        Route::get('reports/kasir/export', [ReportController::class, 'exportCashier'])->name('reports.cashier.export');
-    });
-
     // Staff Management (replaces old Users routes)
     Route::middleware(['permission:users.view'])->group(function () {
         Route::get('users', [RestaurantStaffController::class, 'index'])->name('users.index');

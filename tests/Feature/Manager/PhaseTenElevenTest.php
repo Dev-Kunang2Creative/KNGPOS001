@@ -46,13 +46,13 @@ class PhaseTenElevenTest extends TestCase
             );
     }
 
-    public function test_cashier_report_includes_self_order_and_total_and_exports_csv(): void
+    public function test_cashier_report_includes_self_order_and_total(): void
     {
         $cashier = User::factory()->create(['role' => 'kasir', 'name' => 'Kasir Test']);
         $this->paidOrder($cashier, 'dine_in', 'cash', 10000);
         $this->paidOrder($cashier, 'self_order', 'qris', 15000);
 
-        $this->actingAs($this->manager(['reports.view', 'reports.export']))
+        $this->actingAs($this->manager(['reports.view']))
             ->withSession(['active_restaurant_id' => $this->restaurant->id])
             ->get('/reports/kasir')
             ->assertOk()
@@ -63,18 +63,6 @@ class PhaseTenElevenTest extends TestCase
                 ->where('rows.2.kasir_name', 'TOTAL')
                 ->has('shifts')
             );
-
-        $this->actingAs($this->manager(['reports.view', 'reports.export']))
-            ->withSession(['active_restaurant_id' => $this->restaurant->id])
-            ->get('/reports/kasir/export')
-            ->assertOk()
-            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
-
-        $this->actingAs($this->manager(['reports.view', 'reports.export']))
-            ->withSession(['active_restaurant_id' => $this->restaurant->id])
-            ->get('/reports/kasir/export?format=pdf')
-            ->assertOk()
-            ->assertHeader('content-type', 'application/pdf');
     }
 
     public function test_cashier_report_shift_filter_limits_transactions_to_shift_window(): void
