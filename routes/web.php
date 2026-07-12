@@ -145,7 +145,7 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     });
 
     Route::middleware(['permission:reports.export'])->group(function () {
-        Route::post('reports/kasir/export', [ReportController::class, 'exportCashier'])->name('reports.cashier.export');
+        Route::get('reports/kasir/export', [ReportController::class, 'exportCashier'])->name('reports.cashier.export');
     });
 
     // Staff Management (replaces old Users routes)

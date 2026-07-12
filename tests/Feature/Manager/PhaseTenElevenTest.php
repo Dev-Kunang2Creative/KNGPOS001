@@ -7,23 +7,27 @@ use App\Models\KitchenStation;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\Order;
-use App\Models\SystemSettings;
+use App\Models\RestaurantUser;
+use App\Models\Shift;
 use App\Models\Table;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Zone;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Spatie\Permission\Models\Permission;
+use Illuminate\Support\Carbon;
+use Tests\Concerns\InteractsWithRestaurant;
 use Tests\TestCase;
 
 class PhaseTenElevenTest extends TestCase
 {
+    use InteractsWithRestaurant;
     use RefreshDatabase;
 
     protected function setUp(): void
     {
         parent::setUp();
         $this->withoutVite();
+        $this->activeRestaurant();
     }
 
     public function test_manager_dashboard_renders_metrics(): void
@@ -32,6 +36,7 @@ class PhaseTenElevenTest extends TestCase
         BarStation::query()->create(['name' => 'Bar 1']);
 
         $this->actingAs($this->manager(['dashboard.view']))
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
             ->get('/dashboard')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
@@ -48,6 +53,7 @@ class PhaseTenElevenTest extends TestCase
         $this->paidOrder($cashier, 'self_order', 'qris', 15000);
 
         $this->actingAs($this->manager(['reports.view', 'reports.export']))
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
             ->get('/reports/kasir')
             ->assertOk()
             ->assertInertia(fn ($page) => $page
@@ -55,24 +61,61 @@ class PhaseTenElevenTest extends TestCase
                 ->where('rows.0.kasir_name', 'Kasir Test')
                 ->where('rows.1.kasir_name', 'Self-Order')
                 ->where('rows.2.kasir_name', 'TOTAL')
+                ->has('shifts')
             );
 
         $this->actingAs($this->manager(['reports.view', 'reports.export']))
-            ->post('/reports/kasir/export')
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
+            ->get('/reports/kasir/export')
             ->assertOk()
             ->assertHeader('content-type', 'text/csv; charset=UTF-8');
 
         $this->actingAs($this->manager(['reports.view', 'reports.export']))
-            ->post('/reports/kasir/export', ['format' => 'pdf'])
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
+            ->get('/reports/kasir/export?format=pdf')
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
     }
 
-    public function test_user_role_change_creates_audit_log(): void
+    public function test_cashier_report_shift_filter_limits_transactions_to_shift_window(): void
     {
-        $user = User::factory()->create(['role' => 'kasir']);
+        $cashier = User::factory()->create(['name' => 'Kasir Shift']);
+        $shift = Shift::query()->create([
+            'kasir_id' => $cashier->id,
+            'opening_cash' => 0,
+            'opened_at' => today()->setTime(10, 0),
+            'closed_at' => today()->setTime(12, 0),
+        ]);
+
+        $this->paidOrder($cashier, 'dine_in', 'cash', 10000, today()->setTime(11, 0));
+        $this->paidOrder($cashier, 'dine_in', 'cash', 20000, today()->setTime(14, 0));
+
+        $this->actingAs($this->manager(['reports.view']))
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
+            ->get('/reports/kasir?shift_id='.$shift->id)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Reports/Cashier')
+                ->where('rows.0.kasir_name', 'Kasir Shift')
+                ->where('rows.0.total_transactions', 1)
+                ->where('rows.0.total_revenue', fn ($value) => (float) $value === 10000.0)
+                ->where('rows.1.kasir_name', 'TOTAL')
+                ->where('rows.1.total_transactions', 1)
+            );
+    }
+
+    public function test_user_role_change_updates_restaurant_role(): void
+    {
+        $user = User::factory()->create();
+        RestaurantUser::query()->create([
+            'restaurant_id' => $this->restaurant->id,
+            'user_id' => $user->id,
+            'role' => 'kasir',
+            'is_primary' => true,
+        ]);
 
         $this->actingAs($this->manager(['users.view', 'users.manage']))
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
             ->put("/users/{$user->id}", [
                 'name' => $user->name,
                 'email' => $user->email,
@@ -81,18 +124,23 @@ class PhaseTenElevenTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertDatabaseHas('audit_logs', [
-            'action' => 'user.role.updated',
-            'resource_type' => User::class,
-            'resource_id' => $user->id,
+        $this->assertDatabaseHas('restaurant_users', [
+            'restaurant_id' => $this->restaurant->id,
+            'user_id' => $user->id,
+            'role' => 'manager',
         ]);
     }
 
     public function test_system_settings_update_creates_audit_log(): void
     {
         $this->actingAs($this->manager(['settings.view', 'settings.manage']))
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
             ->put('/settings/system', [
                 'restaurant_name' => 'Karcisqu Test',
+                'restaurant_address' => 'Jl. Test No. 1',
+                'restaurant_phone' => null,
+                'receipt_header' => null,
+                'receipt_footer' => null,
                 'tax_percentage' => 11,
                 'tax_is_active' => true,
                 'service_charge_percentage' => 5,
@@ -100,23 +148,16 @@ class PhaseTenElevenTest extends TestCase
             ])
             ->assertRedirect();
 
-        $this->assertSame('Karcisqu Test', SystemSettings::get('restaurant_name'));
+        $this->assertSame('Karcisqu Test', $this->restaurant->refresh()->name);
         $this->assertDatabaseHas('audit_logs', ['action' => 'settings.system.updated']);
     }
 
     private function manager(array $permissions): User
     {
-        foreach ($permissions as $permission) {
-            Permission::query()->firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
-        }
-
-        $user = User::factory()->create(['role' => 'manager']);
-        $user->givePermissionTo($permissions);
-
-        return $user;
+        return $this->managerFor($this->restaurant, $permissions);
     }
 
-    private function paidOrder(User $cashier, string $orderType, string $paymentMethod, int $amount): void
+    private function paidOrder(User $cashier, string $orderType, string $paymentMethod, int $amount, ?Carbon $paidAt = null): void
     {
         $zone = Zone::query()->firstOrCreate(['name' => 'Indoor']);
         $table = Table::query()->create(['name' => 'T'.uniqid(), 'zone_id' => $zone->id]);
@@ -144,7 +185,7 @@ class PhaseTenElevenTest extends TestCase
             'amount_paid' => $amount,
             'change_amount' => 0,
             'status' => 'paid',
-            'paid_at' => now(),
+            'paid_at' => $paidAt ?? now(),
         ]);
     }
 }
