@@ -11,6 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
+        // This migration predates the create-table migration alphabetically; on a
+        // fresh database the table is created later with a nullable column, so skip.
+        if (! Schema::hasTable('split_payment_disbursements')) {
+            return;
+        }
+
         Schema::table('split_payment_disbursements', function (Blueprint $table) {
             $table->unsignedBigInteger('transaction_id')->nullable()->change();
         });

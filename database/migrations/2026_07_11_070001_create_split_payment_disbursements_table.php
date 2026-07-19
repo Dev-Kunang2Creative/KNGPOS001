@@ -8,9 +8,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('split_payment_disbursements')) {
+            return;
+        }
+
         Schema::create('split_payment_disbursements', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('transaction_id')->constrained()->restrictOnDelete();
+            $table->foreignId('transaction_id')->nullable()->constrained()->restrictOnDelete();
             $table->foreignId('split_account_id')->constrained('split_payment_accounts')->restrictOnDelete();
 
             // Snapshot of destination at time of disbursement
