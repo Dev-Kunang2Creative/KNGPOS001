@@ -19,29 +19,29 @@ class SplitPaymentService
      * These map to Xendit's channel_code field in POST /v2/payouts.
      */
     public const BANK_CHANNELS = [
-        'ID_BCA'               => 'BCA',
-        'ID_MANDIRI'           => 'Mandiri',
-        'ID_BNI'               => 'BNI',
-        'ID_BRI'               => 'BRI',
-        'ID_BSI'               => 'BSI',
-        'ID_BTN'               => 'BTN',
-        'ID_CIMB'              => 'CIMB Niaga',
-        'ID_DANAMON'           => 'Danamon',
-        'ID_PERMATA'           => 'Permata',
-        'ID_MAYBANK'           => 'Maybank',
-        'ID_OCBC_NISP'         => 'OCBC NISP',
-        'ID_PANIN'             => 'Panin',
-        'ID_SINARMAS'          => 'Sinarmas',
-        'ID_MUAMALAT'          => 'Muamalat',
-        'ID_MEGA'              => 'Bank Mega',
-        'ID_BUKOPIN'           => 'Bukopin',
-        'ID_BJB'               => 'BJB',
-        'ID_BPD_BALI'          => 'BPD Bali',
-        'ID_BPD_DIY'           => 'BPD DIY',
-        'ID_JAGO'              => 'Bank Jago',
+        'ID_BCA' => 'BCA',
+        'ID_MANDIRI' => 'Mandiri',
+        'ID_BNI' => 'BNI',
+        'ID_BRI' => 'BRI',
+        'ID_BSI' => 'BSI',
+        'ID_BTN' => 'BTN',
+        'ID_CIMB' => 'CIMB Niaga',
+        'ID_DANAMON' => 'Danamon',
+        'ID_PERMATA' => 'Permata',
+        'ID_MAYBANK' => 'Maybank',
+        'ID_OCBC_NISP' => 'OCBC NISP',
+        'ID_PANIN' => 'Panin',
+        'ID_SINARMAS' => 'Sinarmas',
+        'ID_MUAMALAT' => 'Muamalat',
+        'ID_MEGA' => 'Bank Mega',
+        'ID_BUKOPIN' => 'Bukopin',
+        'ID_BJB' => 'BJB',
+        'ID_BPD_BALI' => 'BPD Bali',
+        'ID_BPD_DIY' => 'BPD DIY',
+        'ID_JAGO' => 'Bank Jago',
         'ID_SAHABAT_SAMPOERNA' => 'Bank Sahabat Sampoerna',
-        'ID_SEABANK'           => 'SeaBank',
-        'ID_NOBU'              => 'Bank Nobu',
+        'ID_SEABANK' => 'SeaBank',
+        'ID_NOBU' => 'Bank Nobu',
     ];
 
     // ──────────────────────────────────────────────
@@ -114,6 +114,7 @@ class SplitPaymentService
             Log::info('recordPendingSplit: no bank-ready accounts, skipping.', [
                 'transaction_id' => $transaction->id,
             ]);
+
             return;
         }
 
@@ -123,23 +124,27 @@ class SplitPaymentService
         // 1. Process Nominal Accounts First
         $nominalAccounts = $accounts->where('split_type', 'nominal');
         foreach ($nominalAccounts as $account) {
-            if ($remainingAmount <= 0) break;
+            if ($remainingAmount <= 0) {
+                break;
+            }
 
             $amount = (float) $account->nominal_amount;
-            
+
             // Cap at remaining amount
             if ($amount > $remainingAmount) {
                 $amount = $remainingAmount;
             }
 
-            if ($amount < 1) continue;
+            if ($amount < 1) {
+                continue;
+            }
 
             $account->increment('pending_balance', $amount);
             $remainingAmount -= $amount;
 
             Log::info('recordPendingSplit: recorded nominal balance', [
-                'account'        => $account->name,
-                'amount'         => $amount,
+                'account' => $account->name,
+                'amount' => $amount,
                 'transaction_id' => $transaction->id,
             ]);
         }
@@ -157,8 +162,8 @@ class SplitPaymentService
                 $account->increment('pending_balance', $amount);
 
                 Log::info('recordPendingSplit: recorded percentage balance', [
-                    'account'        => $account->name,
-                    'amount'         => $amount,
+                    'account' => $account->name,
+                    'amount' => $amount,
                     'transaction_id' => $transaction->id,
                 ]);
             }
@@ -166,10 +171,26 @@ class SplitPaymentService
     }
 
     /**
+     * The amount a manual disbursement would transfer for this account:
+     * nominal accounts pay out at most their configured nominal_amount
+     * (the rest stays as pending balance), percentage accounts pay out
+     * the full pending balance.
+     */
+    public function disbursableAmount(SplitPaymentAccount $account): float
+    {
+        $balance = (float) $account->pending_balance;
+
+        if ($account->split_type === 'nominal' && (float) $account->nominal_amount > 0) {
+            return min((float) $account->nominal_amount, $balance);
+        }
+
+        return $balance;
+    }
+
+    /**
      * Process manual disbursement for a specific split account via Xendit Payouts API.
-     * Requires the account to have a pending_balance >= 10000.
+     * Requires the disbursable amount to be >= 10000.
      *
-     * @return SplitPaymentDisbursement
      * @throws RuntimeException
      */
     public function processManualDisbursement(SplitPaymentAccount $account): SplitPaymentDisbursement
@@ -180,11 +201,11 @@ class SplitPaymentService
             throw new RuntimeException('Xendit belum dikonfigurasi. Pastikan Xendit secret key sudah diset di System Settings.');
         }
 
-        if (!$account->is_active || !$account->bank_code || !$account->account_number) {
+        if (! $account->is_active || ! $account->bank_code || ! $account->account_number) {
             throw new RuntimeException('Akun split ini belum dikonfigurasi dengan benar (Bank & No. Rekening harus diisi).');
         }
 
-        $amount = (float) $account->pending_balance;
+        $amount = $this->disbursableAmount($account);
 
         if ($amount < 10000) {
             throw new RuntimeException('Minimal pencairan adalah Rp 10.000');
@@ -193,15 +214,15 @@ class SplitPaymentService
         $referenceId = 'krc-split-manual-'.$account->id.'-'.Str::lower(Str::random(8));
 
         $disbursement = SplitPaymentDisbursement::query()->create([
-            'transaction_id'      => null,
-            'split_account_id'    => $account->id,
-            'channel_code'        => $account->bank_code,
-            'account_number'      => $account->account_number,
+            'transaction_id' => null,
+            'split_account_id' => $account->id,
+            'channel_code' => $account->bank_code,
+            'account_number' => $account->account_number,
             'account_holder_name' => $account->account_holder,
-            'percent_amount'      => $account->percent_amount,
-            'amount'              => $amount,
-            'reference_id'        => $referenceId,
-            'status'              => 'pending',
+            'percent_amount' => $account->percent_amount ?? 0,
+            'amount' => $amount,
+            'reference_id' => $referenceId,
+            'status' => 'pending',
         ]);
 
         try {
@@ -211,14 +232,14 @@ class SplitPaymentService
                     'Idempotency-key' => $referenceId,
                 ])
                 ->post('https://api.xendit.co/v2/payouts', [
-                    'reference_id'      => $referenceId,
-                    'channel_code'      => $account->bank_code,
+                    'reference_id' => $referenceId,
+                    'channel_code' => $account->bank_code,
                     'channel_properties' => [
-                        'account_number'      => $account->account_number,
+                        'account_number' => $account->account_number,
                         'account_holder_name' => $account->account_holder ?? $account->name,
                     ],
-                    'amount'      => (int) $amount,
-                    'currency'    => 'IDR',
+                    'amount' => (int) $amount,
+                    'currency' => 'IDR',
                     'description' => 'Manual Split Payout - '.$account->name,
                 ])
                 ->throw()
@@ -226,18 +247,18 @@ class SplitPaymentService
 
             // Payout successful (accepted by Xendit)
             $disbursement->update([
-                'status'              => 'succeeded',
-                'xendit_payout_id'    => $response['id'] ?? null,
+                'status' => 'succeeded',
+                'xendit_payout_id' => $response['id'] ?? null,
                 'xendit_raw_response' => $response,
-                'disbursed_at'        => now(),
+                'disbursed_at' => now(),
             ]);
-            
-            // Reset pending balance back to 0
-            $account->update(['pending_balance' => 0]);
+
+            // Deduct only the disbursed amount; any remainder stays as pending balance.
+            $account->decrement('pending_balance', $amount);
 
             Log::info('processManualDisbursement: payout succeeded', [
-                'account'   => $account->name,
-                'amount'    => $amount,
+                'account' => $account->name,
+                'amount' => $amount,
                 'xendit_id' => $response['id'] ?? null,
             ]);
 
@@ -245,17 +266,17 @@ class SplitPaymentService
 
         } catch (\Throwable $e) {
             $disbursement->update([
-                'status'        => 'failed',
+                'status' => 'failed',
                 'error_message' => $e->getMessage(),
             ]);
 
             Log::error('processManualDisbursement: payout failed', [
                 'account' => $account->name,
-                'amount'  => $amount,
-                'error'   => $e->getMessage(),
+                'amount' => $amount,
+                'error' => $e->getMessage(),
             ]);
 
-            throw new RuntimeException('Gagal mencairkan dana melalui Xendit: ' . $e->getMessage());
+            throw new RuntimeException('Gagal mencairkan dana melalui Xendit: '.$e->getMessage());
         }
     }
 }

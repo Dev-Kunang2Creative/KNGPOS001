@@ -127,10 +127,21 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
         router.delete(route('settings.split-payment.destroy', account.id), { preserveScroll: true });
     };
 
+    // Mirrors SplitPaymentService::disbursableAmount — nominal accounts pay out
+    // at most their configured nominal, percentage accounts the full balance.
+    const disbursableAmount = (account: SplitAccount) => {
+        const balance = parseFloat((account.pending_balance || '0').toString());
+        const nominal = parseFloat((account.nominal_amount || '0').toString());
+        if (account.split_type === 'nominal' && nominal > 0) {
+            return Math.min(nominal, balance);
+        }
+        return balance;
+    };
+
     const disburseAccount = (account: SplitAccount) => {
         if (
             !confirm(
-                `Cairkan dana sebesar Rp ${parseInt((account.pending_balance || '0').toString(), 10).toLocaleString('id-ID')} untuk akun "${account.name}"?`,
+                `Cairkan dana sebesar Rp ${Math.floor(disbursableAmount(account)).toLocaleString('id-ID')} untuk akun "${account.name}"?`,
             )
         )
             return;
@@ -292,6 +303,14 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                                 <span className="text-foreground font-semibold">
                                                     Rp {parseInt((account.pending_balance || '0').toString(), 10).toLocaleString('id-ID')}
                                                 </span>
+                                                {disbursableAmount(account) !== parseFloat((account.pending_balance || '0').toString()) && (
+                                                    <>
+                                                        {' · '}Cair:{' '}
+                                                        <span className="text-foreground font-semibold">
+                                                            Rp {Math.floor(disbursableAmount(account)).toLocaleString('id-ID')}
+                                                        </span>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
 
@@ -301,10 +320,10 @@ export default function SplitPaymentIndex({ accounts, totalPercent, splitEnabled
                                                 variant="outline"
                                                 size="sm"
                                                 className="mr-1 h-8 border-emerald-200 bg-emerald-50 px-3 text-xs text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400"
-                                                disabled={parseFloat((account.pending_balance || '0').toString()) < 10000}
+                                                disabled={disbursableAmount(account) < 10000}
                                                 onClick={() => disburseAccount(account)}
                                                 title={
-                                                    parseFloat((account.pending_balance || '0').toString()) < 10000
+                                                    disbursableAmount(account) < 10000
                                                         ? 'Minimum pencairan Rp 10.000'
                                                         : 'Cairkan saldo ini'
                                                 }
