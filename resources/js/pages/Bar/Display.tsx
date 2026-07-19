@@ -1,3 +1,4 @@
+import { stripBillTag } from '@/lib/utils';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/react';
@@ -32,9 +33,16 @@ type BarOrderData = {
 type Props = {
     orders: BarOrderData[];
     stationName: string;
+    readOnly?: boolean;
 };
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Bar', href: '/bar' }];
+
+const statusLabels: Record<string, { label: string; className: string }> = {
+    queued: { label: 'Menunggu', className: 'text-amber-600 dark:text-amber-500' },
+    in_progress: { label: 'Sedang Dibuat', className: 'text-violet-600 dark:text-violet-400' },
+    ready: { label: 'Siap Diantar', className: 'text-green-600 dark:text-green-500' },
+};
 
 function timeAgo(dateStr: string | null): string {
     if (!dateStr) return '-';
@@ -44,7 +52,7 @@ function timeAgo(dateStr: string | null): string {
     return `${Math.floor(diff / 3600)} jam`;
 }
 
-export default function Display({ orders, stationName }: Props) {
+export default function Display({ orders, stationName, readOnly = false }: Props) {
     useEffect(() => {
         const interval = window.setInterval(() => {
             if (document.hidden) return;
@@ -97,9 +105,16 @@ export default function Display({ orders, stationName }: Props) {
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-muted-foreground flex items-center gap-1 text-xs">
-                                        <Clock className="h-3 w-3" />
-                                        {timeAgo(order.sent_at)}
+                                    <div className="flex items-center gap-2">
+                                        {readOnly && order.station && (
+                                            <span className="rounded-full bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-600 dark:text-violet-400">
+                                                {order.station.name}
+                                            </span>
+                                        )}
+                                        <div className="text-muted-foreground flex items-center gap-1 text-xs">
+                                            <Clock className="h-3 w-3" />
+                                            {timeAgo(order.sent_at)}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -133,12 +148,50 @@ export default function Display({ orders, stationName }: Props) {
                                     ))}
                                 </div>
 
-                                {/* Order notes */}
-                                {order.order.notes && (
+                                {/* Order notes (bill type tag stripped — bar only needs the items) */}
+                                {stripBillTag(order.order.notes) && (
                                     <div className="border-border/30 border-t bg-amber-50/50 px-4 py-2 text-xs text-amber-700 dark:bg-amber-950/20 dark:text-amber-400">
-                                        <strong>Catatan:</strong> {order.order.notes}
+                                        <strong>Catatan:</strong> {stripBillTag(order.order.notes)}
                                     </div>
                                 )}
+
+                                {/* Actions */}
+                                <div className="border-border/50 border-t bg-muted/20 px-4 py-3">
+                                    {readOnly ? (
+                                        <div
+                                            className={`text-center text-sm font-semibold ${statusLabels[order.status]?.className ?? 'text-muted-foreground'}`}
+                                        >
+                                            {statusLabels[order.status]?.label ?? order.status}
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {order.status === 'queued' && (
+                                                <button
+                                                    onClick={() => {
+                                                        window.open(`/bar/orders/${order.id}/ticket`, '_blank', 'width=380,height=640');
+                                                        router.patch(`/bar/orders/${order.id}/progress`, {}, { preserveScroll: true });
+                                                    }}
+                                                    className="w-full rounded-lg bg-violet-500 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-violet-600 active:bg-violet-700"
+                                                >
+                                                    Cetak Tiket (Proses)
+                                                </button>
+                                            )}
+                                            {order.status === 'in_progress' && (
+                                                <button
+                                                    onClick={() => router.patch(`/bar/orders/${order.id}/ready`)}
+                                                    className="w-full rounded-lg bg-green-500 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-green-600 active:bg-green-700"
+                                                >
+                                                    Siap Diantar
+                                                </button>
+                                            )}
+                                            {order.status === 'ready' && (
+                                                <div className="text-center text-sm font-semibold text-green-600 dark:text-green-500">
+                                                    Menunggu Waiter...
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>

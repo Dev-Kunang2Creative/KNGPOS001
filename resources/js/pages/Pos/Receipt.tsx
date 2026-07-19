@@ -3,7 +3,7 @@ import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, Link, usePage } from '@inertiajs/react';
 import { ArrowLeft, Printer } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 
 type ReceiptItem = {
     id: number;
@@ -37,7 +37,6 @@ type ReceiptTransaction = {
 
 type Props = {
     transaction: ReceiptTransaction;
-    stationTicketUrls?: { type: string; label: string; url: string }[];
 };
 
 type ReceiptLine = ReceiptItem & {
@@ -51,10 +50,9 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const money = (value?: string | number | null) => Number(value ?? 0).toLocaleString('id-ID');
 
-export default function Receipt({ transaction, stationTicketUrls = [] }: Props) {
+export default function Receipt({ transaction }: Props) {
     const { restaurant } = usePage<SharedData>().props;
     const order = transaction.order;
-    const hasAdvancedPrintQueue = useRef(false);
     const groupedItems = useMemo<ReceiptLine[]>(() => {
         const groups = new Map<string, ReceiptLine>();
 
@@ -81,40 +79,17 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
         return Array.from(groups.values());
     }, [order.items]);
 
-    function stationTicketQueueUrl(index: number): string {
-        const ticket = stationTicketUrls[index];
-        const url = new URL(ticket.url, window.location.origin);
-        const nextIndex = index + 1;
-
-        if (stationTicketUrls[nextIndex]) {
-            url.searchParams.set('next_station_ticket', stationTicketQueueUrl(nextIndex));
-        } else {
-            url.searchParams.set('return_url', `/pos?order=${order.id}`);
-        }
-
-        return `${url.pathname}${url.search}`;
-    }
+    // Checker copy only lists food & drinks (items routed to kitchen/bar), never kasir-only items like tickets.
+    const checkerItems = useMemo<ReceiptLine[]>(
+        () => groupedItems.filter((item) => ['kitchen', 'bar', 'kitchen_bar'].includes(item.menu_item?.print_to ?? '')),
+        [groupedItems],
+    );
 
     useEffect(() => {
-        function advanceToStationTicket() {
-            if (hasAdvancedPrintQueue.current || stationTicketUrls.length === 0) {
-                return;
-            }
-
-            hasAdvancedPrintQueue.current = true;
-            window.setTimeout(() => {
-                window.location.href = stationTicketQueueUrl(0);
-            }, 500);
-        }
-
-        window.addEventListener('afterprint', advanceToStationTicket);
         const timer = window.setTimeout(() => window.print(), 450);
 
-        return () => {
-            window.clearTimeout(timer);
-            window.removeEventListener('afterprint', advanceToStationTicket);
-        };
-    }, [stationTicketUrls]);
+        return () => window.clearTimeout(timer);
+    }, []);
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -133,6 +108,8 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                         box-shadow: none !important;
                         border: 0 !important;
                     }
+                    #receipt-print-area .receipt-doc { box-shadow: none !important; border: 0 !important; }
+                    .checker-sheet { break-before: page; page-break-before: always; }
                     .no-print { display: none !important; }
                 }
             `}</style>
@@ -150,22 +127,15 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                         Cetak Struk
                     </Button>
                 </div>
-                {stationTicketUrls.length > 0 && (
-                    <div className="no-print grid w-full max-w-sm gap-2">
-                        {stationTicketUrls.map((ticket) => (
-                            <Button key={`${ticket.type}-${ticket.url}`} type="button" className="w-full" variant="outline" asChild>
-                                <Link href={ticket.url}>
-                                    <Printer className="size-4" />
-                                    {ticket.label}
-                                </Link>
-                            </Button>
-                        ))}
-                    </div>
-                )}
+                <p className="no-print text-muted-foreground text-xs">
+                    {checkerItems.length > 0
+                        ? 'Cetakan berisi 2 lembar: struk customer dan salinan checker (hanya makanan & minuman beserta jumlahnya).'
+                        : 'Cetakan berisi 1 lembar struk customer (tidak ada makanan/minuman untuk checker).'}
+                </p>
 
-                <section id="receipt-print-area" className="w-full max-w-sm rounded-md border bg-white p-5 font-mono text-sm text-black shadow-sm">
+                <div id="receipt-print-area" className="w-full max-w-sm">
+                <section className="receipt-doc w-full rounded-md border bg-white p-5 font-mono text-sm text-black shadow-sm">
                     <div className="flex flex-col items-center text-center">
-                        {restaurant?.logo_url && <img src={restaurant.logo_url} alt="Logo" className="mb-2 h-14 w-14 object-contain" />}
                         <h1 className="text-base font-bold uppercase">{restaurant?.name ?? 'Restaurant'}</h1>
                         {restaurant?.receipt_header && <p className="mt-1 text-xs whitespace-pre-line">{restaurant.receipt_header}</p>}
                     </div>
@@ -270,6 +240,58 @@ export default function Receipt({ transaction, stationTicketUrls = [] }: Props) 
                         <p className="whitespace-pre-line">{restaurant?.receipt_footer ?? 'Terima kasih.'}</p>
                     </div>
                 </section>
+
+                {/* Checker copy: food & drink items only — no prices, no header, no footer. */}
+                {checkerItems.length > 0 && (
+                <section className="checker-sheet mt-4 w-full rounded-md border border-dashed bg-white p-5 font-mono text-sm text-black shadow-sm">
+                    <p className="text-center text-xs font-semibold">*** CHECKER ***</p>
+
+                    <div className="my-3 border-t border-dashed border-black" />
+
+                    <div className="space-y-1 text-xs">
+                        <div className="flex justify-between gap-3">
+                            <span>Order</span>
+                            <span>#{order.id}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <span>Meja</span>
+                            <span>{order.table?.name ?? '-'}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <span>Waktu</span>
+                            <span>{new Date(transaction.paid_at).toLocaleString('id-ID')}</span>
+                        </div>
+                    </div>
+
+                    {order.notes && (
+                        <>
+                            <div className="my-3 border-t border-dashed border-black" />
+                            <div className="text-xs">
+                                <span className="font-semibold">Catatan: </span>
+                                {order.notes}
+                            </div>
+                        </>
+                    )}
+
+                    <div className="my-3 border-t border-dashed border-black" />
+
+                    <div className="space-y-3">
+                        {checkerItems.map((item) => (
+                            <div key={`checker-${item.ids.join('-')}`}>
+                                <div className="flex justify-between gap-3 font-semibold">
+                                    <span>{item.menu_item?.name ?? 'Item'}</span>
+                                    <span>x{item.quantity}</span>
+                                </div>
+                                {item.addons && item.addons.length > 0 && (
+                                    <div className="ml-2 text-xs">+ {item.addons.map((a) => a.name).join(', ')}</div>
+                                )}
+                                {item.notes && <div className="text-xs">Catatan: {item.notes}</div>}
+                            </div>
+                        ))}
+                    </div>
+                </section>
+                )}
+                </div>
             </main>
         </AppLayout>
     );

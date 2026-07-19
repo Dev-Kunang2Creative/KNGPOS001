@@ -29,20 +29,18 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment, restauran
     const isOnlinePending = selfOrder.payment_preference === 'online' && selfOrder.status === 'converted_to_order' && !isPaid;
     const shouldPoll = selfOrder.status === 'pending' || isQrisPending || isOnlinePending;
 
-    function simulatePayment() {
-        if (!payment) return;
-        router.post(
-            `/s/${qrToken}/status/${selfOrder.id}/payments/${payment.id}/simulate`,
-            {},
-            {
-                preserveScroll: true,
-            },
-        );
-    }
-
     function refreshPayment() {
         router.post(`/s/${qrToken}/status/${selfOrder.id}/refresh`, {}, { preserveScroll: true, preserveState: true });
     }
+
+    // Confirm immediately when the customer is redirected back from Xendit,
+    // so the order routes to Kitchen/Bar without waiting for the poll/webhook.
+    useEffect(() => {
+        if (isOnlinePending) {
+            router.post(`/s/${qrToken}/status/${selfOrder.id}/refresh`, {}, { preserveScroll: true, preserveState: true });
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     useEffect(() => {
         if (!shouldPoll) return;
@@ -144,12 +142,7 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment, restauran
                                 </div>
                             )}
 
-                            <button
-                                onClick={simulatePayment}
-                                className="bg-primary h-12 w-full rounded-full text-sm font-bold font-semibold text-white shadow-sm transition-transform active:scale-[0.98]"
-                            >
-                                Simulasi Bayar QRIS
-                            </button>
+                            <p className="text-on-surface-variant text-xs">Status akan terbarui otomatis setelah pembayaran berhasil.</p>
                         </div>
                     </section>
                 )}
@@ -323,13 +316,6 @@ export default function SelfOrderStatus({ qrToken, selfOrder, payment, restauran
                     </div>
                 </section>
             </main>
-
-            <div className="pointer-events-none fixed right-0 bottom-[112px] left-0 z-40 mx-auto flex max-w-md justify-end px-4">
-                <button className="bg-secondary-container text-on-secondary-container pointer-events-auto flex items-center rounded-xl px-4 py-3 shadow-[0px_8px_24px_rgba(0,0,0,0.15)] transition-transform duration-200 active:scale-95">
-                    <span className="material-symbols-outlined icon-fill mr-2">notifications_active</span>
-                    <span className="text-sm font-bold font-semibold">Panggil Pelayan</span>
-                </button>
-            </div>
 
             <BottomNav
                 activeTab="status"

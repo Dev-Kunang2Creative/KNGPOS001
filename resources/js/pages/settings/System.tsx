@@ -22,8 +22,10 @@ export default function SystemSettings({ settings, printers, kitchenStations, ba
         receipt_footer: String(settings.receipt_footer ?? ''),
         tax_percentage: Number(settings.tax_percentage ?? 0),
         tax_is_active: settings.tax_is_active === '1',
+        tax_type: (settings.tax_type as 'percentage' | 'nominal') ?? 'percentage',
         service_charge_percentage: Number(settings.service_charge_percentage ?? 0),
         service_charge_is_active: settings.service_charge_is_active === '1',
+        service_charge_type: (settings.service_charge_type as 'percentage' | 'nominal') ?? 'percentage',
     });
 
     function submit(event: FormEvent) {
@@ -43,9 +45,21 @@ export default function SystemSettings({ settings, printers, kitchenStations, ba
                         <Input value={form.data.restaurant_phone} onChange={(e) => form.setData('restaurant_phone', e.target.value)} placeholder="Telepon" />
                         <Input value={form.data.receipt_header} onChange={(e) => form.setData('receipt_header', e.target.value)} placeholder="Receipt header" />
                         <Input value={form.data.receipt_footer} onChange={(e) => form.setData('receipt_footer', e.target.value)} placeholder="Receipt footer" />
-                        <Input type="number" value={form.data.tax_percentage} onChange={(e) => form.setData('tax_percentage', Number(e.target.value))} placeholder="Tax %" />
+                        <div className="flex gap-2">
+                            <Input type="number" className="flex-1" value={form.data.tax_percentage} onChange={(e) => form.setData('tax_percentage', Number(e.target.value))} placeholder={form.data.tax_type === 'nominal' ? 'Tax Rp' : 'Tax %'} />
+                            <select className="border-input bg-background rounded-md border px-2 text-sm" value={form.data.tax_type} onChange={(e) => form.setData('tax_type', e.target.value as 'percentage' | 'nominal')}>
+                                <option value="percentage">%</option>
+                                <option value="nominal">Rp</option>
+                            </select>
+                        </div>
                         <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.data.tax_is_active} onCheckedChange={(v) => form.setData('tax_is_active', Boolean(v))} />Tax aktif</label>
-                        <Input type="number" value={form.data.service_charge_percentage} onChange={(e) => form.setData('service_charge_percentage', Number(e.target.value))} placeholder="Service charge %" />
+                        <div className="flex gap-2">
+                            <Input type="number" className="flex-1" value={form.data.service_charge_percentage} onChange={(e) => form.setData('service_charge_percentage', Number(e.target.value))} placeholder={form.data.service_charge_type === 'nominal' ? 'Service charge Rp' : 'Service charge %'} />
+                            <select className="border-input bg-background rounded-md border px-2 text-sm" value={form.data.service_charge_type} onChange={(e) => form.setData('service_charge_type', e.target.value as 'percentage' | 'nominal')}>
+                                <option value="percentage">%</option>
+                                <option value="nominal">Rp</option>
+                            </select>
+                        </div>
                         <label className="flex items-center gap-2 text-sm"><Checkbox checked={form.data.service_charge_is_active} onCheckedChange={(v) => form.setData('service_charge_is_active', Boolean(v))} />Service charge aktif</label>
                         <div className="rounded-md border bg-muted/30 p-3 text-sm">
                             <div className="mb-2 flex items-center justify-between gap-3">

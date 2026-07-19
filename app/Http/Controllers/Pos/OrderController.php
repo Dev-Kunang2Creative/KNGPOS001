@@ -9,11 +9,11 @@ use App\Http\Requests\Pos\ApproveSelfOrderRequest;
 use App\Http\Requests\Pos\RejectSelfOrderRequest;
 use App\Http\Requests\Pos\StoreOrderRequest;
 use App\Http\Requests\Pos\SubmitOrderRequest;
-use App\Models\BarOrder;
-use App\Models\KitchenOrder;
 use App\Models\MenuCategory;
 use App\Models\MenuItem;
+use App\Models\MenuItemAddon;
 use App\Models\Order;
+use App\Models\Restaurant;
 use App\Models\SelfOrder;
 use App\Models\Table;
 use App\Models\Transaction;
@@ -23,7 +23,6 @@ use App\Services\PaymentService;
 use App\Services\SelfOrderService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
@@ -54,11 +53,24 @@ class OrderController extends Controller
                 ->latest()
                 ->get(['id', 'table_id', 'status', 'total_amount', 'created_at']),
             'categories' => MenuCategory::query()
-                ->with(['activeItems' => fn ($query) => $query
-                    ->with(['addons' => fn ($q) => $q->where('is_active', true)])
-                    ->where('is_available', true)
-                    ->orderBy('sort_order')
-                    ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path'])])
+                ->whereNull('parent_id')
+                ->with([
+                    'activeItems' => fn ($query) => $query
+                        ->with(['addons' => fn ($q) => $q->where('is_active', true)])
+                        ->where('is_available', true)
+                        ->orderBy('sort_order')
+                        ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path']),
+                    'children' => fn ($query) => $query
+                        ->where('is_active', true)
+                        ->orderBy('sort_order')
+                        ->with(['activeItems' => fn ($q) => $q
+                            ->with(['addons' => fn ($a) => $a->where('is_active', true)])
+                            ->where('is_available', true)
+                            ->orderBy('sort_order')
+                            ->select(['id', 'category_id', 'name', 'price', 'print_to', 'image_path']),
+                        ])
+                        ->select(['id', 'parent_id', 'name']),
+                ])
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->get(['id', 'name']),
@@ -91,8 +103,15 @@ class OrderController extends Controller
                 ->latest()
                 ->limit(20)
                 ->get(),
-            'pendingStationTickets' => $this->stationTicketsQuery(false),
-            'stationTicketHistory' => $this->stationTicketsQuery(true),
+            'orderHistory' => Order::query()
+                ->with(['table:id,name', 'transaction:id,order_id'])
+                ->where('status', 'paid')
+                ->where(fn ($query) => $query
+                    ->where('kasir_id', auth()->id())
+                    ->orWhere('order_type', 'self_order'))
+                ->latest()
+                ->limit(20)
+                ->get(['id', 'table_id', 'order_type', 'status', 'total_amount', 'created_at']),
         ]);
     }
 
@@ -125,158 +144,11 @@ class OrderController extends Controller
         // Append order notes (not a relation, needs explicit select)
         $transaction->order?->makeVisible('notes');
 
+        // Cashier prints the customer receipt plus a checker copy (items only).
+        // Kitchen/Bar tickets are printed on their own screens.
         return Inertia::render('Pos/Receipt', [
             'transaction' => $transaction,
-            'stationTicketUrls' => $this->stationTicketUrlsForOrder($transaction->order),
         ]);
-    }
-
-    public function stationTicket(Request $request, Order $order): Response
-    {
-        abort_unless(
-            $order->kasir_id === $request->user()->id
-                || ($order->kasir_id === null && $order->order_type === 'self_order'),
-            403
-        );
-
-        $order->load(['table.zone:id,name', 'cashier:id,name', 'transaction:id,order_id']);
-        $kitchenOrderId = $request->integer('kitchen_order');
-        $barOrderId = $request->integer('bar_order');
-        $isBatchTicket = $kitchenOrderId || $barOrderId;
-
-        $kitchenOrders = $order->kitchenOrders()
-            ->with(['station:id,name', 'items.orderItem.menuItem:id,name,print_to'])
-            ->when($kitchenOrderId, fn ($query, int $id) => $query->whereKey($id))
-            ->when($isBatchTicket && ! $kitchenOrderId, fn ($query) => $query->whereRaw('1 = 0'))
-            ->latest()
-            ->get();
-
-        $barOrders = $order->barOrders()
-            ->with(['station:id,name', 'items.orderItem.menuItem:id,name,print_to'])
-            ->when($barOrderId, fn ($query, int $id) => $query->whereKey($id))
-            ->when($isBatchTicket && ! $barOrderId, fn ($query) => $query->whereRaw('1 = 0'))
-            ->latest()
-            ->get();
-
-        abort_if($kitchenOrders->isEmpty() && $barOrders->isEmpty(), 404);
-
-        if (! $request->boolean('reprint')) {
-            $kitchenOrders->whereNull('printed_at')->each->update(['printed_at' => now()]);
-            $barOrders->whereNull('printed_at')->each->update(['printed_at' => now()]);
-        }
-
-        return Inertia::render('Pos/StationTicket', [
-            'order' => $order,
-            'kitchenOrders' => $kitchenOrders,
-            'barOrders' => $barOrders,
-            'xenditPayment' => $request->integer('payment')
-                ? XenditPayment::query()->find($request->integer('payment'))
-                : null,
-            'receiptId' => $request->integer('receipt') ?: null,
-        ]);
-    }
-
-    private function stationTicketsQuery(bool $printed): array
-    {
-        $kitchenTickets = KitchenOrder::query()
-            ->with(['order.table.zone:id,name', 'station:id,name'])
-            ->when($printed, fn ($query) => $query->whereNotNull('printed_at'), fn ($query) => $query->whereNull('printed_at'))
-            ->latest($printed ? 'printed_at' : 'sent_at')
-            ->limit(20)
-            ->get()
-            ->map(fn (KitchenOrder $ticket): array => [
-                'id' => $ticket->id,
-                'type' => 'kitchen',
-                'order_id' => $ticket->order_id,
-                'station_name' => $ticket->station?->name,
-                'table_name' => $ticket->order?->table?->name,
-                'zone_name' => $ticket->order?->table?->zone?->name,
-                'sent_at' => $ticket->sent_at,
-                'printed_at' => $ticket->printed_at,
-            ]);
-
-        $barTickets = BarOrder::query()
-            ->with(['order.table.zone:id,name', 'station:id,name'])
-            ->when($printed, fn ($query) => $query->whereNotNull('printed_at'), fn ($query) => $query->whereNull('printed_at'))
-            ->latest($printed ? 'printed_at' : 'sent_at')
-            ->limit(20)
-            ->get()
-            ->map(fn (BarOrder $ticket): array => [
-                'id' => $ticket->id,
-                'type' => 'bar',
-                'order_id' => $ticket->order_id,
-                'station_name' => $ticket->station?->name,
-                'table_name' => $ticket->order?->table?->name,
-                'zone_name' => $ticket->order?->table?->zone?->name,
-                'sent_at' => $ticket->sent_at,
-                'printed_at' => $ticket->printed_at,
-            ]);
-
-        return $kitchenTickets
-            ->concat($barTickets)
-            ->sortByDesc(fn (array $ticket) => $printed ? $ticket['printed_at'] : $ticket['sent_at'])
-            ->take(20)
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @return list<array{type: string, label: string, url: string}>
-     */
-    private function stationTicketUrlsForOrder(?Order $order): array
-    {
-        if (! $order) {
-            return [];
-        }
-
-        $kitchenOrder = $order->kitchenOrders()
-            ->whereNull('printed_at')
-            ->latest('sent_at')
-            ->first(['id']);
-
-        $barOrder = $order->barOrders()
-            ->whereNull('printed_at')
-            ->latest('sent_at')
-            ->first(['id']);
-
-        $transactionId = $order->transaction?->id;
-        $urls = [];
-
-        if ($kitchenOrder) {
-            $routeParams = [
-                'order' => $order->id,
-                'kitchen_order' => $kitchenOrder->id,
-            ];
-
-            if ($transactionId) {
-                $routeParams['receipt'] = $transactionId;
-            }
-
-            $urls[] = [
-                'type' => 'kitchen',
-                'label' => 'Cetak Kitchen',
-                'url' => route('pos.orders.station-ticket', $routeParams),
-            ];
-        }
-
-        if ($barOrder) {
-            $routeParams = [
-                'order' => $order->id,
-                'bar_order' => $barOrder->id,
-            ];
-
-            if ($transactionId) {
-                $routeParams['receipt'] = $transactionId;
-            }
-
-            $urls[] = [
-                'type' => 'bar',
-                'label' => 'Cetak Bar',
-                'url' => route('pos.orders.station-ticket', $routeParams),
-            ];
-        }
-
-        return $urls;
     }
 
     public function store(StoreOrderRequest $request): RedirectResponse
@@ -302,7 +174,9 @@ class OrderController extends Controller
         try {
             $validated = $request->validated();
             $order = $this->createOrder($request, $validated);
-            $routingService->ensureZoneAssigned($order);
+            if ($routingService->orderNeedsStationRouting($order)) {
+                $routingService->ensureZoneAssigned($order);
+            }
             $paymentMethod = $validated['payment_method'] ?? 'cash';
 
             if ($paymentMethod === 'qris') {
@@ -381,77 +255,27 @@ class OrderController extends Controller
     }
 
     /**
+     * After routing an order, return to the POS (or receipt). Station tickets are
+     * printed by the Kitchen/Bar screens themselves, never at the cashier.
+     *
      * @param  array{kitchen_order: mixed, bar_order: mixed}  $result
      */
     private function redirectToStationTicket(Order $order, array $result, ?int $receiptId = null): RedirectResponse
     {
-        if (! $result['kitchen_order'] && ! $result['bar_order']) {
-            $routeParams = ['order' => $order->id];
-
-            if ($receiptId) {
-                return redirect()
-                    ->route('pos.transactions.receipt', $receiptId)
-                    ->with('success', 'Pembayaran berhasil. Tidak ada item Kitchen/Bar.');
-            }
-
-            return redirect()
-                ->route('pos.index', $routeParams)
-                ->with('success', 'Order berhasil disubmit. Tidak ada item baru untuk Kitchen/Bar.');
-        }
-
-        $stationUrls = $this->stationTicketUrlsFromRouting($order, $result, $receiptId);
-
-        return redirect()
-            ->to($stationUrls[0])
-            ->with('success', 'Order berhasil dikirim ke station. Struk Kitchen/Bar siap dicetak terpisah.');
-    }
-
-    /**
-     * @param  array{kitchen_order: mixed, bar_order: mixed}  $result
-     * @return list<string>
-     */
-    private function stationTicketUrlsFromRouting(Order $order, array $result, ?int $receiptId = null): array
-    {
-        $urls = [];
-        $baseParams = ['order' => $order->id];
-
-        if ($result['payment'] ?? null) {
-            $baseParams['payment'] = $result['payment']->id;
-        }
+        $sentToStation = $result['kitchen_order'] || $result['bar_order'];
+        $message = $sentToStation
+            ? 'Order berhasil dikirim ke Dapur/Bar. Tiket dicetak di layar station.'
+            : 'Order berhasil disubmit.';
 
         if ($receiptId) {
-            $baseParams['receipt'] = $receiptId;
+            return redirect()
+                ->route('pos.transactions.receipt', $receiptId)
+                ->with('success', $message);
         }
 
-        if ($result['kitchen_order']) {
-            $urls[] = route('pos.orders.station-ticket', array_merge($baseParams, [
-                'kitchen_order' => $result['kitchen_order']->id,
-            ]));
-        }
-
-        if ($result['bar_order']) {
-            $urls[] = route('pos.orders.station-ticket', array_merge($baseParams, [
-                'bar_order' => $result['bar_order']->id,
-            ]));
-        }
-
-        if (count($urls) < 2) {
-            return $urls;
-        }
-
-        return collect($urls)
-            ->map(function (string $url, int $index) use ($urls): string {
-                $nextUrl = $urls[$index + 1] ?? null;
-
-                if (! $nextUrl) {
-                    return $url;
-                }
-
-                $separator = str_contains($url, '?') ? '&' : '?';
-
-                return $url.$separator.'next_station_ticket='.urlencode($nextUrl);
-            })
-            ->all();
+        return redirect()
+            ->route('pos.index', ['order' => $order->id])
+            ->with('success', $message);
     }
 
     public function addItems(AddOrderItemsRequest $request, Order $order): RedirectResponse
@@ -545,26 +369,23 @@ class OrderController extends Controller
             $subtotal = collect($validated['items'])->sum(function (array $item) use ($menuItems): float {
                 $basePrice = (float) $menuItems[$item['menu_item_id']]->price;
                 $addonPrice = 0;
-                
-                if (!empty($item['addons'])) {
-                    $addonPrice = \App\Models\MenuItemAddon::query()
+
+                if (! empty($item['addons'])) {
+                    $addonPrice = MenuItemAddon::query()
                         ->whereIn('id', $item['addons'])
                         ->where('menu_item_id', $item['menu_item_id'])
                         ->where('is_active', true)
                         ->sum('price');
                 }
-                
+
                 return ($basePrice + $addonPrice) * (int) $item['quantity'];
             });
 
-            $restaurant = \App\Models\Restaurant::find($table->restaurant_id);
-            $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-                ? $subtotal * ($restaurant->service_charge_percentage / 100)
-                : 0;
-            $taxAmount = $restaurant && $restaurant->tax_is_active
-                ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
-                : 0;
-            $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+            $restaurant = Restaurant::find($table->restaurant_id);
+            $charges = $restaurant?->chargesFor($subtotal) ?? ['service_charge' => 0, 'tax' => 0, 'total' => round($subtotal, 2)];
+            $serviceChargeAmount = $charges['service_charge'];
+            $taxAmount = $charges['tax'];
+            $totalAmount = $charges['total'];
 
             $paymentMethod = $validated['payment_method'] ?? 'cash';
 
@@ -622,14 +443,11 @@ class OrderController extends Controller
                 ->where('status', '!=', 'cancelled')
                 ->sum('subtotal');
 
-            $restaurant = \App\Models\Restaurant::find($order->table->restaurant_id);
-            $serviceChargeAmount = $restaurant && $restaurant->service_charge_is_active
-                ? $subtotal * ($restaurant->service_charge_percentage / 100)
-                : 0;
-            $taxAmount = $restaurant && $restaurant->tax_is_active
-                ? ($subtotal + $serviceChargeAmount) * ($restaurant->tax_percentage / 100)
-                : 0;
-            $totalAmount = $subtotal + $serviceChargeAmount + $taxAmount;
+            $restaurant = Restaurant::find($order->table->restaurant_id);
+            $charges = $restaurant?->chargesFor($subtotal) ?? ['service_charge' => 0, 'tax' => 0, 'total' => round($subtotal, 2)];
+            $serviceChargeAmount = $charges['service_charge'];
+            $taxAmount = $charges['tax'];
+            $totalAmount = $charges['total'];
 
             $order->update([
                 'subtotal' => $subtotal,
@@ -645,25 +463,25 @@ class OrderController extends Controller
     private function createOrderItem(Order $order, MenuItem $menuItem, array $item): void
     {
         $quantity = (int) $item['quantity'];
-        
+
         $addonPrice = 0;
         $addonsData = null;
-        
-        if (!empty($item['addons'])) {
-            $selectedAddons = \App\Models\MenuItemAddon::query()
+
+        if (! empty($item['addons'])) {
+            $selectedAddons = MenuItemAddon::query()
                 ->whereIn('id', $item['addons'])
                 ->where('menu_item_id', $menuItem->id)
                 ->where('is_active', true)
                 ->get(['id', 'name', 'price']);
-                
+
             $addonPrice = $selectedAddons->sum('price');
-            $addonsData = $selectedAddons->map(fn($a) => [
+            $addonsData = $selectedAddons->map(fn ($a) => [
                 'id' => $a->id,
                 'name' => $a->name,
-                'price' => (float) $a->price
+                'price' => (float) $a->price,
             ])->toArray();
         }
-        
+
         $unitPrice = (float) $menuItem->price + $addonPrice;
 
         $order->items()->create([

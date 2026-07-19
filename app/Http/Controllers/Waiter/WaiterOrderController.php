@@ -40,17 +40,17 @@ class WaiterOrderController extends Controller
             'items.orderItem.menuItem:id,name',
         ];
 
-        // Kitchen orders in waiter's zones that are not yet delivered
+        // Kitchen orders in waiter's zones that are ready for delivery
         $kitchenOrders = KitchenOrder::query()
-            ->whereNull('completed_at')
+            ->where('status', 'ready')
             ->whereHas('order.table', fn ($q) => $q->whereIn('zone_id', $zoneIds))
             ->with($eagerLoads)
             ->orderBy('sent_at', 'asc')
             ->get();
 
-        // Bar orders in waiter's zones that are not yet delivered
+        // Bar orders in waiter's zones that are ready for delivery
         $barOrders = BarOrder::query()
-            ->whereNull('completed_at')
+            ->where('status', 'ready')
             ->whereHas('order.table', fn ($q) => $q->whereIn('zone_id', $zoneIds))
             ->with($eagerLoads)
             ->orderBy('sent_at', 'asc')
@@ -112,13 +112,13 @@ class WaiterOrderController extends Controller
     {
         $now = now();
 
-        $order->kitchenOrders()->whereNull('completed_at')->update([
-            'status' => 'done',
+        $order->kitchenOrders()->where('status', 'ready')->update([
+            'status' => 'completed',
             'completed_at' => $now,
         ]);
 
-        $order->barOrders()->whereNull('completed_at')->update([
-            'status' => 'done',
+        $order->barOrders()->where('status', 'ready')->update([
+            'status' => 'completed',
             'completed_at' => $now,
         ]);
 

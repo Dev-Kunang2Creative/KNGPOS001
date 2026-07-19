@@ -9,8 +9,10 @@ use App\Http\Controllers\Manager\MenuController;
 use App\Http\Controllers\Manager\ReportController;
 use App\Http\Controllers\Manager\TableQrController;
 use App\Http\Controllers\Manager\ZoneStationController;
+use App\Http\Controllers\Pos\CashierTableController;
 use App\Http\Controllers\Pos\OrderController;
 use App\Http\Controllers\Pos\PaymentController;
+use App\Http\Controllers\Pos\TableMergeController;
 use App\Http\Controllers\Restaurant\RestaurantController;
 use App\Http\Controllers\Restaurant\RestaurantStaffController;
 use App\Http\Controllers\SelfOrderController;
@@ -27,7 +29,6 @@ Route::get('s/{qr_token}', [SelfOrderController::class, 'show'])->name('self-ord
 Route::get('s/{qr_token}/menu', [SelfOrderController::class, 'menu'])->name('self-order.menu');
 Route::post('s/{qr_token}/orders', [SelfOrderController::class, 'checkout'])->name('self-order.checkout');
 Route::get('s/{qr_token}/status/{selfOrder}', [SelfOrderController::class, 'status'])->name('self-order.status');
-Route::post('s/{qr_token}/status/{selfOrder}/payments/{payment}/simulate', [SelfOrderController::class, 'simulatePayment'])->name('self-order.payment.simulate');
 Route::post('s/{qr_token}/status/{selfOrder}/refresh', [SelfOrderController::class, 'refreshPayment'])->name('self-order.payment.refresh');
 
 // ─── Restaurant Selection (auth but no restaurant required) ──
@@ -40,11 +41,13 @@ Route::middleware(['auth'])->group(function () {
 // ─── All Restaurant-Scoped Routes ────────────────────────────
 Route::middleware(['auth', 'restaurant'])->group(function () {
 
-    // Restaurant CRUD (inside dashboard)
-    Route::get('restaurants/create', [RestaurantController::class, 'create'])->name('restaurants.create');
-    Route::post('restaurants', [RestaurantController::class, 'store'])->name('restaurants.store');
-    Route::get('restaurant/edit', [RestaurantController::class, 'edit'])->name('restaurants.edit');
-    Route::put('restaurant', [RestaurantController::class, 'update'])->name('restaurants.update');
+    // Restaurant CRUD & settings (inside dashboard) — managers & super admins only
+    Route::middleware(['permission:settings.manage'])->group(function () {
+        Route::get('restaurants/create', [RestaurantController::class, 'create'])->name('restaurants.create');
+        Route::post('restaurants', [RestaurantController::class, 'store'])->name('restaurants.store');
+        Route::get('restaurant/edit', [RestaurantController::class, 'edit'])->name('restaurants.edit');
+        Route::put('restaurant', [RestaurantController::class, 'update'])->name('restaurants.update');
+    });
 
     // Dashboard
     Route::middleware(['permission:dashboard.view'])->group(function () {
@@ -56,15 +59,22 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::get('pos', [OrderController::class, 'index'])->name('pos.index');
     });
 
+    // Cashier table management (used when the restaurant has no waiter).
+    Route::middleware(['permission:tables.view'])->group(function () {
+        Route::get('pos/tables', [CashierTableController::class, 'index'])->name('pos.tables.index');
+        Route::patch('pos/tables/{table}/status', [CashierTableController::class, 'updateStatus'])->name('pos.tables.status');
+    });
+
     Route::middleware(['permission:pos.create', 'active.shift'])->group(function () {
         Route::post('pos/orders', [OrderController::class, 'store'])->name('pos.orders.store');
         Route::post('pos/orders/{order}/items', [OrderController::class, 'addItems'])->name('pos.orders.items.store');
         Route::post('pos/orders/{order}/items/submit', [OrderController::class, 'addItemsAndSubmit'])->name('pos.orders.items.submit');
         Route::post('pos/orders/{order}/submit', [OrderController::class, 'submit'])->name('pos.orders.submit');
-        Route::get('pos/orders/{order}/station-ticket', [OrderController::class, 'stationTicket'])->name('pos.orders.station-ticket');
         Route::post('pos/self-orders/{selfOrder}/approve', [OrderController::class, 'approveSelfOrder'])->name('pos.self-orders.approve');
         Route::post('pos/self-orders/{selfOrder}/reject', [OrderController::class, 'rejectSelfOrder'])->name('pos.self-orders.reject');
         Route::post('pos/self-orders/{selfOrder}/receipt-printed', [OrderController::class, 'markSelfOrderReceiptPrinted'])->name('pos.self-orders.receipt-printed');
+        Route::post('pos/tables/merge', [TableMergeController::class, 'merge'])->name('pos.tables.merge');
+        Route::post('pos/tables/{table}/unmerge', [TableMergeController::class, 'unmerge'])->name('pos.tables.unmerge');
     });
 
     Route::middleware(['permission:pos.create', 'permission:pos.checkout', 'active.shift'])->group(function () {
@@ -74,7 +84,6 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     Route::middleware(['permission:pos.checkout', 'active.shift'])->group(function () {
         Route::post('pos/orders/{order}/pay', [PaymentController::class, 'cash'])->name('pos.orders.pay');
         Route::post('pos/orders/{order}/xendit', [PaymentController::class, 'xendit'])->name('pos.orders.xendit');
-        Route::post('pos/orders/{order}/xendit/{payment}/simulate', [PaymentController::class, 'simulateXendit'])->name('pos.orders.xendit.simulate');
         Route::get('pos/xendit/{payment}', [PaymentController::class, 'show'])->name('pos.xendit.show');
         Route::get('pos/xendit/{payment}/success', [PaymentController::class, 'success'])->name('pos.xendit.success');
         Route::get('pos/transactions/{transaction}/receipt', [OrderController::class, 'receipt'])->name('pos.transactions.receipt');
@@ -83,10 +92,16 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     // Kitchen / Bar / Waiter
     Route::middleware(['permission:kitchen.view'])->group(function () {
         Route::get('kitchen', [KitchenDisplayController::class, 'index'])->name('kitchen.index');
+        Route::get('kitchen/orders/{order}/ticket', [KitchenDisplayController::class, 'ticket'])->name('kitchen.orders.ticket');
+        Route::patch('kitchen/orders/{order}/progress', [KitchenDisplayController::class, 'markAsInProgress'])->name('kitchen.orders.progress');
+        Route::patch('kitchen/orders/{order}/ready', [KitchenDisplayController::class, 'markAsReady'])->name('kitchen.orders.ready');
     });
 
     Route::middleware(['permission:bar.view'])->group(function () {
         Route::get('bar', [BarDisplayController::class, 'index'])->name('bar.index');
+        Route::get('bar/orders/{order}/ticket', [BarDisplayController::class, 'ticket'])->name('bar.orders.ticket');
+        Route::patch('bar/orders/{order}/progress', [BarDisplayController::class, 'markAsInProgress'])->name('bar.orders.progress');
+        Route::patch('bar/orders/{order}/ready', [BarDisplayController::class, 'markAsReady'])->name('bar.orders.ready');
     });
 
     Route::middleware(['permission:waiter.view'])->group(function () {
@@ -129,10 +144,8 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     // Reports
     Route::middleware(['permission:reports.view'])->group(function () {
         Route::get('reports/kasir', [ReportController::class, 'cashier'])->name('reports.cashier');
-    });
-
-    Route::middleware(['permission:reports.export'])->group(function () {
-        Route::post('reports/kasir/export', [ReportController::class, 'exportCashier'])->name('reports.cashier.export');
+        Route::get('reports/kasir/export/excel', [ReportController::class, 'cashierExportExcel'])->name('reports.cashier.export.excel');
+        Route::get('reports/kasir/export/pdf', [ReportController::class, 'cashierExportPdf'])->name('reports.cashier.export.pdf');
     });
 
     // Staff Management (replaces old Users routes)
@@ -157,6 +170,8 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::post('menu/categories', [MenuController::class, 'storeCategory'])->name('menu.categories.store');
         Route::put('menu/categories/{category}', [MenuController::class, 'updateCategory'])->name('menu.categories.update');
         Route::delete('menu/categories/{category}', [MenuController::class, 'destroyCategory'])->name('menu.categories.destroy');
+        Route::get('menu/import/template', [MenuController::class, 'downloadImportTemplate'])->name('menu.import.template');
+        Route::post('menu/import', [MenuController::class, 'importItems'])->name('menu.import');
         Route::post('menu/items', [MenuController::class, 'storeItem'])->name('menu.items.store');
         Route::put('menu/items/{item}', [MenuController::class, 'updateItem'])->name('menu.items.update');
         Route::delete('menu/items/{item}', [MenuController::class, 'destroyItem'])->name('menu.items.destroy');

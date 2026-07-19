@@ -7,7 +7,7 @@ use App\Http\Requests\Pos\CashPaymentRequest;
 use App\Http\Requests\Pos\XenditPaymentRequest;
 use App\Models\Order;
 use App\Models\XenditPayment;
-use App\Services\OrderRoutingService;
+use App\Services\AuditLogger;
 use App\Services\PaymentService;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\RedirectResponse;
@@ -18,6 +18,8 @@ use RuntimeException;
 
 class PaymentController extends Controller
 {
+    public function __construct(private AuditLogger $auditLogger) {}
+
     public function cash(CashPaymentRequest $request, Order $order, PaymentService $paymentService): RedirectResponse
     {
         abort_unless($order->kasir_id === $request->user()->id && $order->status === 'submitted', 403);
@@ -36,6 +38,11 @@ class PaymentController extends Controller
         } catch (RuntimeException $exception) {
             return back()->with('error', $exception->getMessage());
         }
+
+        $this->auditLogger->log('pos.payment.cash', 'Transaction', $transaction->id, null, [
+            'order_id' => $order->id,
+            'amount_paid' => (float) $transaction->amount_paid,
+        ]);
 
         return redirect()
             ->route('pos.transactions.receipt', $transaction)
@@ -64,6 +71,11 @@ class PaymentController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
+        $this->auditLogger->log('pos.payment.qris', 'Transaction', $result['transaction']->id, null, [
+            'order_id' => $order->id,
+            'amount' => (float) $result['transaction']->amount_paid,
+        ]);
+
         return redirect()
             ->route('pos.index', ['order' => $order->id, 'payment' => $result['payment']->id])
             ->with('success', 'QRIS Xendit berhasil dibuat.');
@@ -86,54 +98,6 @@ class PaymentController extends Controller
             'transaction' => $payment->transaction,
             'order' => $payment->transaction->order,
         ]);
-    }
-
-    public function simulateXendit(
-        Order $order,
-        XenditPayment $payment,
-        PaymentService $paymentService,
-        OrderRoutingService $routingService,
-    ): RedirectResponse {
-        abort_unless($order->kasir_id === request()->user()->id && $payment->transaction?->order_id === $order->id, 403);
-
-        $backToStation = request()->boolean('back_to_station');
-
-        try {
-            $response = $paymentService->simulateQrisPayment($payment);
-
-            $payload = array_merge($response, [
-                'reference_id' => $payment->external_id,
-                'status' => $response['status'] ?? 'SUCCEEDED',
-            ]);
-
-            $paidPayment = $paymentService->markXenditPaymentPaid($payment->external_id, $payload, $routingService);
-        } catch (RequestException $exception) {
-            Log::error('Xendit QRIS Simulation Error', [
-                'response' => $exception->response->json(),
-                'status' => $exception->response->status(),
-            ]);
-            $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API simulasi Xendit';
-
-            return back()->with('error', 'Gagal simulasi pembayaran Xendit: '.(is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
-        } catch (RuntimeException $exception) {
-            return back()->with('error', $exception->getMessage());
-        }
-
-        if ($backToStation && $paidPayment) {
-            $routeParams = [
-                'order' => $order->id,
-                'receipt' => $paidPayment->transaction_id,
-                'payment' => $paidPayment->id,
-            ];
-
-            return redirect()
-                ->route('pos.orders.station-ticket', $routeParams)
-                ->with('success', 'Pembayaran QRIS berhasil. Silakan cetak struk.');
-        }
-
-        return redirect()
-            ->route('pos.xendit.success', $paidPayment)
-            ->with('success', 'Simulasi pembayaran QRIS berhasil.');
     }
 
     public function success(XenditPayment $payment): Response

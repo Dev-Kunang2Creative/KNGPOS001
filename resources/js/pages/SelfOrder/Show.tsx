@@ -1,3 +1,4 @@
+import { type ChargeType } from '@/lib/utils';
 import SelfOrderLayout from '@/layouts/SelfOrderLayout';
 import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
@@ -23,7 +24,20 @@ type MenuItem = {
 type Category = { id: number; name: string; description?: string | null; active_items: MenuItem[] };
 type Table = { id: number; name: string; zone?: { name: string; color_hex: string } };
 type CartItem = { menu_item_id: number; name: string; quantity: number; price: number; notes: string; image_url?: string | null; addons?: number[] };
-type Props = { qrToken: string; table: Table; categories: Category[]; restaurant: { name: string; tax_percentage: number; tax_is_active: boolean; service_charge_percentage: number; service_charge_is_active: boolean } };
+type Props = {
+    qrToken: string;
+    table: Table;
+    categories: Category[];
+    restaurant: {
+        name: string;
+        tax_percentage: number;
+        tax_is_active: boolean;
+        tax_type?: ChargeType;
+        service_charge_percentage: number;
+        service_charge_is_active: boolean;
+        service_charge_type?: ChargeType;
+    };
+};
 
 type ViewState = 'bill-selection' | 'menu' | 'detail' | 'cart' | 'payment' | 'orders';
 
@@ -115,7 +129,7 @@ export default function SelfOrderShow({ qrToken, table, categories, restaurant }
         setOrderNotes(notes);
     };
 
-    const handlePay = (paymentMethod: 'qris' | 'cashier' | 'online') => {
+    const handlePay = (paymentMethod: 'cashier' | 'online') => {
         setIsProcessing(true);
         router.post(
             `/s/${qrToken}/orders`,

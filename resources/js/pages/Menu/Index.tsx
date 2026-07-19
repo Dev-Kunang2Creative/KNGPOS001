@@ -1,16 +1,18 @@
+import InputError from '@/components/input-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { ChefHat, Edit2, GlassWater, Package, Percent, Plus, Printer, Save, Search, Tag, Trash2, X } from 'lucide-react';
-import { FormEvent, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, ChefHat, Download, Edit2, GlassWater, Package, Percent, Plus, Printer, Save, Search, Tag, Trash2, Upload, X } from 'lucide-react';
+import { ChangeEvent, FormEvent, useMemo, useRef, useState } from 'react';
 
-type Category = { id: number; name: string; description?: string | null; sort_order: number; is_active: boolean; active_items_count: number };
+type Category = { id: number; name: string; description?: string | null; sort_order: number; is_active: boolean; active_items_count: number; parent_id?: number | null; parent?: { id: number; name: string } };
 type Addon = { id: number | null; name: string; price: number | string; is_active: boolean };
 type Item = {
     id: number;
@@ -99,10 +101,37 @@ export default function MenuIndex({ categories, items, promotions }: Props) {
 /* ─────────────────────────── ITEMS TAB ─────────────────────────── */
 
 function ItemsTab({ categories, items, canManage }: { categories: Category[]; items: Item[]; canManage: boolean }) {
+    const { flash } = usePage<SharedData>().props;
+    const importInputRef = useRef<HTMLInputElement>(null);
+    const [importing, setImporting] = useState(false);
+
+    function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        setImporting(true);
+        router.post(
+            '/menu/import',
+            { file },
+            {
+                forceFormData: true,
+                preserveScroll: true,
+                onFinish: () => {
+                    setImporting(false);
+                    if (importInputRef.current) {
+                        importInputRef.current.value = '';
+                    }
+                },
+            },
+        );
+    }
+
     const [editItem, setEditItem] = useState<Item | null>(null);
+    const [formOpen, setFormOpen] = useState(false);
     const [search, setSearch] = useState('');
     const [filterCat, setFilterCat] = useState('all');
-    const formRef = useRef<HTMLDivElement>(null);
 
     const filtered = items.filter((item) => {
         const matchSearch = item.name.toLowerCase().includes(search.toLowerCase());
@@ -110,89 +139,160 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
         return matchSearch && matchCat;
     });
 
-    function startEdit(item: Item) {
-        setEditItem(item);
-        window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    const groups = useMemo(() => {
+        const byCat = new Map<number, Item[]>();
+        for (const item of filtered) {
+            const list = byCat.get(item.category_id) ?? [];
+            list.push(item);
+            byCat.set(item.category_id, list);
+        }
+        const ordered = [...categories]
+            .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+            .filter((cat) => byCat.has(cat.id))
+            .map((cat) => ({ category: cat, items: (byCat.get(cat.id) ?? []).sort((a, b) => a.sort_order - b.sort_order) }));
+
+        // Items whose category is missing from the categories list
+        const known = new Set(categories.map((c) => c.id));
+        const orphans = filtered.filter((i) => !known.has(i.category_id));
+        if (orphans.length > 0) {
+            ordered.push({
+                category: { id: -1, name: 'Tanpa Kategori', sort_order: 999, is_active: true, active_items_count: orphans.length },
+                items: orphans,
+            });
+        }
+        return ordered;
+    }, [filtered, categories]);
+
+    function startCreate() {
+        setEditItem(null);
+        setFormOpen(true);
     }
 
-    return (
-        <div className={`grid gap-4 xl:gap-6 ${canManage ? 'xl:grid-cols-[400px_1fr]' : ''}`}>
-            {/* Form */}
-            {canManage && (
-                <div ref={formRef} className="bg-card rounded-xl border">
-                    <div className="border-b px-4 py-3 sm:px-5 sm:py-4">
+    function startEdit(item: Item) {
+        setEditItem(item);
+        setFormOpen(true);
+    }
+
+    function closeForm() {
+        setFormOpen(false);
+        setEditItem(null);
+    }
+
+    // Separate "page" for the add/edit form — replaces the list instead of sitting beside it.
+    if (canManage && formOpen) {
+        return (
+            <div className="bg-card rounded-xl border">
+                <div className="flex items-center gap-3 border-b px-4 py-3 sm:px-5 sm:py-4">
+                    <Button type="button" variant="ghost" size="icon" className="shrink-0" onClick={closeForm} title="Kembali">
+                        <ArrowLeft className="size-4" />
+                    </Button>
+                    <div>
                         <h2 className="font-semibold">{editItem ? 'Edit Item' : 'Tambah Item Baru'}</h2>
                         <p className="text-muted-foreground mt-0.5 text-xs">
                             {editItem ? `Mengedit: ${editItem.name}` : 'Isi detail menu item baru'}
                         </p>
                     </div>
-                    <div className="p-4 sm:p-5">
-                        <ItemForm categories={categories} editItem={editItem} onCancelEdit={() => setEditItem(null)} />
-                    </div>
+                </div>
+                <div className="p-4 sm:p-5">
+                    <ItemForm categories={categories} editItem={editItem} onDone={closeForm} />
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col gap-4">
+            {/* Toolbar */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <div className="relative flex-1">
+                    <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
+                    <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari nama menu..." className="pl-9" />
+                </div>
+                <Select value={filterCat} onValueChange={setFilterCat}>
+                    <SelectTrigger className="w-full sm:w-48">
+                        <SelectValue placeholder="Semua kategori" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Semua Kategori</SelectItem>
+                        {categories.map((c) => (
+                            <SelectItem key={c.id} value={String(c.id)}>
+                                {c.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {canManage && (
+                    <>
+                        <Button type="button" variant="outline" className="shrink-0" asChild title="Download template import Excel">
+                            <a href="/menu/import/template">
+                                <Download className="size-4" /> Template
+                            </a>
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="shrink-0"
+                            disabled={importing}
+                            onClick={() => importInputRef.current?.click()}
+                        >
+                            <Upload className="size-4" /> {importing ? 'Mengimpor...' : 'Import Excel'}
+                        </Button>
+                        <input ref={importInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleImportFile} />
+                        <Button type="button" onClick={startCreate} className="shrink-0">
+                            <Plus className="size-4" /> Tambah Item
+                        </Button>
+                    </>
+                )}
+            </div>
+
+            {(flash?.import_errors?.length ?? 0) > 0 && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                    <p className="font-medium text-destructive">Sebagian baris gagal diimport:</p>
+                    <ul className="mt-1 list-inside list-disc text-destructive/90">
+                        {flash.import_errors!.map((error) => (
+                            <li key={error}>{error}</li>
+                        ))}
+                    </ul>
                 </div>
             )}
 
-            {/* List */}
-            <div className="flex flex-col gap-4">
-                {/* Toolbar */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <div className="relative flex-1">
-                        <Search className="text-muted-foreground absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-                        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Cari nama menu..." className="pl-9" />
-                    </div>
-                    <Select value={filterCat} onValueChange={setFilterCat}>
-                        <SelectTrigger className="w-full sm:w-48">
-                            <SelectValue placeholder="Semua kategori" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Semua Kategori</SelectItem>
-                            {categories.map((c) => (
-                                <SelectItem key={c.id} value={String(c.id)}>
-                                    {c.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                {/* Cards grid */}
+            {/* List grouped by category */}
                 {filtered.length === 0 ? (
                     <div className="rounded-xl border-2 border-dashed p-12 text-center">
                         <Package className="text-muted-foreground/40 mx-auto size-10" />
                         <p className="text-muted-foreground mt-3 font-medium">Tidak ada item ditemukan</p>
                     </div>
                 ) : (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {filtered.map((item) => {
-                            const pt = printTargetLabels[item.print_to] ?? printTargetLabels.kasir;
-                            const PtIcon = pt.icon;
-                            return (
-                                <div
-                                    key={item.id}
-                                    className={`group bg-card relative overflow-hidden rounded-xl border transition-all hover:shadow-sm ${!item.is_available ? 'opacity-60' : ''}`}
-                                >
-                                    <div className="absolute top-3 left-3 z-10 sm:right-3 sm:left-auto">
-                                        <span className={`block size-2 rounded-full ${item.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                                    </div>
+                    <div className="flex flex-col gap-5">
+                        {groups.map(({ category, items: catItems }) => (
+                            <div key={category.id}>
+                                <div className="mb-2 flex items-center gap-2 px-1">
+                                    <Tag className="text-muted-foreground size-4" />
+                                    <h3 className="text-sm font-semibold">{category.name}</h3>
+                                    <span className="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-[11px] font-medium">
+                                        {catItems.length}
+                                    </span>
+                                </div>
+                                <div className="bg-card divide-y overflow-hidden rounded-xl border">
+                                    {catItems.map((item) => {
+                                        const pt = printTargetLabels[item.print_to] ?? printTargetLabels.kasir;
+                                        const PtIcon = pt.icon;
+                                        return (
+                                            <div
+                                                key={item.id}
+                                                className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 transition-colors hover:bg-muted/50 ${!item.is_available ? 'opacity-60' : ''}`}
+                                            >
+                                                <span
+                                                    className={`size-2 shrink-0 rounded-full ${item.is_available ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                                                />
 
-                                    <div className="grid grid-cols-[104px_1fr] sm:block">
-                                        <div className="bg-muted aspect-square sm:aspect-[4/3]">
-                                            {item.image_url ? (
-                                                <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" />
-                                            ) : (
-                                                <div className="text-muted-foreground flex h-full items-center justify-center">
-                                                    <Package className="size-9" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate leading-tight font-medium">{item.name}</p>
+                                                    {item.description && (
+                                                        <p className="text-muted-foreground truncate text-xs">{item.description}</p>
+                                                    )}
                                                 </div>
-                                            )}
-                                        </div>
 
-                                        <div className="min-w-0 p-3 sm:p-4">
-                                            <p className="pr-4 leading-tight font-semibold">{item.name}</p>
-                                            <p className="text-muted-foreground mt-0.5 text-xs">{item.category?.name ?? '-'}</p>
-
-                                            <p className="text-primary mt-2 text-lg font-bold">Rp {money(item.price)}</p>
-
-                                            <div className="mt-2 flex items-center gap-1.5">
                                                 <span
                                                     className={`flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium ${pt.color}`}
                                                 >
@@ -203,54 +303,57 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
                                                         Habis
                                                     </span>
                                                 )}
-                                            </div>
 
-                                            {canManage && (
-                                                <div className="mt-3 grid grid-cols-2 gap-1.5 sm:flex">
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-9 flex-1 text-xs"
-                                                        onClick={() => startEdit(item)}
-                                                    >
-                                                        <Edit2 className="size-3" /> Edit
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant={item.is_available ? 'outline' : 'default'}
-                                                        className="h-9 flex-1 text-xs"
-                                                        onClick={() =>
-                                                            router.patch(
-                                                                `/menu/items/${item.id}/availability`,
-                                                                { is_available: !item.is_available },
-                                                                { preserveScroll: true },
-                                                            )
-                                                        }
-                                                    >
-                                                        {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-muted-foreground hover:text-destructive col-span-2 h-9 shrink-0 sm:col-span-1 sm:w-9"
-                                                        onClick={() => {
-                                                            if (confirm(`Hapus "${item.name}"?`)) {
-                                                                router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
+                                                <p className="text-primary w-24 text-right font-bold">Rp {money(item.price)}</p>
+
+                                                {canManage && (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-8 px-2 text-xs"
+                                                            onClick={() => startEdit(item)}
+                                                        >
+                                                            <Edit2 className="size-3.5" />
+                                                            <span className="hidden sm:inline">Edit</span>
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant={item.is_available ? 'outline' : 'default'}
+                                                            className="h-8 px-2 text-xs"
+                                                            onClick={() =>
+                                                                router.patch(
+                                                                    `/menu/items/${item.id}/availability`,
+                                                                    { is_available: !item.is_available },
+                                                                    { preserveScroll: true },
+                                                                )
                                                             }
-                                                        }}
-                                                    >
-                                                        <Trash2 className="size-3.5" />
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
+                                                        >
+                                                            {item.is_available ? 'Nonaktifkan' : 'Aktifkan'}
+                                                        </Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="text-muted-foreground hover:text-destructive size-8 shrink-0 px-0"
+                                                            onClick={() => {
+                                                                if (confirm(`Hapus "${item.name}"?`)) {
+                                                                    router.delete(`/menu/items/${item.id}`, { preserveScroll: true });
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Trash2 className="size-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                            );
-                        })}
+                            </div>
+                        ))}
                     </div>
                 )}
 
@@ -258,11 +361,10 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
                     {filtered.length} dari {items.length} item
                 </p>
             </div>
-        </div>
     );
 }
 
-function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category[]; editItem: Item | null; onCancelEdit: () => void }) {
+function ItemForm({ categories, editItem, onDone }: { categories: Category[]; editItem: Item | null; onDone: () => void }) {
     const form = useForm({
         category_id: editItem ? String(editItem.category_id) : '',
         name: editItem?.name ?? '',
@@ -313,9 +415,15 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
         }));
 
         if (editItem) {
-            form.post(`/menu/items/${editItem.id}`, { ...opts, onSuccess: onCancelEdit });
+            form.post(`/menu/items/${editItem.id}`, { ...opts, onSuccess: onDone });
         } else {
-            form.post('/menu/items', { ...opts, onSuccess: () => form.reset() });
+            form.post('/menu/items', {
+                ...opts,
+                onSuccess: () => {
+                    form.reset();
+                    onDone();
+                },
+            });
         }
     }
 
@@ -339,7 +447,7 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
                     <SelectContent>
                         {categories.map((c) => (
                             <SelectItem key={c.id} value={String(c.id)}>
-                                {c.name}
+                                {c.parent ? `${c.parent.name} - ${c.name}` : c.name}
                             </SelectItem>
                         ))}
                     </SelectContent>
@@ -538,12 +646,10 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
                         </>
                     )}
                 </Button>
-                {editItem && (
-                    <Button type="button" variant="outline" className="min-h-[44px] sm:w-12" onClick={onCancelEdit}>
-                        <X className="size-4" />
-                        <span className="sm:hidden">Batal Edit</span>
-                    </Button>
-                )}
+                <Button type="button" variant="outline" className="min-h-[44px] sm:w-12" onClick={onDone}>
+                    <X className="size-4" />
+                    <span className="sm:hidden">Batal</span>
+                </Button>
             </div>
         </form>
     );
@@ -552,168 +658,207 @@ function ItemForm({ categories, editItem, onCancelEdit }: { categories: Category
 /* ─────────────────────────── CATEGORIES TAB ─────────────────────────── */
 
 function CategoriesTab({ categories, canManage }: { categories: Category[]; canManage: boolean }) {
-    const [editCat, setEditCat] = useState<Category | null>(null);
+    const [dialog, setDialog] = useState<{ mode: 'create' | 'edit'; cat?: Category } | null>(null);
 
     return (
-        <div className={`grid gap-6 ${canManage ? 'xl:grid-cols-[380px_1fr]' : ''}`}>
-            {/* Form */}
-            {canManage && (
-                <div className="bg-card rounded-xl border">
-                    <div className="border-b px-5 py-4">
-                        <h2 className="font-semibold">{editCat ? 'Edit Kategori' : 'Tambah Kategori Baru'}</h2>
-                        <p className="text-muted-foreground mt-0.5 text-xs">
-                            {editCat ? `Mengedit: ${editCat.name}` : 'Buat kategori untuk mengelompokkan menu'}
-                        </p>
-                    </div>
-                    <div className="p-5">
-                        <CategoryForm editCat={editCat} onCancelEdit={() => setEditCat(null)} />
-                    </div>
+        <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+                <div>
+                    <h2 className="text-lg font-semibold">Kategori Menu</h2>
+                    <p className="text-muted-foreground text-sm">Kelola daftar kategori dan sub-kategori menu.</p>
                 </div>
-            )}
-
-            {/* List */}
-            <div className="space-y-3">
-                {categories.length === 0 ? (
-                    <div className="rounded-xl border-2 border-dashed p-12 text-center">
-                        <Tag className="text-muted-foreground/40 mx-auto size-10" />
-                        <p className="text-muted-foreground mt-3 font-medium">Belum ada kategori</p>
-                    </div>
-                ) : (
-                    categories.map((cat) => (
-                        <div
-                            key={cat.id}
-                            className={`bg-card flex items-center gap-4 rounded-xl border px-5 py-4 transition-all hover:shadow-sm ${!cat.is_active ? 'opacity-60' : ''}`}
-                        >
-                            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg text-sm font-bold">
-                                {cat.name.slice(0, 2).toUpperCase()}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                    <p className="font-semibold">{cat.name}</p>
-                                    {!cat.is_active && (
-                                        <Badge variant="outline" className="text-xs">
-                                            Nonaktif
-                                        </Badge>
-                                    )}
-                                </div>
-                                <p className="text-muted-foreground text-sm">
-                                    {cat.active_items_count} item aktif · urutan {cat.sort_order}
-                                </p>
-                                {cat.description && <p className="text-muted-foreground mt-0.5 truncate text-xs">{cat.description}</p>}
-                            </div>
-                            {canManage && (
-                                <div className="flex shrink-0 gap-1.5">
-                                    <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setEditCat(cat)}>
-                                        <Edit2 className="size-3.5" /> Edit
-                                    </Button>
-                                    <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="text-muted-foreground hover:text-destructive h-8 w-8"
-                                        onClick={() => {
-                                            if (confirm(`Hapus kategori "${cat.name}"? Item di dalamnya perlu dipindah dulu.`)) {
-                                                router.delete(`/menu/categories/${cat.id}`, { preserveScroll: true });
-                                            }
-                                        }}
-                                    >
-                                        <Trash2 className="size-3.5" />
-                                    </Button>
-                                </div>
-                            )}
-                        </div>
-                    ))
+                {canManage && (
+                    <Button onClick={() => setDialog({ mode: 'create' })}>
+                        <Plus className="mr-2 h-4 w-4" /> Tambah Kategori
+                    </Button>
                 )}
             </div>
+
+            <div className="bg-card rounded-xl border">
+                <div className="overflow-x-auto p-0">
+                    <table className="w-full min-w-[720px] text-sm">
+                        <thead className="text-muted-foreground border-b text-left bg-muted/50">
+                            <tr>
+                                <th className="py-3 px-5 font-medium">Kategori</th>
+                                <th className="py-3 px-5 font-medium">Induk Kategori</th>
+                                <th className="py-3 px-5 font-medium">Urutan</th>
+                                <th className="py-3 px-5 font-medium">Item Aktif</th>
+                                <th className="py-3 px-5 font-medium">Status</th>
+                                <th className="py-3 px-5 text-right font-medium">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {categories.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                                        <Tag className="mx-auto size-8 mb-2 opacity-20" />
+                                        Belum ada kategori
+                                    </td>
+                                </tr>
+                            ) : (
+                                categories.map((cat) => (
+                                    <tr key={cat.id} className={`border-b hover:bg-muted/50 ${!cat.is_active ? 'opacity-70' : ''}`}>
+                                        <td className="py-3 px-5 font-medium">
+                                            {cat.name}
+                                            {cat.description && <p className="text-muted-foreground mt-0.5 font-normal truncate max-w-[200px] text-xs">{cat.description}</p>}
+                                        </td>
+                                        <td className="py-3 px-5 text-muted-foreground">
+                                            {cat.parent ? cat.parent.name : '-'}
+                                        </td>
+                                        <td className="py-3 px-5">{cat.sort_order}</td>
+                                        <td className="py-3 px-5">{cat.active_items_count}</td>
+                                        <td className="py-3 px-5">
+                                            <Badge variant={cat.is_active ? 'secondary' : 'outline'} className="text-xs">
+                                                {cat.is_active ? 'Aktif' : 'Nonaktif'}
+                                            </Badge>
+                                        </td>
+                                        <td className="py-3 px-5 text-right">
+                                            {canManage && (
+                                                <div className="flex items-center justify-end gap-1.5">
+                                                    <Button type="button" size="sm" variant="outline" className="h-8 px-2" onClick={() => setDialog({ mode: 'edit', cat })}>
+                                                        <Edit2 className="size-3.5" />
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-muted-foreground hover:text-destructive h-8 w-8 px-0"
+                                                        onClick={() => {
+                                                            if (confirm(`Hapus kategori "${cat.name}"? Item di dalamnya perlu dipindah dulu.`)) {
+                                                                router.delete(`/menu/categories/${cat.id}`, { preserveScroll: true });
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Trash2 className="size-3.5" />
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {dialog && (
+                <CategoryDialog
+                    key={dialog.cat?.id ?? 'create'}
+                    mode={dialog.mode}
+                    editCat={dialog.cat ?? null}
+                    categories={categories}
+                    onClose={() => setDialog(null)}
+                />
+            )}
         </div>
     );
 }
 
-function CategoryForm({ editCat, onCancelEdit }: { editCat: Category | null; onCancelEdit: () => void }) {
+function CategoryDialog({
+    mode,
+    editCat,
+    categories,
+    onClose,
+}: {
+    mode: 'create' | 'edit';
+    editCat: Category | null;
+    categories: Category[];
+    onClose: () => void;
+}) {
     const form = useForm({
+        parent_id: editCat?.parent_id ? String(editCat.parent_id) : 'none',
         name: editCat?.name ?? '',
         description: editCat?.description ?? '',
         sort_order: editCat?.sort_order ?? 0,
         is_active: editCat?.is_active ?? true,
     });
 
-    const [lastEditId, setLastEditId] = useState<number | null>(null);
-    if (editCat && editCat.id !== lastEditId) {
-        setLastEditId(editCat.id);
-        form.setData({ name: editCat.name, description: editCat.description ?? '', sort_order: editCat.sort_order, is_active: editCat.is_active });
-    }
-    if (!editCat && lastEditId !== null) {
-        setLastEditId(null);
-        form.reset();
-    }
-
     function submit(e: FormEvent) {
         e.preventDefault();
-        const opts = { preserveScroll: true };
-        if (editCat) {
-            form.post(`/menu/categories/${editCat.id}?_method=PUT`, { ...opts, onSuccess: onCancelEdit });
+        form.transform((data) => ({
+            ...data,
+            parent_id: data.parent_id === 'none' ? null : Number(data.parent_id),
+        }));
+        if (mode === 'edit' && editCat) {
+            form.put(`/menu/categories/${editCat.id}`, { preserveScroll: true, onSuccess: onClose });
         } else {
-            form.post('/menu/categories', { ...opts, onSuccess: () => form.reset() });
+            form.post('/menu/categories', { preserveScroll: true, onSuccess: onClose });
         }
     }
 
     return (
-        <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-1.5">
-                <Label>
-                    Nama Kategori <span className="text-destructive">*</span>
-                </Label>
-                <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="cth: Makanan, Minuman, Snack" />
-                {form.errors.name && <p className="text-destructive text-xs">{form.errors.name}</p>}
-            </div>
+        <Dialog open onOpenChange={(o) => (!o ? onClose() : undefined)}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>{mode === 'edit' ? `Edit Kategori: ${editCat?.name}` : 'Tambah Kategori Baru'}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={submit} className="space-y-4">
+                    <div className="grid gap-2">
+                        <Label>Kategori Induk (Opsional)</Label>
+                        <Select value={form.data.parent_id} onValueChange={(v) => form.setData('parent_id', v)}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Tidak ada (Kategori Utama)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="none">Tidak ada (Kategori Utama)</SelectItem>
+                                {categories
+                                    .filter((c) => c.parent_id === null && c.id !== editCat?.id)
+                                    .map((c) => (
+                                        <SelectItem key={c.id} value={String(c.id)}>
+                                            {c.name}
+                                        </SelectItem>
+                                    ))}
+                            </SelectContent>
+                        </Select>
+                        <p className="text-muted-foreground text-xs">Pilih induk jika ini adalah sub-kategori.</p>
+                    </div>
 
-            <div className="space-y-1.5">
-                <Label>Deskripsi</Label>
-                <Input
-                    value={form.data.description}
-                    onChange={(e) => form.setData('description', e.target.value)}
-                    placeholder="Deskripsi kategori (opsional)"
-                />
-            </div>
+                    <div className="grid gap-2">
+                        <Label>
+                            Nama Kategori <span className="text-destructive">*</span>
+                        </Label>
+                        <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} placeholder="cth: Makanan, Minuman, Snack" />
+                        <InputError message={form.errors.name} />
+                    </div>
 
-            <div className="space-y-1.5">
-                <Label>Urutan Tampil</Label>
-                <Input
-                    type="number"
-                    min={0}
-                    value={form.data.sort_order}
-                    onChange={(e) => form.setData('sort_order', Number(e.target.value))}
-                    placeholder="0"
-                />
-                <p className="text-muted-foreground text-xs">Angka lebih kecil tampil lebih dulu</p>
-            </div>
+                    <div className="grid gap-2">
+                        <Label>Deskripsi</Label>
+                        <Input
+                            value={form.data.description}
+                            onChange={(e) => form.setData('description', e.target.value)}
+                            placeholder="Deskripsi kategori (opsional)"
+                        />
+                        <InputError message={form.errors.description} />
+                    </div>
 
-            <div className="flex items-center gap-2">
-                <Checkbox id="cat_active" checked={form.data.is_active} onCheckedChange={(v) => form.setData('is_active', Boolean(v))} />
-                <Label htmlFor="cat_active" className="cursor-pointer font-normal">
-                    Kategori aktif / ditampilkan
-                </Label>
-            </div>
+                    <div className="grid gap-2">
+                        <Label>Urutan Tampil</Label>
+                        <Input
+                            type="number"
+                            min={0}
+                            value={form.data.sort_order}
+                            onChange={(e) => form.setData('sort_order', Number(e.target.value))}
+                            placeholder="0"
+                        />
+                        <p className="text-muted-foreground text-xs">Angka lebih kecil tampil lebih dulu</p>
+                    </div>
 
-            <div className="flex gap-2 pt-1">
-                <Button type="submit" disabled={form.processing} className="flex-1">
-                    {editCat ? (
-                        <>
-                            <Save className="size-4" /> Simpan
-                        </>
-                    ) : (
-                        <>
-                            <Plus className="size-4" /> Tambah Kategori
-                        </>
-                    )}
-                </Button>
-                {editCat && (
-                    <Button type="button" variant="outline" onClick={onCancelEdit}>
-                        <X className="size-4" />
-                    </Button>
-                )}
-            </div>
-        </form>
+                    <label className="flex items-center gap-2 text-sm">
+                        <Checkbox checked={form.data.is_active} onCheckedChange={(v) => form.setData('is_active', Boolean(v))} /> Kategori aktif / ditampilkan
+                    </label>
+
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={onClose}>
+                            Batal
+                        </Button>
+                        <Button type="submit" disabled={form.processing}>
+                            {mode === 'edit' ? 'Simpan Perubahan' : 'Tambah Kategori'}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     );
 }
 

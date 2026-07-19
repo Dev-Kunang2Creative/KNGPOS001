@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Traits\BelongsToRestaurant;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -38,5 +39,15 @@ class Table extends Model
     public function activeQrCode(): HasOne
     {
         return $this->hasOne(TableQrcode::class)->where('is_active', true);
+    }
+
+    public function mergedIntoTable(): BelongsTo
+    {
+        return $this->belongsTo(Table::class, 'merged_into_table_id');
+    }
+
+    public function mergedTables(): HasMany
+    {
+        return $this->hasMany(Table::class, 'merged_into_table_id');
     }
 }

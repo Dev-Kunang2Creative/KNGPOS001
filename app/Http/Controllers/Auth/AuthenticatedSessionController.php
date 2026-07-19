@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\RestaurantUser;
 use App\Models\Shift;
+use App\Services\AuditLogger;
 use App\Services\RestaurantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -65,6 +66,8 @@ class AuthenticatedSessionController extends Controller
             $ru = $restaurantUsers->first();
             app(RestaurantContext::class)->persist($ru->restaurant_id);
 
+            app(AuditLogger::class)->log('auth.login', 'User', $user->id, null, ['email' => $user->email]);
+
             return redirect()->intended($this->redirectPathForRole($ru->role));
         }
 
@@ -77,6 +80,10 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        if ($user = $request->user()) {
+            app(AuditLogger::class)->log('auth.logout', 'User', $user->id, null, ['email' => $user->email]);
+        }
+
         app(RestaurantContext::class)->clear();
 
         Auth::guard('web')->logout();

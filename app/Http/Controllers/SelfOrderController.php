@@ -24,6 +24,7 @@ class SelfOrderController extends Controller
     {
         $qrCode = $this->activeQrCode($qrToken);
         $this->setRestaurantFromQr($qrCode);
+        $this->abortIfSelfOrderDisabled();
 
         return Inertia::render('SelfOrder/Show', [
             'qrToken' => $qrToken,
@@ -33,8 +34,10 @@ class SelfOrderController extends Controller
                 'name' => app(RestaurantContext::class)->restaurant()?->name ?? 'Restoran',
                 'tax_percentage' => app(RestaurantContext::class)->restaurant()?->tax_percentage ?? 0,
                 'tax_is_active' => app(RestaurantContext::class)->restaurant()?->tax_is_active ?? false,
+                'tax_type' => app(RestaurantContext::class)->restaurant()?->tax_type ?? 'percentage',
                 'service_charge_percentage' => app(RestaurantContext::class)->restaurant()?->service_charge_percentage ?? 0,
                 'service_charge_is_active' => app(RestaurantContext::class)->restaurant()?->service_charge_is_active ?? false,
+                'service_charge_type' => app(RestaurantContext::class)->restaurant()?->service_charge_type ?? 'percentage',
             ],
         ]);
     }
@@ -43,6 +46,7 @@ class SelfOrderController extends Controller
     {
         $qrCode = $this->activeQrCode($qrToken);
         $this->setRestaurantFromQr($qrCode);
+        $this->abortIfSelfOrderDisabled();
 
         return ['categories' => $this->menuCategories()];
     }
@@ -51,6 +55,7 @@ class SelfOrderController extends Controller
     {
         $qrCode = $this->activeQrCode($qrToken);
         $this->setRestaurantFromQr($qrCode);
+        $this->abortIfSelfOrderDisabled();
 
         $validated = $request->validated();
 
@@ -120,45 +125,6 @@ class SelfOrderController extends Controller
         ]);
     }
 
-    public function simulatePayment(
-        string $qrToken,
-        SelfOrder $selfOrder,
-        XenditPayment $payment,
-        PaymentService $paymentService,
-        OrderRoutingService $routingService,
-    ): RedirectResponse {
-        $qrCode = $this->activeQrCode($qrToken);
-        $this->setRestaurantFromQr($qrCode);
-
-        abort_unless($selfOrder->table_qrcode_id === $qrCode->id, 404);
-        abort_unless($selfOrder->order_id && $payment->transaction?->order_id === $selfOrder->order_id, 404);
-
-        try {
-            $response = $paymentService->simulateQrisPayment($payment);
-
-            $payload = array_merge($response, [
-                'reference_id' => $payment->external_id,
-                'status' => $response['status'] ?? 'SUCCEEDED',
-            ]);
-
-            $paymentService->markXenditPaymentPaid($payment->external_id, $payload, $routingService);
-        } catch (RequestException $exception) {
-            Log::error('Self-order Xendit QRIS Simulation Error', [
-                'response' => $exception->response->json(),
-                'status' => $exception->response->status(),
-            ]);
-            $errorMessage = $exception->response->json('message') ?? 'Terjadi kesalahan pada API simulasi Xendit';
-
-            return back()->with('error', 'Gagal simulasi pembayaran QRIS: '.(is_array($errorMessage) ? json_encode($errorMessage) : $errorMessage));
-        } catch (RuntimeException $exception) {
-            return back()->with('error', $exception->getMessage());
-        }
-
-        return redirect()
-            ->route('self-order.status', ['qr_token' => $qrToken, 'selfOrder' => $selfOrder->id])
-            ->with('success', 'Simulasi pembayaran QRIS berhasil.');
-    }
-
     /**
      * Confirm an online (Xendit Invoice) payment by querying Xendit.
      * Used by the status page poll / "Cek status" button so payment is
@@ -207,6 +173,19 @@ class SelfOrderController extends Controller
         }
     }
 
+    /**
+     * Block the customer-facing ordering flow when the restaurant has turned
+     * off self-order (QR ordering).
+     */
+    private function abortIfSelfOrderDisabled(): void
+    {
+        abort_unless(
+            app(RestaurantContext::class)->restaurant()?->self_order_enabled ?? true,
+            403,
+            'Pemesanan mandiri (self-order) tidak tersedia di restoran ini.'
+        );
+    }
+
     private function activeQrCode(string $qrToken): TableQrcode
     {
         return TableQrcode::query()
@@ -219,11 +198,24 @@ class SelfOrderController extends Controller
     private function menuCategories()
     {
         return MenuCategory::query()
-            ->with(['activeItems' => fn ($query) => $query
-                ->with(['addons' => fn ($q) => $q->orderBy('id')])
-                ->where('is_available', true)
-                ->orderBy('sort_order')
-                ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id'])])
+            ->whereNull('parent_id')
+            ->with([
+                'activeItems' => fn ($query) => $query
+                    ->with(['addons' => fn ($q) => $q->orderBy('id')])
+                    ->where('is_available', true)
+                    ->orderBy('sort_order')
+                    ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id']),
+                'children' => fn ($query) => $query
+                    ->where('is_active', true)
+                    ->orderBy('sort_order')
+                    ->with(['activeItems' => fn ($q) => $q
+                        ->with(['addons' => fn ($a) => $a->orderBy('id')])
+                        ->where('is_available', true)
+                        ->orderBy('sort_order')
+                        ->select(['id', 'category_id', 'name', 'description', 'price', 'print_to', 'image_path', 'restaurant_id']),
+                    ])
+                    ->select(['id', 'parent_id', 'name', 'description', 'restaurant_id']),
+            ])
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->get(['id', 'name', 'description', 'restaurant_id']);

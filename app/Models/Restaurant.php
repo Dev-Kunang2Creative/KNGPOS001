@@ -26,6 +26,63 @@ class Restaurant extends Model
             'tax_is_active' => 'boolean',
             'service_charge_percentage' => 'decimal:2',
             'service_charge_is_active' => 'boolean',
+            'has_kitchen' => 'boolean',
+            'has_bar' => 'boolean',
+            'has_waiter' => 'boolean',
+            'self_order_enabled' => 'boolean',
+        ];
+    }
+
+    // ─── Charge calculation ──────────────────────────────────
+
+    /**
+     * Service charge for a given subtotal. Respects the active flag and the
+     * charge type ('percentage' of subtotal, or flat 'nominal' Rp amount).
+     */
+    public function serviceChargeAmount(float $subtotal): float
+    {
+        if (! $this->service_charge_is_active) {
+            return 0.0;
+        }
+
+        $value = (float) $this->service_charge_percentage;
+
+        return $this->service_charge_type === 'nominal'
+            ? round($value, 2)
+            : round($subtotal * ($value / 100), 2);
+    }
+
+    /**
+     * Tax for a given subtotal. Percentage tax is applied on top of the
+     * subtotal + service charge; nominal tax is a flat Rp amount.
+     */
+    public function taxAmount(float $subtotal, float $serviceCharge = 0.0): float
+    {
+        if (! $this->tax_is_active) {
+            return 0.0;
+        }
+
+        $value = (float) $this->tax_percentage;
+
+        return $this->tax_type === 'nominal'
+            ? round($value, 2)
+            : round(($subtotal + $serviceCharge) * ($value / 100), 2);
+    }
+
+    /**
+     * Full charge breakdown for a subtotal.
+     *
+     * @return array{service_charge: float, tax: float, total: float}
+     */
+    public function chargesFor(float $subtotal): array
+    {
+        $serviceCharge = $this->serviceChargeAmount($subtotal);
+        $tax = $this->taxAmount($subtotal, $serviceCharge);
+
+        return [
+            'service_charge' => $serviceCharge,
+            'tax' => $tax,
+            'total' => round($subtotal + $serviceCharge + $tax, 2),
         ];
     }
 

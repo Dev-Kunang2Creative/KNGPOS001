@@ -41,10 +41,11 @@ export interface SharedData {
         logo_url?: string | null;
         receipt_header?: string | null;
         receipt_footer?: string | null;
+        has_waiter?: boolean;
     } | null;
     restaurants: Restaurant[];
     activeShift: { id: number; opened_at: string; opening_cash: string } | null;
-    flash: { success?: string; error?: string; info?: string };
+    flash: { success?: string; error?: string; info?: string; import_errors?: string[] };
     [key: string]: unknown;
 }
 
