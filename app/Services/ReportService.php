@@ -7,6 +7,7 @@ use App\Models\KitchenStation;
 use App\Models\MenuItem;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\Shift;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -136,12 +137,16 @@ class ReportService
         $fromDate = $from ? Carbon::parse($from)->startOfDay() : today()->startOfDay();
         $toDate = $to ? Carbon::parse($to)->endOfDay() : today()->endOfDay();
 
+        $shift = $shiftId ? Shift::query()->find($shiftId) : null;
+
         $transactions = Transaction::query()
             ->with(['order:id,order_type,kasir_id', 'cashier:id,name'])
             ->where('status', 'paid')
             ->whereBetween('paid_at', [$fromDate, $toDate])
             ->when($cashierId, fn ($query) => $query->where('kasir_id', $cashierId))
-            ->when($shiftId, fn ($query) => $query->whereHas('cashier.shifts', fn ($shiftQuery) => $shiftQuery->where('id', $shiftId)))
+            ->when($shift, fn ($query) => $query
+                ->where('kasir_id', $shift->kasir_id)
+                ->whereBetween('paid_at', [$shift->opened_at, $shift->closed_at ?? now()]))
             ->get();
 
         $rows = $transactions
@@ -191,6 +196,24 @@ class ReportService
                     ->where('role', 'kasir'))
                 ->orderBy('name')
                 ->get(['id', 'name']),
+            'shifts' => Shift::query()
+                ->with('cashier:id,name')
+                ->where('opened_at', '<=', $toDate)
+                ->where(fn ($query) => $query
+                    ->whereNull('closed_at')
+                    ->orWhere('closed_at', '>=', $fromDate))
+                ->orderByDesc('opened_at')
+                ->get()
+                ->map(fn (Shift $shiftOption): array => [
+                    'id' => $shiftOption->id,
+                    'label' => sprintf(
+                        '%s — %s%s',
+                        $shiftOption->cashier?->name ?? 'Kasir #'.$shiftOption->kasir_id,
+                        $shiftOption->opened_at->format('d/m H:i'),
+                        $shiftOption->closed_at ? '–'.$shiftOption->closed_at->format('H:i') : ' (aktif)',
+                    ),
+                ])
+                ->all(),
         ];
     }
 }

@@ -9,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem, type SharedData } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeft, ChefHat, Edit2, GlassWater, Package, Percent, Plus, Printer, Save, Search, Tag, Trash2, X } from 'lucide-react';
-import { FormEvent, useMemo, useState } from 'react';
+import { ArrowLeft, ChefHat, Download, Edit2, GlassWater, Package, Percent, Plus, Printer, Save, Search, Tag, Trash2, Upload, X } from 'lucide-react';
+import { ChangeEvent, FormEvent, useMemo, useRef, useState } from 'react';
 
 type Category = { id: number; name: string; description?: string | null; sort_order: number; is_active: boolean; active_items_count: number; parent_id?: number | null; parent?: { id: number; name: string } };
 type Addon = { id: number | null; name: string; price: number | string; is_active: boolean };
@@ -101,6 +101,33 @@ export default function MenuIndex({ categories, items, promotions }: Props) {
 /* ─────────────────────────── ITEMS TAB ─────────────────────────── */
 
 function ItemsTab({ categories, items, canManage }: { categories: Category[]; items: Item[]; canManage: boolean }) {
+    const { flash } = usePage<SharedData>().props;
+    const importInputRef = useRef<HTMLInputElement>(null);
+    const [importing, setImporting] = useState(false);
+
+    function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        if (!file) {
+            return;
+        }
+
+        setImporting(true);
+        router.post(
+            '/menu/import',
+            { file },
+            {
+                forceFormData: true,
+                preserveScroll: true,
+                onFinish: () => {
+                    setImporting(false);
+                    if (importInputRef.current) {
+                        importInputRef.current.value = '';
+                    }
+                },
+            },
+        );
+    }
+
     const [editItem, setEditItem] = useState<Item | null>(null);
     const [formOpen, setFormOpen] = useState(false);
     const [search, setSearch] = useState('');
@@ -195,11 +222,39 @@ function ItemsTab({ categories, items, canManage }: { categories: Category[]; it
                     </SelectContent>
                 </Select>
                 {canManage && (
-                    <Button type="button" onClick={startCreate} className="shrink-0">
-                        <Plus className="size-4" /> Tambah Item
-                    </Button>
+                    <>
+                        <Button type="button" variant="outline" className="shrink-0" asChild title="Download template import Excel">
+                            <a href="/menu/import/template">
+                                <Download className="size-4" /> Template
+                            </a>
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="shrink-0"
+                            disabled={importing}
+                            onClick={() => importInputRef.current?.click()}
+                        >
+                            <Upload className="size-4" /> {importing ? 'Mengimpor...' : 'Import Excel'}
+                        </Button>
+                        <input ref={importInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleImportFile} />
+                        <Button type="button" onClick={startCreate} className="shrink-0">
+                            <Plus className="size-4" /> Tambah Item
+                        </Button>
+                    </>
                 )}
             </div>
+
+            {(flash?.import_errors?.length ?? 0) > 0 && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                    <p className="font-medium text-destructive">Sebagian baris gagal diimport:</p>
+                    <ul className="mt-1 list-inside list-disc text-destructive/90">
+                        {flash.import_errors!.map((error) => (
+                            <li key={error}>{error}</li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
             {/* List grouped by category */}
                 {filtered.length === 0 ? (

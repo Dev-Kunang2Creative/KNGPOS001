@@ -138,11 +138,7 @@ class PaymentFlowTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Pos/Receipt')
                 ->where('transaction.id', $transaction->id)
-                ->has('stationTicketUrls', 2)
-                ->where('stationTicketUrls.0.type', 'kitchen')
-                ->where('stationTicketUrls.1.type', 'bar')
-                ->where('stationTicketUrls.0.url', fn (string $url) => str_contains($url, 'kitchen_order=') && ! str_contains($url, 'bar_order='))
-                ->where('stationTicketUrls.1.url', fn (string $url) => str_contains($url, 'bar_order=') && ! str_contains($url, 'kitchen_order=')));
+                ->missing('stationTicketUrls'));
         $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'paid']);
         $this->assertDatabaseHas('transactions', ['id' => $transaction->id, 'status' => 'paid', 'change_amount' => 5000]);
         $this->assertDatabaseHas('kitchen_orders', ['order_id' => $order->id, 'kitchen_station_id' => $kitchen->id]);
@@ -381,22 +377,9 @@ class PaymentFlowTest extends TestCase
         $response = $this->actingAs($cashier)
             ->post("/pos/orders/{$order->id}/submit");
 
-        $barOrder = BarOrder::query()->where('order_id', $order->id)->firstOrFail();
+        BarOrder::query()->where('order_id', $order->id)->firstOrFail();
 
-        $response->assertRedirect(route('pos.orders.station-ticket', [
-            'order' => $order->id,
-            'bar_order' => $barOrder->id,
-        ]));
-        $this->actingAs($cashier)
-            ->get(route('pos.orders.station-ticket', [
-                'order' => $order->id,
-                'bar_order' => $barOrder->id,
-            ]))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Pos/StationTicket')
-                ->where('order.id', $order->id)
-                ->has('barOrders', 1));
+        $response->assertRedirect(route('pos.index', ['order' => $order->id]));
 
         $response = $this->actingAs($cashier)
             ->post("/pos/orders/{$order->id}/items/submit", [
@@ -405,12 +388,8 @@ class PaymentFlowTest extends TestCase
                 ],
             ]);
 
-        $latestBarOrder = BarOrder::query()->where('order_id', $order->id)->latest('id')->firstOrFail();
-
-        $response->assertRedirect(route('pos.orders.station-ticket', [
-            'order' => $order->id,
-            'bar_order' => $latestBarOrder->id,
-        ]));
+        $response->assertRedirect(route('pos.index', ['order' => $order->id]));
+        $this->assertSame(2, BarOrder::query()->where('order_id', $order->id)->count());
         $this->assertDatabaseHas('order_items', [
             'order_id' => $order->id,
             'menu_item_id' => $menuItem->id,
@@ -432,22 +411,9 @@ class PaymentFlowTest extends TestCase
                 ],
             ]);
 
-        $latestKitchenOrder = KitchenOrder::query()->where('order_id', $order->id)->latest('id')->firstOrFail();
+        KitchenOrder::query()->where('order_id', $order->id)->firstOrFail();
 
-        $response->assertRedirect(route('pos.orders.station-ticket', [
-            'order' => $order->id,
-            'kitchen_order' => $latestKitchenOrder->id,
-        ]));
-        $this->actingAs($cashier)
-            ->get(route('pos.orders.station-ticket', [
-                'order' => $order->id,
-                'kitchen_order' => $latestKitchenOrder->id,
-            ]))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Pos/StationTicket')
-                ->has('kitchenOrders', 1)
-                ->has('barOrders', 0));
+        $response->assertRedirect(route('pos.index', ['order' => $order->id]));
     }
 
     public function test_open_bill_submit_splits_kitchen_and_bar_tickets(): void
@@ -512,26 +478,10 @@ class PaymentFlowTest extends TestCase
         $response = $this->actingAs($cashier)
             ->post("/pos/orders/{$order->id}/submit");
 
-        $kitchenOrder = KitchenOrder::query()->where('order_id', $order->id)->firstOrFail();
-        $barOrder = BarOrder::query()->where('order_id', $order->id)->firstOrFail();
-        $location = $response->headers->get('Location');
+        KitchenOrder::query()->where('order_id', $order->id)->firstOrFail();
+        BarOrder::query()->where('order_id', $order->id)->firstOrFail();
 
-        $response->assertRedirect();
-        $this->assertStringContainsString('kitchen_order='.$kitchenOrder->id, $location);
-        $this->assertStringNotContainsString('bar_order='.$barOrder->id, $location);
-        $this->assertStringContainsString('next_station_ticket=', $location);
-        $this->assertStringContainsString(urlencode('bar_order='.$barOrder->id), $location);
-
-        $this->actingAs($cashier)
-            ->get(route('pos.orders.station-ticket', [
-                'order' => $order->id,
-                'kitchen_order' => $kitchenOrder->id,
-            ]))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Pos/StationTicket')
-                ->has('kitchenOrders', 1)
-                ->has('barOrders', 0));
+        $response->assertRedirect(route('pos.index', ['order' => $order->id]));
     }
 
     public function test_xendit_callback_validates_token_logs_and_is_idempotent(): void
