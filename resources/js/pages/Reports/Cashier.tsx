@@ -26,6 +26,8 @@ export default function CashierReport({ rows, filters, cashiers, shifts }: Props
         shift_id: form.data.shift_id === 'all' ? '' : form.data.shift_id,
     });
 
+    const exportUrl = (format: 'excel' | 'pdf') => `/reports/kasir/export/${format}?${new URLSearchParams(params()).toString()}`;
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Laporan Kasir" />
@@ -65,6 +67,12 @@ export default function CashierReport({ rows, filters, cashiers, shifts }: Props
                     </Select>
                     <Button type="button" onClick={() => router.get('/reports/kasir', params(), { preserveState: true })}>
                         Filter
+                    </Button>
+                    <Button type="button" variant="outline" asChild>
+                        <a href={exportUrl('excel')}>Export Excel</a>
+                    </Button>
+                    <Button type="button" variant="outline" asChild>
+                        <a href={exportUrl('pdf')}>Export PDF</a>
                     </Button>
                 </div>
                 <div className="overflow-x-auto rounded-md border">

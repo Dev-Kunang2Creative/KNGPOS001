@@ -79,6 +79,12 @@ export default function Receipt({ transaction }: Props) {
         return Array.from(groups.values());
     }, [order.items]);
 
+    // Checker copy only lists food & drinks (items routed to kitchen/bar), never kasir-only items like tickets.
+    const checkerItems = useMemo<ReceiptLine[]>(
+        () => groupedItems.filter((item) => ['kitchen', 'bar', 'kitchen_bar'].includes(item.menu_item?.print_to ?? '')),
+        [groupedItems],
+    );
+
     useEffect(() => {
         const timer = window.setTimeout(() => window.print(), 450);
 
@@ -121,7 +127,11 @@ export default function Receipt({ transaction }: Props) {
                         Cetak Struk
                     </Button>
                 </div>
-                <p className="no-print text-muted-foreground text-xs">Cetakan berisi 2 lembar: struk customer dan salinan checker.</p>
+                <p className="no-print text-muted-foreground text-xs">
+                    {checkerItems.length > 0
+                        ? 'Cetakan berisi 2 lembar: struk customer dan salinan checker (hanya makanan & minuman beserta jumlahnya).'
+                        : 'Cetakan berisi 1 lembar struk customer (tidak ada makanan/minuman untuk checker).'}
+                </p>
 
                 <div id="receipt-print-area" className="w-full max-w-sm">
                 <section className="receipt-doc w-full rounded-md border bg-white p-5 font-mono text-sm text-black shadow-sm">
@@ -231,7 +241,8 @@ export default function Receipt({ transaction }: Props) {
                     </div>
                 </section>
 
-                {/* Checker copy: items only — no prices, no header, no footer. */}
+                {/* Checker copy: food & drink items only — no prices, no header, no footer. */}
+                {checkerItems.length > 0 && (
                 <section className="checker-sheet mt-4 w-full rounded-md border border-dashed bg-white p-5 font-mono text-sm text-black shadow-sm">
                     <p className="text-center text-xs font-semibold">*** CHECKER ***</p>
 
@@ -265,7 +276,7 @@ export default function Receipt({ transaction }: Props) {
                     <div className="my-3 border-t border-dashed border-black" />
 
                     <div className="space-y-3">
-                        {groupedItems.map((item) => (
+                        {checkerItems.map((item) => (
                             <div key={`checker-${item.ids.join('-')}`}>
                                 <div className="flex justify-between gap-3 font-semibold">
                                     <span>{item.menu_item?.name ?? 'Item'}</span>
@@ -279,6 +290,7 @@ export default function Receipt({ transaction }: Props) {
                         ))}
                     </div>
                 </section>
+                )}
                 </div>
             </main>
         </AppLayout>

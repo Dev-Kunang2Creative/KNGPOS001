@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\SendSelfOrderReceiptEmail;
 use App\Models\Order;
 use App\Models\Restaurant;
+use App\Models\Table;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\XenditPayment;
@@ -45,6 +46,7 @@ class PaymentService
             ]);
 
             $order->table()->update(['status' => 'occupied']);
+            $this->releaseMergedTables($order);
 
             DB::afterCommit(fn () => SendSelfOrderReceiptEmail::dispatch($order->id));
 
@@ -251,6 +253,7 @@ class PaymentService
 
             $order->update(['status' => 'paid']);
             $order->table()->update(['status' => 'occupied']);
+            $this->releaseMergedTables($order);
 
             if ($order->order_type === 'self_order') {
                 $order->selfOrder()->update([
@@ -267,6 +270,23 @@ class PaymentService
 
             return $payment;
         });
+    }
+
+    /**
+     * When a merged bill is paid, split the group: every table joined to the
+     * order's table goes back to normal. Runs unscoped so Xendit webhooks
+     * (no restaurant context) also release the tables.
+     */
+    private function releaseMergedTables(Order $order): void
+    {
+        if (! $order->table_id) {
+            return;
+        }
+
+        Table::query()
+            ->allRestaurants()
+            ->where('merged_into_table_id', $order->table_id)
+            ->update(['merged_into_table_id' => null, 'status' => 'occupied']);
     }
 
     public function calculateOrderTotals(Order $order): array

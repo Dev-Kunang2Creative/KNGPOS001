@@ -92,6 +92,47 @@ class PhaseTenElevenTest extends TestCase
             );
     }
 
+    public function test_cashier_report_export_excel_downloads_spreadsheet(): void
+    {
+        $cashier = User::factory()->create(['role' => 'kasir', 'name' => 'Kasir Export']);
+        $this->paidOrder($cashier, 'dine_in', 'cash', 10000);
+
+        $response = $this->actingAs($this->manager(['reports.view']))
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
+            ->get('/reports/kasir/export/excel')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/vnd.ms-excel; charset=UTF-8');
+
+        $this->assertStringContainsString('laporan-kasir-', $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('.xls', $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('Kasir Export', $response->getContent());
+        $this->assertStringContainsString('TOTAL', $response->getContent());
+    }
+
+    public function test_cashier_report_export_pdf_downloads_document(): void
+    {
+        $cashier = User::factory()->create(['role' => 'kasir', 'name' => 'Kasir Export']);
+        $this->paidOrder($cashier, 'dine_in', 'cash', 10000);
+
+        $response = $this->actingAs($this->manager(['reports.view']))
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
+            ->get('/reports/kasir/export/pdf')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
+
+        $this->assertStringContainsString('laporan-kasir-', $response->headers->get('Content-Disposition'));
+        $this->assertStringContainsString('.pdf', $response->headers->get('Content-Disposition'));
+        $this->assertStringStartsWith('%PDF', $response->getContent());
+    }
+
+    public function test_cashier_report_export_requires_permission(): void
+    {
+        $this->actingAs($this->managerFor($this->restaurant, []))
+            ->withSession(['active_restaurant_id' => $this->restaurant->id])
+            ->get('/reports/kasir/export/excel')
+            ->assertForbidden();
+    }
+
     public function test_user_role_change_updates_restaurant_role(): void
     {
         $user = User::factory()->create();

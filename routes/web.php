@@ -12,6 +12,7 @@ use App\Http\Controllers\Manager\ZoneStationController;
 use App\Http\Controllers\Pos\CashierTableController;
 use App\Http\Controllers\Pos\OrderController;
 use App\Http\Controllers\Pos\PaymentController;
+use App\Http\Controllers\Pos\TableMergeController;
 use App\Http\Controllers\Restaurant\RestaurantController;
 use App\Http\Controllers\Restaurant\RestaurantStaffController;
 use App\Http\Controllers\SelfOrderController;
@@ -72,6 +73,8 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::post('pos/self-orders/{selfOrder}/approve', [OrderController::class, 'approveSelfOrder'])->name('pos.self-orders.approve');
         Route::post('pos/self-orders/{selfOrder}/reject', [OrderController::class, 'rejectSelfOrder'])->name('pos.self-orders.reject');
         Route::post('pos/self-orders/{selfOrder}/receipt-printed', [OrderController::class, 'markSelfOrderReceiptPrinted'])->name('pos.self-orders.receipt-printed');
+        Route::post('pos/tables/merge', [TableMergeController::class, 'merge'])->name('pos.tables.merge');
+        Route::post('pos/tables/{table}/unmerge', [TableMergeController::class, 'unmerge'])->name('pos.tables.unmerge');
     });
 
     Route::middleware(['permission:pos.create', 'permission:pos.checkout', 'active.shift'])->group(function () {
@@ -141,6 +144,8 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
     // Reports
     Route::middleware(['permission:reports.view'])->group(function () {
         Route::get('reports/kasir', [ReportController::class, 'cashier'])->name('reports.cashier');
+        Route::get('reports/kasir/export/excel', [ReportController::class, 'cashierExportExcel'])->name('reports.cashier.export.excel');
+        Route::get('reports/kasir/export/pdf', [ReportController::class, 'cashierExportPdf'])->name('reports.cashier.export.pdf');
     });
 
     // Staff Management (replaces old Users routes)
@@ -165,6 +170,8 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::post('menu/categories', [MenuController::class, 'storeCategory'])->name('menu.categories.store');
         Route::put('menu/categories/{category}', [MenuController::class, 'updateCategory'])->name('menu.categories.update');
         Route::delete('menu/categories/{category}', [MenuController::class, 'destroyCategory'])->name('menu.categories.destroy');
+        Route::get('menu/import/template', [MenuController::class, 'downloadImportTemplate'])->name('menu.import.template');
+        Route::post('menu/import', [MenuController::class, 'importItems'])->name('menu.import');
         Route::post('menu/items', [MenuController::class, 'storeItem'])->name('menu.items.store');
         Route::put('menu/items/{item}', [MenuController::class, 'updateItem'])->name('menu.items.update');
         Route::delete('menu/items/{item}', [MenuController::class, 'destroyItem'])->name('menu.items.destroy');

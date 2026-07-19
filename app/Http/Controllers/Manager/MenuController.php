@@ -10,11 +10,14 @@ use App\Models\MenuCategory;
 use App\Models\MenuItem;
 use App\Models\MenuPromotion;
 use App\Services\AuditLogger;
+use App\Services\MenuImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MenuController extends Controller
 {
@@ -110,6 +113,44 @@ class MenuController extends Controller
         $this->auditLogger->log('menu.item.availability', 'MenuItem', $item->id, $before, ['is_available' => $item->is_available]);
 
         return back()->with('success', 'Ketersediaan menu diperbarui.');
+    }
+
+    public function downloadImportTemplate(MenuImportService $importService): StreamedResponse
+    {
+        $spreadsheet = $importService->buildTemplate();
+
+        return response()->streamDownload(function () use ($spreadsheet) {
+            (new Xlsx($spreadsheet))->save('php://output');
+        }, 'template-import-menu.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    public function importItems(Request $request, MenuImportService $importService): RedirectResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx', 'max:20480'],
+        ], [
+            'file.mimes' => 'File harus berformat .xlsx (Excel).',
+        ]);
+
+        $result = $importService->import($request->file('file')->getRealPath());
+
+        $this->auditLogger->log('menu.import', 'MenuItem', null, null, [
+            'created' => $result['created'],
+            'updated' => $result['updated'],
+            'errors' => count($result['errors']),
+        ]);
+
+        $message = sprintf('Import selesai: %d menu dibuat, %d menu diperbarui.', $result['created'], $result['updated']);
+
+        if ($result['errors'] !== []) {
+            return back()
+                ->with($result['created'] + $result['updated'] > 0 ? 'success' : 'error', $message.' '.count($result['errors']).' baris gagal.')
+                ->with('import_errors', $result['errors']);
+        }
+
+        return back()->with('success', $message);
     }
 
     public function storePromotion(MenuPromotionRequest $request): RedirectResponse

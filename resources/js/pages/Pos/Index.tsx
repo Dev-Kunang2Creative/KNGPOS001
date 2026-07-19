@@ -17,6 +17,7 @@ import {
     ChevronRight,
     ChevronUp,
     CreditCard,
+    Merge,
     Minus,
     Package,
     Plus,
@@ -25,6 +26,7 @@ import {
     ReceiptText,
     Send,
     ShoppingCart,
+    Split,
     Trash2,
     X,
     XCircle,
@@ -36,6 +38,7 @@ type Table = {
     id: number;
     name: string;
     status: string;
+    merged_into_table_id?: number | null;
     zone?: { id: number; name: string; color_hex: string; assignment?: unknown | null };
 };
 type MenuItemAddon = { id: number; name: string; price: string; is_active: boolean };
@@ -255,6 +258,47 @@ export default function PosIndex({
     const [historyPage, setHistoryPage] = useState(1);
     const [activePanel, setActivePanel] = useState<CashierPanel>(activeOrder ? 'bills' : pendingSelfOrders.length > 0 ? 'self_order' : 'bills');
     const orderableTables = useMemo(() => tables.filter((t) => ['available', 'occupied'].includes(t.status)), [tables]);
+
+    // Merge meja state
+    const [mergeTargetId, setMergeTargetId] = useState('');
+    const [mergeTableIds, setMergeTableIds] = useState<number[]>([]);
+    const [mergeSubmitting, setMergeSubmitting] = useState(false);
+    const mergeableTables = useMemo(
+        () => tables.filter((t) => ['available', 'occupied', 'open_bill'].includes(t.status) && !t.merged_into_table_id),
+        [tables],
+    );
+    const mergedGroups = useMemo(() => {
+        const groups = new Map<number, Table[]>();
+        for (const table of tables) {
+            if (table.merged_into_table_id) {
+                groups.set(table.merged_into_table_id, [...(groups.get(table.merged_into_table_id) ?? []), table]);
+            }
+        }
+        return Array.from(groups.entries()).map(([targetId, members]) => ({
+            target: tables.find((t) => t.id === targetId),
+            members,
+        }));
+    }, [tables]);
+
+    function toggleMergeTable(id: number) {
+        setMergeTableIds((prev) => (prev.includes(id) ? prev.filter((tableId) => tableId !== id) : [...prev, id]));
+    }
+
+    function submitMerge() {
+        setMergeSubmitting(true);
+        router.post(
+            '/pos/tables/merge',
+            { target_table_id: Number(mergeTargetId), table_ids: mergeTableIds },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setMergeTargetId('');
+                    setMergeTableIds([]);
+                },
+                onFinish: () => setMergeSubmitting(false),
+            },
+        );
+    }
     const selectedCategory = categories.find((c) => String(c.id) === selectedCategoryId) ?? categories[0];
     const displayCategory = (selectedSubCategoryId ? selectedCategory?.children?.find((c) => String(c.id) === selectedSubCategoryId) : null) || selectedCategory;
     const selectedTable = tables.find((t) => String(t.id) === selectedTableId);
@@ -1422,6 +1466,100 @@ export default function PosIndex({
                                                 </SelectContent>
                                             </Select>
                                         )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Merge meja */}
+                            <div className="bg-card rounded-xl border">
+                                <button
+                                    type="button"
+                                    className="flex w-full items-center gap-2 px-4 py-3 font-semibold"
+                                    onClick={() => toggleCard('merge_tables')}
+                                >
+                                    <Merge className="size-4" />
+                                    <span className="flex-1 text-left">Gabung Meja</span>
+                                    {mergedGroups.length > 0 && <Badge variant="secondary">{mergedGroups.length} grup</Badge>}
+                                    {expandedCards.has('merge_tables') ? (
+                                        <ChevronUp className="text-muted-foreground size-4" />
+                                    ) : (
+                                        <ChevronDown className="text-muted-foreground size-4" />
+                                    )}
+                                </button>
+                                {expandedCards.has('merge_tables') && (
+                                    <div className="space-y-3 border-t px-4 py-4">
+                                        {mergedGroups.length > 0 && (
+                                            <div className="space-y-2">
+                                                {mergedGroups.map(({ target, members }) => (
+                                                    <div key={target?.id ?? members[0].id} className="bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                                                        <span className="flex-1">
+                                                            <strong>{target?.name ?? '?'}</strong> + {members.map((m) => m.name).join(', ')}
+                                                        </span>
+                                                        {target && (
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => router.post(`/pos/tables/${target.id}/unmerge`, {}, { preserveScroll: true })}
+                                                            >
+                                                                <Split className="size-3.5" /> Pisahkan
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-1">
+                                            <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Meja utama (bill jadi satu di sini)</p>
+                                            <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
+                                                <SelectTrigger className="min-h-[44px]">
+                                                    <SelectValue placeholder="Pilih meja utama..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {mergeableTables.map((t) => (
+                                                        <SelectItem key={t.id} value={String(t.id)}>
+                                                            {t.name}
+                                                            {t.status === 'open_bill' ? ' (open bill)' : ''}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        {mergeTargetId && (
+                                            <div className="space-y-1">
+                                                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Meja yang digabung</p>
+                                                <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2">
+                                                    {mergeableTables
+                                                        .filter((t) => String(t.id) !== mergeTargetId)
+                                                        .map((t) => (
+                                                            <label key={t.id} className="hover:bg-muted/50 flex min-h-[36px] cursor-pointer items-center gap-2 rounded px-2 text-sm">
+                                                                <Checkbox
+                                                                    checked={mergeTableIds.includes(t.id)}
+                                                                    onCheckedChange={() => toggleMergeTable(t.id)}
+                                                                />
+                                                                <span className="flex-1">{t.name}</span>
+                                                                <span className="text-muted-foreground text-xs">
+                                                                    {t.status === 'open_bill' ? 'open bill' : t.status}
+                                                                </span>
+                                                            </label>
+                                                        ))}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <Button
+                                            type="button"
+                                            className="min-h-[44px] w-full"
+                                            disabled={!mergeTargetId || mergeTableIds.length === 0 || mergeSubmitting}
+                                            onClick={submitMerge}
+                                        >
+                                            <Merge className="size-4" /> {mergeSubmitting ? 'Menggabung...' : 'Gabung Meja'}
+                                        </Button>
+                                        <p className="text-muted-foreground text-xs">
+                                            Semua item dari open bill meja yang digabung pindah ke bill meja utama. Setelah bill dibayar, meja otomatis terpisah lagi.
+                                        </p>
                                     </div>
                                 )}
                             </div>

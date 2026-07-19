@@ -45,7 +45,7 @@ export interface SharedData {
     } | null;
     restaurants: Restaurant[];
     activeShift: { id: number; opened_at: string; opening_cash: string } | null;
-    flash: { success?: string; error?: string; info?: string };
+    flash: { success?: string; error?: string; info?: string; import_errors?: string[] };
     [key: string]: unknown;
 }
 
