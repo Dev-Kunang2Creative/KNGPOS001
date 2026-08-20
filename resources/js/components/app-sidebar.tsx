@@ -18,6 +18,7 @@ import {
     MenuSquare,
     Plus,
     ScrollText,
+    Split,
     Timer,
     Users,
     Utensils,
@@ -49,6 +50,7 @@ export function AppSidebar() {
         { title: 'Audit Logs', url: '/audit-logs', icon: ScrollText, permission: 'audit.view' },
         { title: 'Shifts', url: '/shifts', icon: Timer, permission: 'shift.view' },
         { title: 'Restoran', url: '/restaurant/edit', icon: Building2, permission: 'settings.view' },
+        { title: 'Split Payment', url: '/settings/split-payment', icon: Split, permission: 'settings.manage' },
     ];
 
     const mainNavItems = candidates.filter((item) => {

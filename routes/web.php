@@ -16,6 +16,7 @@ use App\Http\Controllers\Pos\TableMergeController;
 use App\Http\Controllers\Restaurant\RestaurantController;
 use App\Http\Controllers\Restaurant\RestaurantStaffController;
 use App\Http\Controllers\SelfOrderController;
+use App\Http\Controllers\Settings\SplitPaymentController;
 use App\Http\Controllers\Settings\SystemSettingsController;
 use App\Http\Controllers\Waiter\WaiterOrderController;
 use Illuminate\Support\Facades\Route;
@@ -196,6 +197,14 @@ Route::middleware(['auth', 'restaurant'])->group(function () {
         Route::put('settings/system', [SystemSettingsController::class, 'update'])->name('settings.system.update');
         Route::post('settings/printers', [SystemSettingsController::class, 'storePrinter'])->name('settings.printers.store');
         Route::put('settings/printers/{printer}', [SystemSettingsController::class, 'updatePrinter'])->name('settings.printers.update');
+
+        // Split Payment
+        Route::get('settings/split-payment', [SplitPaymentController::class, 'index'])->name('settings.split-payment.index');
+        Route::post('settings/split-payment', [SplitPaymentController::class, 'store'])->name('settings.split-payment.store');
+        Route::put('settings/split-payment/{splitAccount}', [SplitPaymentController::class, 'update'])->name('settings.split-payment.update');
+        Route::delete('settings/split-payment/{splitAccount}', [SplitPaymentController::class, 'destroy'])->name('settings.split-payment.destroy');
+        Route::post('settings/split-payment/toggle', [SplitPaymentController::class, 'toggle'])->name('settings.split-payment.toggle');
+        Route::post('settings/split-payment/{splitAccount}/disburse', [SplitPaymentController::class, 'disburse'])->name('settings.split-payment.disburse');
     });
 
     // Audit Logs
